@@ -22,7 +22,7 @@ const FormGrid2 = styled(Grid)(() => ({
     flexDirection: "column",
 }));
 
-// Updated interface with new fields for insurance info, vehicle inspection, and jobcard
+
 interface VehicleFormData {
     vehicleRegId?: string;
     appointmentId: string;
@@ -45,12 +45,12 @@ interface VehicleFormData {
     status: "In Progress" | "Complete" | "Waiting";
     userId: string;
     date: string;
-    // New fields:
     insuranceStatus: "Insured" | "Expired";
     insuranceFrom: string;
     insuranceTo: string;
     vehicleInspection: string;
-    jobcard: string;
+    jobCard: string;
+    kmsDriven: number;
 }
 
 export default function VehicleDetailsView() {
@@ -77,12 +77,12 @@ export default function VehicleDetailsView() {
         status: "In Progress",
         userId: "",
         date: "",
-        // Default new values
         insuranceStatus: "Expired",
         insuranceFrom: "",
         insuranceTo: "",
         vehicleInspection: "",
-        jobcard: "",
+        jobCard: "",
+        kmsDriven: 0,
     });
 
     const navigate = useNavigate();
@@ -105,15 +105,13 @@ export default function VehicleDetailsView() {
                 return;
             }
 
-            // Ensure responsePart.data is an array
             const transactions: any = Array.isArray(responsePart.data)
                 ? responsePart.data
                 : [responsePart.data];
             console.log(transactions[0].data);
             const transactionsData = transactions[0].data;
-            // Transform each transaction
             const newTransactions = transactionsData.map((resData: any, index: number) => ({
-                id: rows.length + index + 1, // Assign a unique ID
+                id: rows.length + index + 1, 
                 partNumber: resData.partNumber,
                 partName: resData.partName,
                 quantity: resData.quantity,
@@ -124,7 +122,6 @@ export default function VehicleDetailsView() {
                 sparePartTransactionId: resData.sparePartTransactionId
             }));
 
-            // Append new transactions to the state
             setRows([...newTransactions]);
         } catch (err) {
             console.error("Error fetching transactions:", err);
@@ -167,12 +164,14 @@ export default function VehicleDetailsView() {
                         status: response.status,
                         userId: response.userId,
                         date: response.date,
-                        // Map new insurance and inspection fields.
+     
                         insuranceStatus: response.insuranceStatus || "Expired",
                         insuranceFrom: response.insuranceFrom || "",
                         insuranceTo: response.insuranceTo || "",
                         vehicleInspection: response.vehicleInspection || "",
-                        jobcard: response.jobcard || "",
+        
+                        jobCard: response.jobCard || response.jobcard || "",
+                        kmsDriven: response.kmsDriven || 0,
                     });
                 } catch (error) {
                     console.error("Error fetching vehicle data:", error);
@@ -202,7 +201,7 @@ export default function VehicleDetailsView() {
             </Stack>
 
             <Grid container spacing={3}>
-                {/* Vehicle Details Section */}
+              =
                 <FormGrid item xs={12} md={6}>
                     <Typography>Vehicle Number :</Typography>
                     <FormLabel>{formData.vehicleNumber}</FormLabel>
@@ -233,7 +232,6 @@ export default function VehicleDetailsView() {
                     <FormLabel>{formData.numberPlateColour}</FormLabel>
                 </FormGrid>
 
-                {/* Customer Details Section */}
                 <FormGrid item xs={12} md={6}>
                     <Typography>Customer Name :</Typography>
                     <FormLabel>{formData.customerName}</FormLabel>
@@ -289,7 +287,6 @@ export default function VehicleDetailsView() {
                     <FormLabel>{formData.date}</FormLabel>
                 </FormGrid>
 
-                {/* New Insurance Info Section */}
                 <FormGrid item xs={12} md={6}>
                     <Typography>Insurance Status :</Typography>
                     <FormLabel>{formData.insuranceStatus}</FormLabel>
@@ -307,14 +304,18 @@ export default function VehicleDetailsView() {
                     </>
                 )}
 
-                {/* New Vehicle Inspection and Jobcard Section */}
                 <FormGrid item xs={12} md={6}>
                     <Typography>Vehicle Inspection :</Typography>
                     <FormLabel>{formData.vehicleInspection}</FormLabel>
                 </FormGrid>
                 <FormGrid item xs={12} md={6}>
                     <Typography>Jobcard :</Typography>
-                    <FormLabel>{formData.jobcard}</FormLabel>
+                    <FormLabel>{formData.jobCard}</FormLabel>
+                </FormGrid>
+
+                <FormGrid item xs={12} md={6}>
+                    <Typography>KMs Driven :</Typography>
+                    <FormLabel>{formData.kmsDriven}</FormLabel>
                 </FormGrid>
             </Grid>
 

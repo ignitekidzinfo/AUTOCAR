@@ -26,7 +26,6 @@ const FormGrid = styled(Grid)(() => ({
   flexDirection: "column",
 }));
 
-// Updated interface including insurance info, extra fields, and KMs Driven.
 interface VehicleFormData {
   vehicleRegId?: string;
   appointmentId: string;
@@ -46,19 +45,17 @@ interface VehicleFormData {
   superwiser: string;
   technician: string;
   worker: string;
-  vehicleInspection: string; // New field
-  jobcard: string;           // New field
-  kmsDriven: string;         // New field for KMs Driven
+  vehicleInspection: string; 
+  jobCard: string;           
+  kmsDriven: number;         
   status: "In Progress" | "Complete" | "Waiting";
   userId: string;
   date: string;
-  // New insurance info fields:
   insuranceStatus: "Insured" | "Expired";
   insuranceFrom: string;
   insuranceTo: string;
 }
 
-// Create a reusable initial state.
 const initialFormData: VehicleFormData = {
   vehicleRegId: "",
   appointmentId: "",
@@ -79,12 +76,12 @@ const initialFormData: VehicleFormData = {
   technician: "",
   worker: "",
   vehicleInspection: "",
-  jobcard: "",
-  kmsDriven: "",
+  jobCard: "",
+  kmsDriven: 0,
   status: "In Progress",
   userId: "",
   date: "",
-  insuranceStatus: "Expired",  // Default to Expired
+  insuranceStatus: "Expired",  
   insuranceFrom: "",
   insuranceTo: "",
 };
@@ -95,31 +92,26 @@ export default function AddVehicle() {
 
   const [formData, setFormData] = React.useState<VehicleFormData>(initialFormData);
 
-  // State for dialog pop-up message
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [dialogTitle, setDialogTitle] = React.useState("");
   const [dialogMessage, setDialogMessage] = React.useState("");
 
-  // General change handler for inputs
   const handleChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     setFormData({ ...formData, [event.target.name]: event.target.value });
   };
 
-  // Handler for vehicle status select
   const handleSelectChange = (event: SelectChangeEvent<"In Progress" | "Complete" | "Waiting">) => {
     setFormData({ ...formData, status: event.target.value as VehicleFormData["status"] });
   };
 
-  // New handler for Insurance Status dropdown
   const handleInsuranceStatusChange = (
     event: SelectChangeEvent<"Insured" | "Expired">
   ) => {
     setFormData({ ...formData, insuranceStatus: event.target.value as "Insured" | "Expired" });
   };
 
-  // Function to reset the form to its initial state (used only in Add mode)
   const resetForm = () => {
     setFormData(initialFormData);
   };
@@ -137,7 +129,7 @@ export default function AddVehicle() {
       setDialogTitle("Success");
       setDialogMessage(`Vehicle ${id ? 'updated' : 'added'} successfully!`);
       setDialogOpen(true);
-      // Only reset the form if adding a new vehicle; update form should retain updated values.
+      
       if (!id) {
         resetForm();
       }
@@ -178,7 +170,7 @@ export default function AddVehicle() {
             technician: response.technician,
             worker: response.worker,
             vehicleInspection: response.vehicleInspection,
-            jobcard: response.jobcard,
+            jobCard: response.jobcard,
             kmsDriven: response.kmsDriven || "",
             status: response.status,
             userId: response.userId,
@@ -216,7 +208,7 @@ export default function AddVehicle() {
 
       <form onSubmit={handleSubmit}>
         <Grid container spacing={3}>
-          {/* Existing fields */}
+       
           <FormGrid item xs={12} md={6}>
             <FormLabel htmlFor="vehicleNumber">Vehicle Number</FormLabel>
             <OutlinedInput
@@ -397,7 +389,7 @@ export default function AddVehicle() {
               size="small"
             />
           </FormGrid>
-          {/* New Field: Vehicle Inspection */}
+       
           <FormGrid item xs={12} md={6}>
             <FormLabel htmlFor="vehicleInspection">Vehicle Inspection</FormLabel>
             <OutlinedInput
@@ -410,21 +402,21 @@ export default function AddVehicle() {
               size="small"
             />
           </FormGrid>
-          {/* New Field: Jobcard */}
+ 
           <FormGrid item xs={12} md={6}>
-            <FormLabel htmlFor="jobcard">Jobcard</FormLabel>
+            <FormLabel htmlFor="jobCard">Jobcard</FormLabel>
             <OutlinedInput
-              id="jobcard"
-              name="jobcard"
-              value={formData.jobcard}
+              id="jobCard"
+              name="jobCard"
+              value={formData.jobCard}
               onChange={handleChange}
               placeholder="Enter Jobcard details"
-              // For edit mode, not required
+           
               required={!id}
               size="small"
             />
           </FormGrid>
-          {/* New Field: KMs Driven */}
+    
           <FormGrid item xs={12} md={6}>
             <FormLabel htmlFor="kmsDriven">KMs Driven</FormLabel>
             <OutlinedInput
@@ -437,7 +429,7 @@ export default function AddVehicle() {
               size="small"
             />
           </FormGrid>
-          {/* New Section: Insurance Information */}
+      
           <FormGrid item xs={12} md={6}>
             <FormLabel htmlFor="insuranceStatus">Insurance Status</FormLabel>
             <FormControl fullWidth size="small">
@@ -463,7 +455,7 @@ export default function AddVehicle() {
                   type="date"
                   value={formData.insuranceFrom}
                   onChange={handleChange}
-                  // For edit mode, not required
+       
                   required={!id}
                   size="small"
                 />
@@ -476,14 +468,14 @@ export default function AddVehicle() {
                   type="date"
                   value={formData.insuranceTo}
                   onChange={handleChange}
-                  // For edit mode, not required
+              
                   required={!id}
                   size="small"
                 />
               </FormGrid>
             </>
           )}
-          {/* Existing Status field */}
+      
           <FormGrid item xs={12} md={6}>
             <FormControl fullWidth size="small">
               <InputLabel>Status</InputLabel>
@@ -519,7 +511,6 @@ export default function AddVehicle() {
         </Grid>
       </form>
 
-      {/* Dialog Pop-up */}
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}

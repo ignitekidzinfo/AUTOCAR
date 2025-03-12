@@ -1,4 +1,5 @@
-import React, { useState, ChangeEvent } from 'react';
+import * as React from 'react';
+import { useState, ChangeEvent } from 'react';
 import {
   Box,
   Grid,
@@ -12,7 +13,11 @@ import {
   TableHead,
   TableRow,
   Button,
-  IconButton
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import apiClient from 'Services/apiService';
@@ -27,29 +32,30 @@ interface InvoiceFormData {
   date: string;
   regNo: string;
   model: string;
+
   kmsDriven: string;
   comments: string;
   parts: {
     partName: string;
-    quantity: number | string;
-    unitPrice: number | string;
-    discountPercent: number | string;
-    cgstPercent: number | string;
-    sgstPercent: number | string;
-    igstPercent: number | string;
+    quantity: string; 
+    unitPrice: string;
+    discountPercent: string;
+    cgstPercent: string;
+    sgstPercent: string;
+    igstPercent: string;
   }[];
   labours: {
     description: string;
-    quantity: number | string;
-    unitPrice: number | string;
-    discountPercent: number | string;
-    cgstPercent: number | string;
-    sgstPercent: number | string;
-    igstPercent: number | string;
+    quantity: string;
+    unitPrice: string;
+    discountPercent: string;
+    cgstPercent: string;
+    sgstPercent: string;
+    igstPercent: string;
   }[];
   subTotal: number;
   totalAmount: number;
-  advanceAmount: number;
+  advanceAmount: string;
   totalInWords: string;
 }
 
@@ -63,23 +69,23 @@ const defaultInvoiceData: InvoiceFormData = {
   date: '',
   regNo: '',
   model: '',
-  kmsDriven: '',
+  kmsDriven: '', 
   comments: '',
-  parts: [],
+  parts: [], 
   labours: [
     {
       description: '',
-      quantity: 1,
-      unitPrice: 0,
-      discountPercent: 0,
-      cgstPercent: 0,
-      sgstPercent: 0,
-      igstPercent: 0
+      quantity: "1",
+      unitPrice: "",
+      discountPercent: "",
+      cgstPercent: "",
+      sgstPercent: "",
+      igstPercent: ""
     }
   ],
   subTotal: 0,
   totalAmount: 0,
-  advanceAmount: 0,
+  advanceAmount: '',
   totalInWords: ''
 };
 
@@ -87,84 +93,78 @@ export default function InvoiceForm() {
   const [formData, setFormData] = useState<InvoiceFormData>(defaultInvoiceData);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
+  
 
-  // Generic change handler for text and numeric fields.
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogTitle, setDialogTitle] = useState("");
+  const [dialogMessage, setDialogMessage] = useState("");
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    // For numeric fields, allow empty string but default advanceAmount to 0.
-    if (['subTotal', 'totalAmount', 'advanceAmount'].includes(name)) {
-      if (value !== '' && parseFloat(value) < 0) return;
-      const newValue = value === '' ? 0 : parseFloat(value);
-      setFormData(prev => ({ ...prev, [name]: newValue }));
+
+    if (name === 'advanceAmount') {
+      if (value === '' || parseFloat(value) >= 0) {
+        setFormData(prev => ({ ...prev, advanceAmount: value }));
+      }
+    } else if(name === 'kmsDriven'){
+     
+      setFormData(prev => ({ ...prev, kmsDriven: value }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
-  // Handler for parts changes.
   const handlePartsChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     index: number,
     field: keyof InvoiceFormData['parts'][number]
   ) => {
     const newParts = [...formData.parts];
-    let fieldValue: string | number = e.target.value;
-    if (['quantity', 'unitPrice', 'discountPercent', 'cgstPercent', 'sgstPercent', 'igstPercent'].includes(field)) {
-      if (e.target.value !== '' && parseFloat(e.target.value) < 0) return;
-      fieldValue = e.target.value === '' ? 0 : parseFloat(e.target.value);
-    }
-    newParts[index] = { ...newParts[index], [field]: fieldValue };
+    const inputVal = e.target.value;
+
+    if (inputVal !== "" && parseFloat(inputVal) < 0) return; 
+    newParts[index] = { ...newParts[index], [field]: inputVal };
     setFormData(prev => ({ ...prev, parts: newParts }));
   };
 
-  // Handler for labours changes.
   const handleLabourChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     index: number,
     field: keyof InvoiceFormData['labours'][number]
   ) => {
     const newLabours = [...formData.labours];
-    let fieldValue: string | number = e.target.value;
-    if (['quantity', 'unitPrice', 'discountPercent', 'cgstPercent', 'sgstPercent', 'igstPercent'].includes(field)) {
-      if (e.target.value !== '' && parseFloat(e.target.value) < 0) return;
-      fieldValue = e.target.value === '' ? 0 : parseFloat(e.target.value);
-    }
-    newLabours[index] = { ...newLabours[index], [field]: fieldValue };
+    const inputVal = e.target.value;
+    if (inputVal !== "" && parseFloat(inputVal) < 0) return;
+    newLabours[index] = { ...newLabours[index], [field]: inputVal };
     setFormData(prev => ({ ...prev, labours: newLabours }));
   };
 
-  // Add new labour row.
   const addLabourRow = () => {
     setFormData(prev => ({
       ...prev,
       labours: [
         ...prev.labours,
-        { description: '', quantity: 1, unitPrice: 0, discountPercent: 0, cgstPercent: 0, sgstPercent: 0, igstPercent: 0 }
+        { description: '', quantity: "1", unitPrice: "", discountPercent: "", cgstPercent: "", sgstPercent: "", igstPercent: "" }
       ]
     }));
   };
 
-  // Compute totals for parts and labours.
   const computeTotals = () => {
     const computeItemTotal = (item: {
-      quantity: number | string;
-      unitPrice: number | string;
-      discountPercent: number | string;
-      cgstPercent: number | string;
-      sgstPercent: number | string;
-      igstPercent: number | string;
+      quantity: string;
+      unitPrice: string;
+      discountPercent: string;
+      cgstPercent: string;
+      sgstPercent: string;
+      igstPercent: string;
     }) => {
       const quantity = Number(item.quantity) || 0;
       const unitPrice = Number(item.unitPrice) || 0;
       const discountPercent = Number(item.discountPercent) || 0;
-      const cgst = Number(item.cgstPercent) || 0;
-      const sgst = Number(item.sgstPercent) || 0;
-      const igst = Number(item.igstPercent) || 0;
-      
       const base = quantity * unitPrice;
       const discount = base * discountPercent / 100;
       const netBase = base - discount;
-      const taxRate = (cgst + sgst + igst) / 100;
+      const taxRate = (Number(item.cgstPercent) + Number(item.sgstPercent) + Number(item.igstPercent)) / 100;
       const taxAmount = netBase * taxRate;
       return netBase + taxAmount;
     };
@@ -172,21 +172,18 @@ export default function InvoiceForm() {
     const partsTotal = formData.parts.reduce((sum, item) => sum + computeItemTotal(item), 0);
     const laboursTotal = formData.labours.reduce((sum, item) => sum + computeItemTotal(item), 0);
     const subTotal = partsTotal + laboursTotal;
-    const totalAmount = subTotal; // Modify here if you add further charges or adjustments.
+    const totalAmount = subTotal;
     return { subTotal, totalAmount };
   };
 
-  // Fetch vehicle details and spare parts using query parameters.
   const fetchVehicleData = async () => {
     if (!formData.vehicleRegId) return;
     setLoadingData(true);
     try {
       const vid = formData.vehicleRegId;
-      // Fetch vehicle details.
       const vehicleResponse = await apiClient.get('/vehicle-reg/getById', {
         params: { vehicleRegId: vid }
       });
-      console.log('Vehicle Response:', vehicleResponse.data);
       const vehicleData = vehicleResponse.data.data || vehicleResponse.data;
       if (vehicleData) {
         setFormData(prev => ({
@@ -197,17 +194,18 @@ export default function InvoiceForm() {
           customerAadharNo: vehicleData.customerAadharNo || '',
           customerGstin: vehicleData.customerGstin || '',
           regNo: vehicleData.vehicleNumber || '',
-          model: `${vehicleData.vehicleBrand || ''} - ${vehicleData.vehicleModelName || ''}`
+          model: `${vehicleData.vehicleBrand || ''} - ${vehicleData.vehicleModelName || ''}`,
+          kmsDriven: vehicleData.kmsDriven ? String(vehicleData.kmsDriven) : ''
         }));
       } else {
-        alert('No vehicle data found.');
+        setDialogTitle("Error");
+        setDialogMessage("No vehicle data found.");
+        setDialogOpen(true);
       }
 
-      // Fetch spare parts.
       const partsResponse = await apiClient.get('/sparePartTransactions/vehicleRegId', {
         params: { vehicleRegId: vid }
       });
-      console.log('Parts Response:', partsResponse.data);
       let partsArray: any[] = [];
       if (partsResponse.data && partsResponse.data.data && Array.isArray(partsResponse.data.data)) {
         partsArray = partsResponse.data.data;
@@ -218,27 +216,27 @@ export default function InvoiceForm() {
       }
       const parts = partsArray.map((p: any) => ({
         partName: p.partName,
-        quantity: p.quantity || 1,
-        unitPrice: p.price || 0,
-        discountPercent: 0,
-        cgstPercent: 0,
-        sgstPercent: 0,
-        igstPercent: 0
+        quantity: p.quantity ? String(p.quantity) : "1",
+        unitPrice: p.price ? String(p.price) : "",
+        discountPercent: "",
+        cgstPercent: "",
+        sgstPercent: "",
+        igstPercent: ""
       }));
       setFormData(prev => ({ ...prev, parts }));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching data:', error);
-      alert('Error fetching vehicle or parts data.');
+      setDialogTitle("Error");
+      setDialogMessage("Error fetching vehicle or parts data.");
+      setDialogOpen(true);
     } finally {
       setLoadingData(false);
     }
   };
 
-  // Handle form submission to generate PDF.
   const handleSubmit = async () => {
     const totals = computeTotals();
-    // Ensure advanceAmount is set to 0 if not entered.
-    const advanceAmount = formData.advanceAmount || 0;
+    const advanceAmount = formData.advanceAmount === '' ? 0 : parseFloat(formData.advanceAmount);
     const submissionData = {
       ...formData,
       subTotal: totals.subTotal,
@@ -253,14 +251,23 @@ export default function InvoiceForm() {
       });
       const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(pdfBlob);
-      setPdfUrl(url);
-    } catch (error) {
+      
+      window.open(url, '_blank');
+      setDialogTitle("Success");
+      setDialogMessage("PDF generated successfully!");
+      setDialogOpen(true);
+    } catch (error: any) {
       console.error('Error generating PDF:', error);
-      alert('Error generating PDF.');
+      let errorMsg = "Error generating PDF.";
+      if (error.response && error.response.data && error.response.data.message) {
+        errorMsg = error.response.data.message;
+      }
+      setDialogTitle("Error");
+      setDialogMessage(errorMsg);
+      setDialogOpen(true);
     }
   };
 
-  // Compute totals for display.
   const totals = computeTotals();
 
   return (
@@ -269,7 +276,22 @@ export default function InvoiceForm() {
         Generate Invoice
       </Typography>
 
-      {/* Vehicle Reg ID and Fetch Button */}
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        aria-labelledby="dialog-title"
+        aria-describedby="dialog-description"
+        PaperProps={{ style: { padding: 20, textAlign: 'center' } }}
+      >
+        <DialogTitle id="dialog-title">{dialogTitle}</DialogTitle>
+        <DialogContent>
+          <Typography id="dialog-description">{dialogMessage}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
       <Grid container spacing={2} alignItems="center">
         <Grid item xs={12} sm={6} md={4}>
           <TextField
@@ -289,51 +311,20 @@ export default function InvoiceForm() {
       </Grid>
 
       <Grid container spacing={2} mt={2}>
-        {/* CUSTOMER DETAILS */}
+     
         <Grid item xs={12} md={6}>
           <Typography variant="h6" fontWeight="bold">
             CUSTOMER DETAILS
           </Typography>
           <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <TextField
-              label="Name"
-              name="customerName"
-              size="small"
-              value={formData.customerName}
-              onChange={handleChange}
-            />
-            <TextField
-              label="Address"
-              name="customerAddress"
-              size="small"
-              value={formData.customerAddress}
-              onChange={handleChange}
-            />
-            <TextField
-              label="Mobile"
-              name="customerMobile"
-              size="small"
-              value={formData.customerMobile}
-              onChange={handleChange}
-            />
-            <TextField
-              label="Aadhar No"
-              name="customerAadharNo"
-              size="small"
-              value={formData.customerAadharNo}
-              onChange={handleChange}
-            />
-            <TextField
-              label="GSTIN"
-              name="customerGstin"
-              size="small"
-              value={formData.customerGstin}
-              onChange={handleChange}
-            />
+            <TextField label="Name" name="customerName" size="small" value={formData.customerName} onChange={handleChange} />
+            <TextField label="Address" name="customerAddress" size="small" value={formData.customerAddress} onChange={handleChange} />
+            <TextField label="Mobile" name="customerMobile" size="small" value={formData.customerMobile} onChange={handleChange} />
+            <TextField label="Aadhar No" name="customerAadharNo" size="small" value={formData.customerAadharNo} onChange={handleChange} />
+            <TextField label="GSTIN" name="customerGstin" size="small" value={formData.customerGstin} onChange={handleChange} />
           </Box>
         </Grid>
 
-        {/* VEHICLE / INVOICE DETAILS */}
         <Grid item xs={12} md={6}>
           <Typography variant="h6" fontWeight="bold">
             VEHICLE / INVOICE DETAILS
@@ -348,26 +339,15 @@ export default function InvoiceForm() {
               value={formData.date}
               onChange={handleChange}
             />
-            <TextField
-              label="Reg No"
-              name="regNo"
-              size="small"
-              value={formData.regNo}
-              onChange={handleChange}
-            />
-            <TextField
-              label="Model"
-              name="model"
-              size="small"
-              value={formData.model}
-              onChange={handleChange}
-            />
-            <TextField
-              label="KMS Driven"
-              name="kmsDriven"
-              size="small"
-              value={formData.kmsDriven}
-              onChange={handleChange}
+            <TextField label="Reg No" name="regNo" size="small" value={formData.regNo} onChange={handleChange} />
+            <TextField label="Model" name="model" size="small" value={formData.model} onChange={handleChange} />
+            <TextField 
+              label="KMS Driven" 
+              name="kmsDriven" 
+              size="small" 
+              type="number"
+              value={formData.kmsDriven === "0" ? "" : formData.kmsDriven} 
+              onChange={handleChange} 
             />
             <TextField
               label="Advance Amount"
@@ -378,13 +358,7 @@ export default function InvoiceForm() {
               onChange={handleChange}
               inputProps={{ min: 0 }}
             />
-            <TextField
-              label="Comments"
-              name="comments"
-              size="small"
-              value={formData.comments}
-              onChange={handleChange}
-            />
+            <TextField label="Comments" name="comments" size="small" value={formData.comments} onChange={handleChange} />
           </Box>
         </Grid>
       </Grid>
@@ -417,7 +391,7 @@ export default function InvoiceForm() {
                 const base = quantity * unitPrice;
                 const discount = base * discountPercent / 100;
                 const net = base - discount;
-                const amount = net; // Taxes can be added if needed.
+                const amount = net;
                 return (
                   <TableRow key={index}>
                     <TableCell align="center">{index + 1}</TableCell>
@@ -427,7 +401,7 @@ export default function InvoiceForm() {
                         size="small"
                         fullWidth
                         value={item.partName}
-                        onChange={(e) => handlePartsChange(e, index, 'partName')}
+                        onChange={(e) => handlePartsChange(e as React.ChangeEvent<HTMLInputElement>, index, 'partName')}
                       />
                     </TableCell>
                     <TableCell align="center">
@@ -436,7 +410,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.quantity}
-                        onChange={(e) => handlePartsChange(e, index, 'quantity')}
+                        onChange={(e) => handlePartsChange(e as React.ChangeEvent<HTMLInputElement>, index, 'quantity')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -447,7 +421,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.unitPrice}
-                        onChange={(e) => handlePartsChange(e, index, 'unitPrice')}
+                        onChange={(e) => handlePartsChange(e as React.ChangeEvent<HTMLInputElement>, index, 'unitPrice')}
                         sx={{ width: '100px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -458,7 +432,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.discountPercent}
-                        onChange={(e) => handlePartsChange(e, index, 'discountPercent')}
+                        onChange={(e) => handlePartsChange(e as React.ChangeEvent<HTMLInputElement>, index, 'discountPercent')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -469,7 +443,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.cgstPercent}
-                        onChange={(e) => handlePartsChange(e, index, 'cgstPercent')}
+                        onChange={(e) => handlePartsChange(e as React.ChangeEvent<HTMLInputElement>, index, 'cgstPercent')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -480,7 +454,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.sgstPercent}
-                        onChange={(e) => handlePartsChange(e, index, 'sgstPercent')}
+                        onChange={(e) => handlePartsChange(e as React.ChangeEvent<HTMLInputElement>, index, 'sgstPercent')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -491,7 +465,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.igstPercent}
-                        onChange={(e) => handlePartsChange(e, index, 'igstPercent')}
+                        onChange={(e) => handlePartsChange(e as React.ChangeEvent<HTMLInputElement>, index, 'igstPercent')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -514,7 +488,6 @@ export default function InvoiceForm() {
         </TableContainer>
       </Box>
 
-      {/* LABOUR WORK TABLE */}
       <Box sx={{ mt: 3 }}>
         <Box display="flex" alignItems="center" justifyContent="space-between">
           <Typography variant="subtitle1" fontWeight="bold">
@@ -547,7 +520,7 @@ export default function InvoiceForm() {
                 const base = quantity * unitPrice;
                 const discount = base * discountPercent / 100;
                 const net = base - discount;
-                const amount = net; // Taxes can be added if needed.
+                const amount = net;
                 return (
                   <TableRow key={index}>
                     <TableCell align="center">{index + 1}</TableCell>
@@ -557,7 +530,7 @@ export default function InvoiceForm() {
                         size="small"
                         fullWidth
                         value={item.description}
-                        onChange={(e) => handleLabourChange(e, index, 'description')}
+                        onChange={(e) => handleLabourChange(e as React.ChangeEvent<HTMLInputElement>, index, 'description')}
                       />
                     </TableCell>
                     <TableCell align="center">
@@ -566,7 +539,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.quantity}
-                        onChange={(e) => handleLabourChange(e, index, 'quantity')}
+                        onChange={(e) => handleLabourChange(e as React.ChangeEvent<HTMLInputElement>, index, 'quantity')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -577,7 +550,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.unitPrice}
-                        onChange={(e) => handleLabourChange(e, index, 'unitPrice')}
+                        onChange={(e) => handleLabourChange(e as React.ChangeEvent<HTMLInputElement>, index, 'unitPrice')}
                         sx={{ width: '100px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -588,7 +561,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.discountPercent}
-                        onChange={(e) => handleLabourChange(e, index, 'discountPercent')}
+                        onChange={(e) => handleLabourChange(e as React.ChangeEvent<HTMLInputElement>, index, 'discountPercent')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -599,7 +572,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.cgstPercent}
-                        onChange={(e) => handleLabourChange(e, index, 'cgstPercent')}
+                        onChange={(e) => handleLabourChange(e as React.ChangeEvent<HTMLInputElement>, index, 'cgstPercent')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -610,7 +583,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.sgstPercent}
-                        onChange={(e) => handleLabourChange(e, index, 'sgstPercent')}
+                        onChange={(e) => handleLabourChange(e as React.ChangeEvent<HTMLInputElement>, index, 'sgstPercent')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -621,7 +594,7 @@ export default function InvoiceForm() {
                         type="number"
                         size="small"
                         value={item.igstPercent}
-                        onChange={(e) => handleLabourChange(e, index, 'igstPercent')}
+                        onChange={(e) => handleLabourChange(e as React.ChangeEvent<HTMLInputElement>, index, 'igstPercent')}
                         sx={{ width: '70px' }}
                         inputProps={{ min: 0 }}
                       />
@@ -644,7 +617,6 @@ export default function InvoiceForm() {
         </TableContainer>
       </Box>
 
-      {/* Final Amounts (computed) */}
       <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 300 }}>
         <TextField
           label="Sub Total"
@@ -677,29 +649,6 @@ export default function InvoiceForm() {
         </Button>
       </Box>
 
-      {/* PDF Preview & Download */}
-      {pdfUrl && (
-        <Box mt={4}>
-          <Typography variant="h6" mb={1}>
-            PDF Preview
-          </Typography>
-          <iframe
-            title="Invoice PDF"
-            src={pdfUrl}
-            style={{ width: '100%', height: '600px', border: 'none' }}
-          />
-          <Box textAlign="right" mt={1}>
-            <Button variant="outlined" onClick={() => {
-              const link = document.createElement('a');
-              link.href = pdfUrl;
-              link.download = 'invoice.pdf';
-              link.click();
-            }}>
-              Download PDF
-            </Button>
-          </Box>
-        </Box>
-      )}
     </Box>
   );
 }
