@@ -73,7 +73,7 @@ const AppRoutes = () => {
                 <Route path="vehicle/view/:id" element={<VehicleDetailsView/>} />
                 <Route path="vehicle/add/servicepart/:id" element={<AddVehiclePartService/>} />
                 <Route path="vehicle/details/:id" element={<AddVehicle/>} />
-                <Route path="spare-part/transaction/add" element={<TransactionAdd />} />
+                {/* <Route path="spare-part/transaction/add" element={<TransactionAdd />} /> */}
                 <Route path="spare-part/transaction/list" element={<TransactionAll />} />
             </Route>
         </Routes>
