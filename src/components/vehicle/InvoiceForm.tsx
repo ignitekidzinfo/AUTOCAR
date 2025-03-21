@@ -21,6 +21,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import apiClient from 'Services/apiService';
+import { useParams } from 'react-router-dom';
 
 interface InvoiceFormData {
   vehicleRegId: string;
@@ -93,6 +94,7 @@ export default function InvoiceForm() {
   const [formData, setFormData] = useState<InvoiceFormData>(defaultInvoiceData);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
+  const { id } = useParams();
   
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -176,13 +178,18 @@ export default function InvoiceForm() {
     return { subTotal, totalAmount };
   };
 
+  React.useEffect(() => {
+    if(id){
+      fetchVehicleData()
+    }
+  },[id])
   const fetchVehicleData = async () => {
-    if (!formData.vehicleRegId) return;
+    // if (!formData.vehicleRegId) return;
     setLoadingData(true);
     try {
       const vid = formData.vehicleRegId;
       const vehicleResponse = await apiClient.get('/vehicle-reg/getById', {
-        params: { vehicleRegId: vid }
+        params: { vehicleRegId: id }
       });
       const vehicleData = vehicleResponse.data.data || vehicleResponse.data;
       if (vehicleData) {
@@ -195,7 +202,8 @@ export default function InvoiceForm() {
           customerGstin: vehicleData.customerGstin || '',
           regNo: vehicleData.vehicleNumber || '',
           model: `${vehicleData.vehicleBrand || ''} - ${vehicleData.vehicleModelName || ''}`,
-          kmsDriven: vehicleData.kmsDriven ? String(vehicleData.kmsDriven) : ''
+          kmsDriven: vehicleData.kmsDriven ? String(vehicleData.kmsDriven) : '',
+          vehicleRegId : String(id),
         }));
       } else {
         setDialogTitle("Error");
@@ -292,7 +300,7 @@ export default function InvoiceForm() {
         </DialogActions>
       </Dialog>
 
-      <Grid container spacing={2} alignItems="center">
+      {/* <Grid container spacing={2} alignItems="center">
         <Grid item xs={12} sm={6} md={4}>
           <TextField
             label="Vehicle Reg ID"
@@ -308,7 +316,7 @@ export default function InvoiceForm() {
             {loadingData ? 'Fetching...' : 'Fetch Vehicle Data'}
           </Button>
         </Grid>
-      </Grid>
+      </Grid> */}
 
       <Grid container spacing={2} mt={2}>
      

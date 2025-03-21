@@ -10,13 +10,17 @@ const API_URL = "https://carauto01-production-8b0b.up.railway.app";
 function EditSparePart() {
   const { id } = useParams();
   const navigate = useNavigate();
-
+  
   const [sparePart, setSparePart] = useState({
     partName: "",
     description: "",
     manufacturer: "",
-    price: 0,
-    partNumber: 0,
+    price: "", 
+    partNumber: "", 
+    sGST: "", 
+    cGST: "", 
+    totalGST: "", 
+    buyingPrice: "", 
     photo: [] as string[],
   });
 
@@ -48,7 +52,15 @@ function EditSparePart() {
       try {
         setLoading(true);
         const response = await SparePartGetByID(id);
-        setSparePart(response);
+        setSparePart({
+          ...response,
+          price: response.price?.toString() || "",
+          sGST: response.sgst?.toString() || "",   
+          cGST: response.cgst?.toString() || "",   
+          totalGST: response.totalGST?.toString() || "", 
+          buyingPrice: response.buyingPrice?.toString() || "",
+          partNumber: response.partNumber || "",
+        });
       } catch (err) {
         console.error("Error fetching spare part:", err);
         setError("Failed to fetch data");
@@ -137,7 +149,7 @@ function EditSparePart() {
         setShowMessage(true);
         setTimeout(() => {
           setShowMessage(false);
-          navigate("/spare-parts");
+          navigate("/getAll"); 
         }, 2000);
       } catch (err) {
         console.error("Error deleting spare part:", err);
@@ -152,19 +164,27 @@ function EditSparePart() {
   const handleSave = async () => {
     try {
       const formData = new FormData();
-      formData.append("partName", sparePart.partName);
-      formData.append("description", sparePart.description);
-      formData.append("manufacturer", sparePart.manufacturer);
-      formData.append("price", sparePart.price.toString());
-      formData.append("partNumber", sparePart.partNumber.toString());
+      formData.append("partName", sparePart.partName ?? "");
+      formData.append("description", sparePart.description ?? "");
+      formData.append("manufacturer", sparePart.manufacturer ?? "");
+      formData.append("price", Number(sparePart.price || 0).toString());
+      formData.append("partNumber", sparePart.partNumber ?? "");
+      formData.append("sGST", Number(sparePart.sGST || 0).toString());
+      formData.append("cGST", Number(sparePart.cGST || 0).toString());
+      formData.append("totalGST", Number(sparePart.totalGST || 0).toString());
+      formData.append("buyingPrice", Number(sparePart.buyingPrice || 0).toString());
 
       selectedImages.forEach((file) => {
         formData.append("photos", file);
       });
 
-      await axios.patch(`${API_URL}/sparePartManagement/update/${id}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await axios.patch(
+        `${API_URL}/sparePartManagement/update/${id}`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
 
       setMessage("Spare part updated successfully.");
       setMessageType("success");
@@ -215,7 +235,7 @@ function EditSparePart() {
       transition={{ duration: 0.5 }}
       className="min-h-screen bg-gradient-to-r from-gray-100 to-gray-200 p-4 md:p-6"
     >
-      {/* Header with Back Button */}
+     
       <div className="mb-6 flex items-center justify-between">
         <button
           className="flex items-center gap-2 text-gray-700 hover:text-black transition duration-300"
@@ -228,13 +248,11 @@ function EditSparePart() {
       </div>
 
       <div className="flex flex-col md:flex-row gap-8 max-w-6xl mx-auto">
-        {/* LEFT PANEL: Images */}
         <div className="bg-white p-6 md:p-8 shadow-lg rounded-lg border border-gray-100 flex-1">
           <h2 className="text-2xl md:text-3xl font-bold mb-6 text-gray-800">
             Photos
           </h2>
 
-          {/* Existing Images */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
             {sparePart.photo.map((photo, index) => (
               <motion.div
@@ -268,7 +286,6 @@ function EditSparePart() {
             <div className="flex-1 border-t border-gray-300"></div>
           </div>
 
-          {/* New Image Previews */}
           <div>
             <label className="block text-gray-700 font-medium mb-2">
               Preview New Images
@@ -301,7 +318,6 @@ function EditSparePart() {
             </div>
           </div>
 
-          {/* File Input & Update Button */}
           <div>
             <label className="block text-gray-700 font-medium mb-2">
               Upload More Images
@@ -326,7 +342,6 @@ function EditSparePart() {
           </div>
         </div>
 
-        {/* RIGHT PANEL: Form Fields */}
         <div className="bg-white p-6 md:p-8 shadow-lg rounded-lg border border-gray-100 flex-1">
           <h2 className="text-2xl md:text-3xl font-bold mb-6 text-gray-800">
             Edit Details
@@ -339,7 +354,7 @@ function EditSparePart() {
               <input
                 type="text"
                 name="partName"
-                value={sparePart.partName}
+                value={sparePart.partName || ""}
                 onChange={handleChange}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
                 placeholder="Enter spare part name"
@@ -352,7 +367,7 @@ function EditSparePart() {
               </label>
               <textarea
                 name="description"
-                value={sparePart.description}
+                value={sparePart.description || ""}
                 onChange={handleChange}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
                 placeholder="Enter a detailed description"
@@ -367,7 +382,7 @@ function EditSparePart() {
               <input
                 type="text"
                 name="manufacturer"
-                value={sparePart.manufacturer}
+                value={sparePart.manufacturer || ""}
                 onChange={handleChange}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
                 placeholder="Enter manufacturer name"
@@ -376,7 +391,7 @@ function EditSparePart() {
 
             <div>
               <label className="block text-gray-700 font-medium mb-2">
-                Price
+                Selling Price
               </label>
               <input
                 type="number"
@@ -385,7 +400,7 @@ function EditSparePart() {
                 onChange={handleChange}
                 min="0"
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
-                placeholder="Enter price"
+                placeholder="Enter selling price"
               />
             </div>
 
@@ -394,17 +409,75 @@ function EditSparePart() {
                 Part Number
               </label>
               <input
-                type="number"
+                type="text"
                 name="partNumber"
-                value={sparePart.partNumber}
+                value={sparePart.partNumber || ""}
                 onChange={handleChange}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
                 placeholder="Enter part number"
               />
             </div>
+           
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  SGST (%)
+                </label>
+                <input
+                  type="number"
+                  name="sGST"
+                  value={sparePart.sGST}
+                  onChange={handleChange}
+                  min="0"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
+                  placeholder="e.g., 9"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  CGST (%)
+                </label>
+                <input
+                  type="number"
+                  name="cGST"
+                  value={sparePart.cGST}
+                  onChange={handleChange}
+                  min="0"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
+                  placeholder="e.g., 9"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  Total GST (%)
+                </label>
+                <input
+                  type="number"
+                  name="totalGST" 
+                  value={sparePart.totalGST}
+                  onChange={handleChange}
+                  min="0"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
+                  placeholder="e.g., 18"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  Buying Price (INR)
+                </label>
+                <input
+                  type="number"
+                  name="buyingPrice"
+                  value={sparePart.buyingPrice}
+                  onChange={handleChange}
+                  min="0"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 bg-white text-black"
+                  placeholder="Enter buying price"
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Save & Delete Buttons */}
           <div className="flex flex-col md:flex-row gap-4 mt-8">
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -429,7 +502,6 @@ function EditSparePart() {
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {showDeleteConfirmation && (
           <motion.div
@@ -477,7 +549,6 @@ function EditSparePart() {
         )}
       </AnimatePresence>
 
-      {/* Toast Messages */}
       <AnimatePresence>
         {showMessage && (
           <motion.div

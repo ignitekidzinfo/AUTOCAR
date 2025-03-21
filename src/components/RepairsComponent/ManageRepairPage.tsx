@@ -72,7 +72,7 @@ export default function ManageRepairPage() {
 
       <Box sx={{ mt: 4 }}>
         <Typography variant="body2" align="center">
-          Copyright © Sitemark 2025.
+          Copyright © AutoCarCarePoint 2025.
         </Typography>
       </Box>
     </Box>

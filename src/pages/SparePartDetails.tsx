@@ -27,25 +27,27 @@ type SparePartType = {
 function SparePartDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  
   const [sparePart, setSparePart] = useState<SparePartType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  
   const [showPincodePopup, setShowPincodePopup] = useState(true);
   const [pincode, setPincode] = useState("");
   const [deliveryMessage, setDeliveryMessage] = useState("");
-
+  
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isFullScreen, setIsFullScreen] = useState(false);
-
-  // Get user role from local storage token
+  
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  
   let userRole = "";
   const storedDecodedToken = localStorage.getItem("userData");
   if (storedDecodedToken) {
     const parsedToken = JSON.parse(storedDecodedToken);
     userRole = parsedToken.authorities[0];
   }
-
+  
   useEffect(() => {
     const storedPincode = localStorage.getItem("pincode");
     if (storedPincode) {
@@ -54,14 +56,14 @@ function SparePartDetails() {
       setShowPincodePopup(false);
     }
   }, []);
-
+  
   useEffect(() => {
     if (!id) {
       setError("Invalid Spare Part ID");
       setLoading(false);
       return;
     }
-
+  
     apiClient
       .get(`sparePartManagement/getPartById/${id}`)
       .then((response) => {
@@ -74,7 +76,7 @@ function SparePartDetails() {
         setLoading(false);
       });
   }, [id]);
-
+  
   const handlePincodeSubmit = () => {
     if (pincode) {
       localStorage.setItem("pincode", pincode);
@@ -82,27 +84,38 @@ function SparePartDetails() {
       setShowPincodePopup(false);
     }
   };
-
+  
   const handleThumbnailClick = (index: number) => {
     setCurrentImageIndex(index);
   };
-
+  
   const handleDelete = () => {
-    alert("Delete functionality to be implemented.");
+    setShowDeleteConfirmation(true);
   };
-
+  
+  const confirmDelete = async () => {
+    try {
+      await apiClient.delete(`/sparePartManagement/delete/${id}`);
+      setShowDeleteConfirmation(false);
+      navigate("/getAll"); 
+    } catch (error) {
+      console.error("Error deleting spare part:", error);
+      alert("Failed to delete spare part.");
+    }
+  };
+  
   const handleEdit = () => {
     navigate(`/edit-spare-part/${id}`);
   };
-
+  
   const handleFullScreen = () => {
     setIsFullScreen(true);
   };
-
+  
   const handleCloseFullScreen = () => {
     setIsFullScreen(false);
   };
-
+  
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -115,8 +128,8 @@ function SparePartDetails() {
       </div>
     );
   }
-
-  if (error) {
+  
+  if (error || !sparePart) {
     return (
       <div className="flex justify-center items-center h-screen">
         <motion.p
@@ -124,12 +137,12 @@ function SparePartDetails() {
           animate={{ opacity: 1 }}
           className="text-center text-red-500 text-xl p-6 bg-white rounded-lg shadow-md"
         >
-          {error}
+          {error || "Spare part not found"}
         </motion.p>
       </div>
     );
   }
-
+  
   return (
     <div className="min-h-screen bg-gray-100 p-4 lg:p-6 relative">
       <motion.button
@@ -141,7 +154,7 @@ function SparePartDetails() {
         <ArrowLeft size={24} />
         <span className="text-lg font-medium">Back</span>
       </motion.button>
-
+  
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 lg:gap-8">
         <div className="w-full lg:w-1/2 flex flex-col gap-4">
           <div className="flex flex-col lg:flex-row gap-4">
@@ -170,13 +183,13 @@ function SparePartDetails() {
                   </motion.div>
                 ))}
             </motion.div>
-
+  
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="flex-1 border-2 border-gray-200 rounded-lg shadow-lg overflow-hidden relative bg-white flex items-center justify-center"
             >
-              {sparePart && sparePart.photo?.length > 0 ? (
+              {sparePart.photo?.length > 0 ? (
                 <motion.img
                   src={`data:image/jpeg;base64,${sparePart.photo[currentImageIndex]}`}
                   alt={sparePart.partName || "Spare Part"}
@@ -191,8 +204,6 @@ function SparePartDetails() {
                   className="w-full max-h-[500px] object-contain"
                 />
               )}
-
-              {/* Edit button visible only for ADMIN */}
               {userRole === "ADMIN" && (
                 <motion.button
                   whileHover={{ scale: 1.1 }}
@@ -204,7 +215,7 @@ function SparePartDetails() {
               )}
             </motion.div>
           </div>
-
+  
           {deliveryMessage && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -222,7 +233,7 @@ function SparePartDetails() {
             </motion.div>
           )}
         </div>
-
+  
         <div className="w-full lg:w-1/2">
           <div className="flex items-center justify-between mb-4">
             <motion.h1
@@ -230,9 +241,8 @@ function SparePartDetails() {
               animate={{ opacity: 1 }}
               className="text-2xl lg:text-3xl font-bold text-gray-800"
             >
-              {sparePart?.partName}
+              {sparePart.partName}
             </motion.h1>
-            {/* Edit button visible only for ADMIN */}
             {userRole === "ADMIN" && (
               <motion.button
                 whileHover={{ scale: 1.1 }}
@@ -243,7 +253,7 @@ function SparePartDetails() {
               </motion.button>
             )}
           </div>
-
+  
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -259,31 +269,31 @@ function SparePartDetails() {
               Best Offer
             </span>
           </motion.div>
-
+  
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="mb-4"
           >
             <p className="text-4xl font-mono font-bold text-gray-800">
-              ₹{sparePart?.price}
+              ₹{sparePart.price}
             </p>
             <p className="text-gray-600 text-sm">Incl. of all taxes</p>
           </motion.div>
-
+  
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="space-y-4 mb-6"
           >
             <p className="text-gray-700 text-lg">
-              <strong>Part Number:</strong> {sparePart?.partNumber}
+              <strong>Part Number:</strong> {sparePart.partNumber}
             </p>
             <p className="text-gray-700 text-lg">
-              <strong>Origin:</strong> {sparePart?.manufacturer ?? "N/A"}
+              <strong>Manufacturer:</strong> {sparePart.manufacturer ?? "N/A"}
             </p>
           </motion.div>
-
+  
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -293,10 +303,10 @@ function SparePartDetails() {
               Description
             </h2>
             <p className="text-gray-700 text-lg break-words">
-              {sparePart?.description}
+              {sparePart.description}
             </p>
           </motion.div>
-
+  
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -307,7 +317,7 @@ function SparePartDetails() {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center gap-2 bg-green-500 text-white px-8 py-3 rounded-lg transition duration-300 shadow-md"
+                  className="flex items-center gap-2 bg-green-500 text-white px-8 py-3 rounded-lg transition duration-300 shadow-md"
                 >
                   <ShoppingCart size={20} />
                   <span className="text-lg">Add to Cart</span>
@@ -315,14 +325,14 @@ function SparePartDetails() {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center gap-2 bg-blue-500 text-white px-8 py-3 rounded-lg transition duration-300 shadow-md"
+                  className="flex items-center gap-2 bg-blue-500 text-white px-8 py-3 rounded-lg transition duration-300 shadow-md"
                 >
                   <CreditCard size={20} />
                   <span className="text-lg">Buy Now</span>
                 </motion.button>
               </>
             )}
-            {/* Delete button visible only for ADMIN */}
+  
             {userRole === "ADMIN" && (
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -337,7 +347,7 @@ function SparePartDetails() {
           </motion.div>
         </div>
       </div>
-
+ 
       <AnimatePresence>
         {isFullScreen && (
           <motion.div
@@ -371,7 +381,51 @@ function SparePartDetails() {
           </motion.div>
         )}
       </AnimatePresence>
-
+ 
+      <AnimatePresence>
+        {showDeleteConfirmation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.8 }}
+              transition={{ duration: 0.3 }}
+              className="bg-white p-6 rounded-lg shadow-lg text-gray-800 max-w-sm w-full"
+            >
+              <h2 className="text-xl font-bold mb-2">
+                Warning!
+              </h2>
+              <p className="mb-4">
+                Deleting this spare part is irreversible and will remove it permanently.
+              </p>
+              <div className="flex gap-4">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={confirmDelete}
+                  className="flex-1 bg-red-500 text-white px-4 py-2 rounded-lg transition duration-300"
+                >
+                  Delete
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowDeleteConfirmation(false)}
+                  className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition duration-300"
+                >
+                  Cancel
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+  
       <AnimatePresence>
         {showPincodePopup && (
           <motion.div

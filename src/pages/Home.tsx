@@ -146,7 +146,7 @@ function Home() {
       <div
         className="relative h-[300px] md:h-[600px] flex flex-col items-center justify-center bg-center bg-no-repeat"
         style={{
-          backgroundImage: `url('/cover5.jpg')`,
+          backgroundImage: `url('/Ps.png')`,
           backgroundSize: "cover",
         }}
       >
@@ -160,7 +160,7 @@ function Home() {
             transition={{ duration: 0.7, ease: "easeOut" }}
             className="text-4xl md:text-6xl font-bold mb-4"
           >
-            Premium Car Servicing & Repairs
+            Car Spare Parts & Accessories
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -192,33 +192,6 @@ function Home() {
               Explore Services
             </motion.button>
           </motion.div>
-        </div>
-      </div>
-
-      <div className="relative z-20 max-w-5xl mx-auto px-4 -mt-12">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
-          {[
-            { title: "4,000+", subtitle: "Happy Customers" },
-            { title: "50+", subtitle: "Services Offered" },
-            { title: "24/7", subtitle: "Customer Support" },
-            { title: "4.8", subtitle: "Average Rating" },
-          ].map((item, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: false, amount: 0.3 }}
-              transition={{
-                duration: 0.7,
-                ease: "easeOut",
-                delay: 0.1 * index,
-              }}
-              className="bg-gradient-to-r from-red-600 to-black p-6 rounded-lg shadow-md text-white text-center"
-            >
-              <h3 className="text-4xl font-bold mb-2">{item.title}</h3>
-              <p className="text-xl">{item.subtitle}</p>
-            </motion.div>
-          ))}
         </div>
       </div>
 

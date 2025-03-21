@@ -7,4 +7,12 @@ export interface SparePartData {
     stockQuantity: number;
     photo?: string; // Assuming it's a base64 string or URL
   }
+
+  export interface filter {
+    vehicleRegId? : string;
+    appointmentId? :string;
+    startDate? : string;
+    endDate? : string;
+    status?: string;
+  }
   

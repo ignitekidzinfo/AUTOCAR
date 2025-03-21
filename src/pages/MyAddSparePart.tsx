@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { UploadCloud, X, ArrowLeft, Package, Factory, Tag, Hash, Info } from "lucide-react";
+import {
+  UploadCloud,
+  X,
+  ArrowLeft,
+  Package,
+  Factory,
+  Tag,
+  Hash,
+  Info,
+} from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import apiClient from "Services/apiService";
@@ -11,6 +20,10 @@ interface FormData {
   manufacturer: string;
   price: string;
   partNumber: string;
+  sGST: string;
+  cGST: string;
+  totalGST: string;
+  buyingPrice: string;
 }
 
 interface ApiError {
@@ -31,6 +44,10 @@ function MyAddSparePart() {
     manufacturer: "",
     price: "",
     partNumber: "",
+    sGST: "",
+    cGST: "",
+    totalGST: "",
+    buyingPrice: "",
   });
   const [photos, setPhotos] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -47,7 +64,7 @@ function MyAddSparePart() {
       return;
     }
 
-    if (!Object.values(formData).every(field => field.trim())) {
+    if (!Object.values(formData).every((field) => field.trim())) {
       toast.error("Please fill all required fields.");
       return;
     }
@@ -59,14 +76,24 @@ function MyAddSparePart() {
       Object.entries(formData).forEach(([key, value]) => {
         formPayload.append(key, value);
       });
-      photos.forEach(photo => formPayload.append("photos", photo));
+      photos.forEach((photo) => formPayload.append("photos", photo));
 
       await apiClient.post("/sparePartManagement/addPart", formPayload, {
-        headers: { "Content-Type": "multipart/form-data" }
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       toast.success("Spare part added successfully!");
-      setFormData({ partName: "", description: "", manufacturer: "", price: "", partNumber: "" });
+      setFormData({
+        partName: "",
+        description: "",
+        manufacturer: "",
+        price: "",
+        partNumber: "",
+        sGST: "",
+        cGST: "",
+        totalGST: "",
+        buyingPrice: "",
+      });
       setPhotos([]);
       setImagePreviews([]);
     } catch (error) {
@@ -74,9 +101,10 @@ function MyAddSparePart() {
       let errorMessage = "Failed to add spare part. Please try again.";
 
       if (axios.isAxiosError(error)) {
-        errorMessage = error.response?.data?.exception ||
-                       error.response?.data?.message ||
-                       errorMessage;
+        errorMessage =
+          error.response?.data?.exception ||
+          error.response?.data?.message ||
+          errorMessage;
       } else if (error instanceof Error) {
         errorMessage = error.message;
       }
@@ -91,25 +119,30 @@ function MyAddSparePart() {
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-    
+
     const files = Array.from(e.target.files);
 
     if (files.length > 0) {
       setUploadError(false);
     }
-    setPhotos(prev => [...prev, ...files]);
-    setImagePreviews(prev => [...prev, ...files.map(file => URL.createObjectURL(file))]);
+    setPhotos((prev) => [...prev, ...files]);
+    setImagePreviews((prev) => [
+      ...prev,
+      ...files.map((file) => URL.createObjectURL(file)),
+    ]);
   };
 
   const handleRemoveImage = (index: number) => {
     URL.revokeObjectURL(imagePreviews[index]);
-    setPhotos(prev => prev.filter((_, i) => i !== index));
-    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   return (
@@ -132,10 +165,10 @@ function MyAddSparePart() {
             <Package className="h-8 w-8 text-blue-600" />
             Add New Spare Part
           </h1>
-          
+
           <form onSubmit={handleSubmit} className="space-y-6">
+        
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-         
               <div className="space-y-2">
                 <label className="flex items-center text-gray-700 font-medium gap-2">
                   <Tag className="h-5 w-5 text-blue-600" />
@@ -170,8 +203,8 @@ function MyAddSparePart() {
 
               <div className="space-y-2">
                 <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <span className="text-blue-600">₹</span>
-                  Price
+                  <Hash className="h-5 w-5 text-blue-600" />
+                  Selling Price (INR)
                 </label>
                 <input
                   type="number"
@@ -179,7 +212,7 @@ function MyAddSparePart() {
                   value={formData.price}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter price in INR"
+                  placeholder="Enter selling price"
                   min="0"
                   required
                 />
@@ -197,6 +230,76 @@ function MyAddSparePart() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., BP-2023-XL"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="flex items-center text-gray-700 font-medium gap-2">
+                  <Info className="h-5 w-5 text-blue-600" />
+                  SGST (%)
+                </label>
+                <input
+                  type="number"
+                  name="sGST"
+                  value={formData.sGST}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., 9"
+                  min="0"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center text-gray-700 font-medium gap-2">
+                  <Info className="h-5 w-5 text-blue-600" />
+                  CGST (%)
+                </label>
+                <input
+                  type="number"
+                  name="cGST"
+                  value={formData.cGST}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., 9"
+                  min="0"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center text-gray-700 font-medium gap-2">
+                  <Info className="h-5 w-5 text-blue-600" />
+                  Total GST (%)
+                </label>
+                <input
+                  type="number"
+                  name="totalGST"
+                  value={formData.totalGST}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., 18"
+                  min="0"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center text-gray-700 font-medium gap-2">
+                  <Hash className="h-5 w-5 text-blue-600" />
+                  Buying Price (INR)
+                </label>
+                <input
+                  type="number"
+                  name="buyingPrice"
+                  value={formData.buyingPrice}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter buying price"
+                  min="0"
                   required
                 />
               </div>
@@ -224,20 +327,30 @@ function MyAddSparePart() {
                 Product Photos
                 <span className="text-sm text-gray-500">(Required)</span>
               </label>
-              
+
               <div
                 className={`border-2 border-dashed ${
-                  uploadError ? "border-red-500 bg-red-50" : "border-gray-200 hover:border-blue-400"
+                  uploadError
+                    ? "border-red-500 bg-red-50"
+                    : "border-gray-200 hover:border-blue-400"
                 } rounded-xl p-6 text-center transition-all cursor-pointer group`}
                 onClick={() => document.getElementById("fileUpload")?.click()}
               >
                 <UploadCloud
                   className={`h-12 w-12 mx-auto mb-4 ${
-                    uploadError ? "text-red-500" : "text-gray-400 group-hover:text-blue-500"
+                    uploadError
+                      ? "text-red-500"
+                      : "text-gray-400 group-hover:text-blue-500"
                   }`}
                 />
-                <p className={`${uploadError ? "text-red-600" : "text-gray-600"} mb-2`}>
-                  {uploadError ? "Please upload at least one photo" : "Click or drag to upload images"}
+                <p
+                  className={`${
+                    uploadError ? "text-red-600" : "text-gray-600"
+                  } mb-2`}
+                >
+                  {uploadError
+                    ? "Please upload at least one photo"
+                    : "Click or drag to upload images"}
                 </p>
                 <p className="text-sm text-gray-500">
                   Supported formats: JPG, PNG (max 5MB each)

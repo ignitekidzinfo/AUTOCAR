@@ -11,7 +11,6 @@ function HowItWorks() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Responsive background: use "top" for mobile to show key parts of the image
   const backgroundStyle = {
     backgroundImage: "url('/cove.jpg')",
     backgroundSize: "cover",
@@ -19,7 +18,7 @@ function HowItWorks() {
     backgroundRepeat: "no-repeat",
   };
 
-  // Adjusted spring transition for a slightly slower, smoother effect
+
   const springTransition = {
     type: "spring",
     stiffness: 60,
@@ -28,10 +27,9 @@ function HowItWorks() {
 
   return (
     <div className="relative w-full min-h-screen" style={backgroundStyle}>
-      {/* Dark overlay */}
+
       <div className="absolute inset-0 bg-black bg-opacity-60" />
 
-      {/* Content */}
       <div className="relative container mx-auto py-20 px-4 text-white">
         <motion.div
           className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center"
@@ -40,7 +38,7 @@ function HowItWorks() {
           transition={{ ...springTransition, delay: 0 }}
           viewport={{ once: false }}
         >
-          {/* LEFT COLUMN (2 boxes) */}
+          
           <div className="flex flex-col space-y-8">
             <motion.div
               className="bg-black bg-opacity-80 rounded-lg p-10"
@@ -71,7 +69,6 @@ function HowItWorks() {
             </motion.div>
           </div>
 
-          {/* CENTER COLUMN (Heading & Subheading) */}
           <div className="flex flex-col items-center justify-center text-center">
             <motion.h2
               className="text-4xl font-bold mb-4"
