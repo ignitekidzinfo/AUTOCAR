@@ -1,34 +1,93 @@
-import * as React from "react";
-import { Card, CardContent, Typography, Grid, CardActionArea, Box } from "@mui/material";
+import { Box, Card, CardActionArea, CardContent, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { FaTools, FaClipboardList, FaCalendarAlt, FaShoppingCart } from "react-icons/fa";
 
 const reportItems = [
-  { text: "ADD New Stock Service", link: "/admin/transaction" },
-  { text: "View All Stock", link: "/admin/transaction-list" },
-  { text: "Stock By Date", link: "/admin/stock-by-date" },
-  { text: "Counter Sale", link: "/admin/counter-sale" },
+  {
+    text: "ADD New Stock Service",
+    link: "/admin/transaction",
+    icon: <FaTools size={40} color="#1976d2" />,
+  },
+  {
+    text: "View All Stock",
+    link: "/admin/transaction-list",
+    icon: <FaClipboardList size={40} color="#388e3c" />,
+  },
+  {
+    text: "Stock By Date",
+    link: "/admin/stock-by-date",
+    icon: <FaCalendarAlt size={40} color="#f57c00" />,
+  },
+  {
+    text: "Counter Sale",
+    link: "/admin/counter-sale",
+    icon: <FaShoppingCart size={40} color="#d32f2f" />,
+  },
 ];
 
 export default function ReportCards() {
   const navigate = useNavigate();
 
   return (
-    <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", p: 3 }}>
-      <Grid container spacing={3} sx={{ maxWidth: 900 }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        py: 5,
+        px: 2,
+      }}
+    >
+      <Typography variant="h4" fontWeight="bold" color="#fff" mb={4}>
+        Stock Management
+      </Typography>
+
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          gap: 3,
+          maxWidth: "1000px",
+        }}
+      >
         {reportItems.map((item, index) => (
-          <Grid item xs={12} sm={6} key={index}>
-            <Card sx={{ minHeight: 150, textAlign: "center", boxShadow: 3, borderRadius: 3 }}>
-              <CardActionArea onClick={() => navigate(item.link)}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight="bold">
-                    {item.text}
-                  </Typography>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
+          <Card
+            key={index}
+            sx={{
+              width: 220,
+              height: 150,
+              backgroundColor: "transparent", 
+              color: "#fff",
+              borderRadius: 3,
+              textAlign: "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "transform 0.3s ease-in-out",
+              border: "1px solid rgba(255, 255, 255, 0.2)", 
+              "&:hover": {
+                transform: "scale(1.05)",
+                boxShadow: 4,
+              },
+            }}
+          >
+            <CardActionArea onClick={() => navigate(item.link)} sx={{ height: "100%" }}>
+              <CardContent sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                {item.icon}
+                <Typography variant="subtitle1" fontWeight="bold" mt={2}>
+                  {item.text}
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+          </Card>
         ))}
-      </Grid>
+      </Box>
+
+      <Typography variant="body2" sx={{ mt: 5, color: "#aaa" }}>
+        Copyright © AutoCarCarePoint 2025.
+      </Typography>
     </Box>
   );
 }
