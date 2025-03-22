@@ -17,7 +17,7 @@ import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 
 
 const cardItems = [
-  { title: 'Add New Stock', icon: <ShoppingCartIcon fontSize="large" />, link: '/admin/transaction' },
+  { title: 'Add New Stock', icon: <ShoppingCartIcon fontSize="large" />, link: '/admin/vehicle' },
   { title: 'View All Stock', icon: <DirectionsCarIcon fontSize="large" />, link: '/admin/transaction-list' },
   { title: 'View by Partname', icon: <BookOnlineIcon fontSize="large" />, link: '/admin/booking' },
   { title: 'Manage Stock', icon: <BuildIcon fontSize="large" />, link: '/admin/transaction' },
