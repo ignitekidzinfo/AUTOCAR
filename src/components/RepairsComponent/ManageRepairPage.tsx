@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   Box,
@@ -19,16 +18,15 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import PolicyIcon from '@mui/icons-material/Policy';
 
 const cardItems = [
-  { title: 'Vehicle Registration', icon: <ShoppingCartIcon fontSize="large" />, link: '/admin/purchase' },
-  { title: 'Vehicle ID', icon: <DirectionsCarIcon fontSize="large" />, link: '/admin/vehicle-registration' },
-  { title: 'Vehicle Date Range', icon: <BookOnlineIcon fontSize="large" />, link: '/admin/booking' },
-  { title: 'Vehicle Status', icon: <BuildIcon fontSize="large" />, link: '/admin/service-queue' },
-  { title: 'Vehicle Appointment', icon: <HistoryIcon fontSize="large" />, link: '/admin/service-history' },
-  { title: 'Counter Sale', icon: <PointOfSaleIcon fontSize="large" />, link: '/admin/counter-sale' },
-  { title: 'Quotation', icon: <DescriptionIcon fontSize="large" />, link: '/admin/billForm' },
-  { title: 'Insurance', icon: <PolicyIcon fontSize="large" />, link: '/admin/insurance' },
+  { title: 'Vehicle Registration', icon: <ShoppingCartIcon fontSize="large" sx={{ color: '#ff9800' }} />, link: '/admin/purchase' },
+  { title: 'Vehicle ID', icon: <DirectionsCarIcon fontSize="large" sx={{ color: '#2196f3' }} />, link: '/admin/vehicle-registration' },
+  { title: 'Vehicle Date Range', icon: <BookOnlineIcon fontSize="large" sx={{ color: '#4caf50' }} />, link: '/admin/booking' },
+  { title: 'Vehicle Status', icon: <BuildIcon fontSize="large" sx={{ color: '#f44336' }} />, link: '/admin/service-queue' },
+  { title: 'Vehicle Appointment', icon: <HistoryIcon fontSize="large" sx={{ color: '#9c27b0' }} />, link: '/admin/service-history' },
+  { title: 'Counter Sale', icon: <PointOfSaleIcon fontSize="large" sx={{ color: '#ff5722' }} />, link: '/admin/counter-sale' },
+  { title: 'Quotation', icon: <DescriptionIcon fontSize="large" sx={{ color: '#3f51b5' }} />, link: '/admin/billForm' },
+  { title: 'Insurance', icon: <PolicyIcon fontSize="large" sx={{ color: '#00bcd4' }} />, link: '/admin/insurance' },
 ];
-
 
 export default function ManageRepairPage() {
   return (

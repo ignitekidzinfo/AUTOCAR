@@ -1,8 +1,6 @@
-import * as React from 'react';
-import CssBaseline from '@mui/material/CssBaseline';
 import Stack from '@mui/material/Stack';
 import AppTheme from '../theme/AppTheme';
-import ColorModeSelect from '../theme/ColorModeSelect';
+
 import SignUpCard from '../components/SignUpCard';
 
 export default function SignUp(props: { disableCustomTheme?: boolean }) {

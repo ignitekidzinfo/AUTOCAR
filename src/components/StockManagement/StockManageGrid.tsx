@@ -1,76 +1,100 @@
+import { useTheme } from "@mui/material/styles";
+import { Box, Card, CardActionArea, CardContent, Typography } from "@mui/material";
+import { useNavigate } from "react-router-dom";
+import { FaTools, FaClipboardList, FaCalendarAlt, FaShoppingCart } from "react-icons/fa";
 
-import {
-  Box,
-  Card,
-  CardActionArea,
-  CardContent,
-  Grid,
-  Typography
-} from '@mui/material';
-
-import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
-import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
-import BookOnlineIcon from '@mui/icons-material/BookOnline';
-import BuildIcon from '@mui/icons-material/Build';
-import HistoryIcon from '@mui/icons-material/History';
-import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
-
-
-const cardItems = [
-  { title: 'Add New Stock', icon: <ShoppingCartIcon fontSize="large" />, link: '/admin/transaction' },
-  { title: 'View All Stock', icon: <DirectionsCarIcon fontSize="large" />, link: '/admin/transaction-list' },
-  { title: 'View by Partname', icon: <BookOnlineIcon fontSize="large" />, link: '/admin/booking' },
-  { title: 'Manage Stock', icon: <BuildIcon fontSize="large" />, link: '/admin/service-queue' },
-  { title: 'Stock By Date', icon: <HistoryIcon fontSize="large" />, link: '/admin/service-history' },
-  { title: 'Counter Sale', icon: <PointOfSaleIcon fontSize="large" />, link: '/admin/counter-sale' }
+const reportItems = [
+  {
+    text: "ADD New Stock Service",
+    link: "/admin/transaction",
+    icon: <FaTools size={40} color="#1976d2" />,
+  },
+  {
+    text: "View All Stock",
+    link: "/admin/transaction-list",
+    icon: <FaClipboardList size={40} color="#388e3c" />,
+  },
+  {
+    text: "Stock By Date",
+    link: "/admin/stock-by-date",
+    icon: <FaCalendarAlt size={40} color="#f57c00" />,
+  },
+  {
+    text: "Counter Sale",
+    link: "/admin/counter-sale",
+    icon: <FaShoppingCart size={40} color="#d32f2f" />,
+  },
 ];
 
+export default function ReportCards() {
+  const navigate = useNavigate();
+  const theme = useTheme();                     
+  const isDark = theme.palette.mode === "dark"; 
 
-export default function StockManageGrid() {
   return (
     <Box
       sx={{
-        minHeight: '100vh',
-        backgroundColor: '#000',
-        color: '#fff',
-        p: 3,
+     
+        minHeight: "100vh",
+        backgroundColor: theme.palette.background.default,
+        color: theme.palette.text.primary,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        py: 5,
+        px: 2,
       }}
     >
-    
-      <Typography variant="h4" align="center" gutterBottom>
-        AUTO CAR CARE POINT
+      <Typography variant="h4" fontWeight="bold" mb={4}>
+        Stock Management
       </Typography>
 
-      <Grid container spacing={3} justifyContent="center">
-        {cardItems.map((item, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <Card sx={{ backgroundColor: '#1b1b1b' }}>
-              <CardActionArea
-                href={item.link} 
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  p: 3,
-                  textAlign: 'center',
-                  color: '#fff',
-                }}
-              >
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          gap: 3,
+          maxWidth: "1000px",
+        }}
+      >
+        {reportItems.map((item, index) => (
+          <Card
+            key={index}
+            sx={{
+              width: 220,
+              height: 150,
+        
+              backgroundColor: "transparent",
+              borderRadius: 3,
+              textAlign: "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "transform 0.3s ease-in-out",
+          
+              border: "none",
+              "&:hover": {
+                transform: "scale(1.05)",
+                boxShadow: 4,
+              },
+            }}
+          >
+            <CardActionArea onClick={() => navigate(item.link)} sx={{ height: "100%" }}>
+              <CardContent sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 {item.icon}
-                <CardContent>
-                  <Typography variant="h6">{item.title}</Typography>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
+                <Typography variant="subtitle1" fontWeight="bold" mt={2}>
+                  {item.text}
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+          </Card>
         ))}
-      </Grid>
-
-      <Box sx={{ mt: 4 }}>
-        <Typography variant="body2" align="center">
-          Copyright © AutoCarCarePoint 2025.
-        </Typography>
       </Box>
+
+      <Typography variant="body2" sx={{ mt: 5 }}>
+        Copyright © AutoCarCarePoint 2025.
+      </Typography>
     </Box>
   );
 }

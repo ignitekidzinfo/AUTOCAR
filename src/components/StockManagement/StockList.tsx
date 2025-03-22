@@ -51,7 +51,6 @@ export default function StockList() {
     const [textInput, setTextInput] = React.useState<string>("");
     const [selectedStatus, setSelectedStatus] = React.useState<string>("");
 
-  // Function to handle Delete Click
   const handleDelete = (id: number) => {
     setSelectedId(id);
     setOpen(true);
@@ -79,9 +78,9 @@ export default function StockList() {
     }
         console.log("check",response);
         if (response && Array.isArray(response)) {
-          // If response.data is an array, process it
+         
           const formattedRows = response.map((vehicle: Vehicle, index: number) => ({
-              id: index + 1, // Unique ID
+              id: index + 1, 
               vehicleRegId: vehicle.vehicleRegId,
               appointmentId: vehicle.appointmentId,
               chasisNumber: vehicle.chasisNumber,
@@ -98,10 +97,10 @@ export default function StockList() {
           }));
           setRows(formattedRows);
       } else if (response && typeof response === "object" && !Array.isArray(response) ) {
-          // If response is a single object (not an array), convert it into an array
+         
           const formattedRows = [
               {
-                  id: 1, // Unique ID
+                  id: 1, 
                   vehicleRegId: response.vehicleRegId,
                   appointmentId: response.appointmentId,
                   chasisNumber: response.chasisNumber,
@@ -119,7 +118,7 @@ export default function StockList() {
           ];
           setRows(formattedRows);
       } else {
-          // If response is null or undefined, set empty array
+          
           setRows([]);
       }
       
@@ -130,8 +129,6 @@ export default function StockList() {
     }
 };
 
-  
-  // Function to render Edit & Delete buttons in the "Action" column
   function renderActionButtons(params: GridCellParams) {
     return (
       <>
@@ -238,7 +235,7 @@ export default function StockList() {
                 const response = await VehicleListData();
                 if (response && Array.isArray(response.data)) {
                     const formattedRows = response.data.map((vehicle: Vehicle, index: number) => ({
-                        id: index + 1, // Ensure each row has a unique id
+                        id: index + 1, 
                         vehicleRegId: vehicle.vehicleRegId,
                         appointmentId: vehicle.appointmentId,
                         chasisNumber: vehicle.chasisNumber,
@@ -251,7 +248,7 @@ export default function StockList() {
                         userId: vehicle.userId,
                         Status: vehicle.status,
                         date: vehicle.date,
-                        Action: 'View', // Modify as needed
+                        Action: 'View', 
                     }));
                     setRows(formattedRows);
                 }
@@ -267,12 +264,11 @@ export default function StockList() {
     <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
    
    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        {/* Left Side: Title */}
+      
         <Typography component="h2" variant="h6">
             Vehicle List
         </Typography>
 
-        {/* Right Side: Add Vehicle Button */}
         <Button variant="contained" color="primary" onClick={() => navigate("/admin/vehicle/add")}>
             Add Vehicle
         </Button>
@@ -295,7 +291,6 @@ export default function StockList() {
         </Select>
       </FormControl>
 
-      {/* Input Field for Vehicle ID or Appointment Number */}
       {selectedType === "Vehicle ID" || selectedType === "Appointment Number" ? (
         <FormControl sx={{ width: { xs: "100%", md: "25ch" } }} variant="outlined">
           <OutlinedInput
@@ -313,7 +308,6 @@ export default function StockList() {
         </FormControl>
       ) : null}
 
-      {/* Date Range Picker */}
       {selectedType === "Date Range" && (
         <Grid mt={-1}>
         <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -330,7 +324,6 @@ export default function StockList() {
         </Grid>
       )}
 
-      {/* Select Status */}
       {selectedType === "Status" && (
         <FormControl sx={{ width: { xs: "100%", md: "25ch" } }}>
           <InputLabel>Select Status</InputLabel>
@@ -342,7 +335,6 @@ export default function StockList() {
         </FormControl>
       )}
 
-      {/* Search Button */}
       <Button variant="contained" color="primary" sx={{ alignSelf: "start" }} onClick={handleSearch}>
         Search
       </Button>
