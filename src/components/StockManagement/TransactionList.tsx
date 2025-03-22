@@ -6,8 +6,14 @@ import {
   Alert,
   IconButton,
   Button,
+  Tooltip,
 } from '@mui/material';
-import { DataGrid, GridColDef, GridCellParams } from '@mui/x-data-grid';
+import {
+  DataGrid,
+  GridColDef,
+  GridCellParams,
+  GridColumnHeaderParams,
+} from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
@@ -29,10 +35,10 @@ interface PaginatedResponse<T> {
   content: T[];
   totalPages: number;
   totalElements: number;
-  currentPage: number; 
+  currentPage: number;
 }
 
-const pageSize = 30; 
+const pageSize = 30;
 
 async function getAllUserParts(page: number): Promise<PaginatedResponse<UserPart>> {
   const response = await apiClient.get<PaginatedResponse<UserPart>>('/userParts/getAll', {
@@ -47,10 +53,13 @@ const UserPartList: React.FC = () => {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
-
   const [totalPages, setTotalPages] = useState<number>(0);
   const [totalElements, setTotalElements] = useState<number>(0);
-  const [currentPage, setCurrentPage] = useState<number>(0); 
+  const [currentPage, setCurrentPage] = useState<number>(0);
+
+  useEffect(() => {
+    fetchUserParts(0);
+  }, []);
 
   const fetchUserParts = async (page: number) => {
     setLoading(true);
@@ -61,14 +70,14 @@ const UserPartList: React.FC = () => {
       setCurrentPage(paginatedResponse.currentPage);
 
       const formattedRows = paginatedResponse.content.map((p) => ({
-        id: p.userPartId, 
+        id: p.userPartId,
         partNumber: p.partNumber,
         partName: p.partName,
+        description: p.description,
         manufacturer: p.manufacturer,
         quantity: p.quantity,
         price: p.price,
         updateAt: p.updateAt,
-        description: p.description,
       }));
       setRows(formattedRows);
     } catch (error: any) {
@@ -81,15 +90,18 @@ const UserPartList: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchUserParts(0);
-  }, []);
+  const renderHeaderWithTooltip = (params: GridColumnHeaderParams) => (
+    <Tooltip title={params.colDef.headerName || ''}>
+      <span>{params.colDef.headerName}</span>
+    </Tooltip>
+  );
 
   const columns: GridColDef[] = [
     {
       field: 'view',
       headerName: '',
-      width: 50,
+      flex: 0.3,
+      minWidth: 50,
       sortable: false,
       filterable: false,
       renderCell: (params: GridCellParams) => (
@@ -101,26 +113,66 @@ const UserPartList: React.FC = () => {
           <VisibilityIcon fontSize="inherit" />
         </IconButton>
       ),
+      renderHeader: () => null,
     },
-    { field: 'id', headerName: 'Part ID', flex: 1, minWidth: 100 },
-    { field: 'partNumber', headerName: 'Part Number', flex: 1, minWidth: 100 },
-    { field: 'partName', headerName: 'Part Name', flex: 1, minWidth: 150 },
+    {
+      field: 'id',
+      headerName: 'Part ID',
+      flex: 0.7,
+      minWidth: 80,
+      renderHeader: renderHeaderWithTooltip,
+    },
+    {
+      field: 'partNumber',
+      headerName: 'Part Number',
+      flex: 1,
+      minWidth: 120,
+      renderHeader: renderHeaderWithTooltip,
+    },
+    {
+      field: 'partName',
+      headerName: 'Part Name',
+      flex: 1,
+      minWidth: 150,
+      renderHeader: renderHeaderWithTooltip,
+    },
     {
       field: 'description',
       headerName: 'Description',
       flex: 1,
       minWidth: 150,
-      headerAlign: 'center',
-      align: 'left',
+      renderHeader: renderHeaderWithTooltip,
     },
-    { field: 'manufacturer', headerName: 'Manufacturer', flex: 1, minWidth: 150 },
-    { field: 'quantity', headerName: 'Quantity', flex: 1, minWidth: 80 },
-    { field: 'price', headerName: 'Price', flex: 1, minWidth: 100 },
-    { field: 'updateAt', headerName: 'Updated At', flex: 1, minWidth: 120 },
-  
+    {
+      field: 'manufacturer',
+      headerName: 'Manufacturer',
+      flex: 1,
+      minWidth: 150,
+      renderHeader: renderHeaderWithTooltip,
+    },
+    {
+      field: 'quantity',
+      headerName: 'Quantity',
+      flex: 0.7,
+      minWidth: 80,
+      renderHeader: renderHeaderWithTooltip,
+    },
+    {
+      field: 'price',
+      headerName: 'Price',
+      flex: 0.7,
+      minWidth: 100,
+      renderHeader: renderHeaderWithTooltip,
+    },
+    {
+      field: 'updateAt',
+      headerName: 'Updated At',
+      flex: 1,
+      minWidth: 120,
+      renderHeader: renderHeaderWithTooltip,
+    },
   ];
 
-  
   const startIndex = currentPage * pageSize + 1;
   const endIndex = Math.min((currentPage + 1) * pageSize, totalElements);
 
@@ -147,7 +199,12 @@ const UserPartList: React.FC = () => {
       }}
     >
       
-      <Typography variant="h4" align="center" gutterBottom sx={{ color: '#fff', pt: 2 }}>
+      <Typography
+        variant="h4"
+        align="center"
+        gutterBottom
+        sx={{ color: '#fff', pt: 2 }}
+      >
         User Parts Management
       </Typography>
 
@@ -157,7 +214,9 @@ const UserPartList: React.FC = () => {
           backgroundColor: '#fff',
           m: 2,
           borderRadius: 2,
-          overflow: 'hidden',
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         <DataGrid
@@ -167,9 +226,32 @@ const UserPartList: React.FC = () => {
           disableRowSelectionOnClick
           hideFooterPagination
           hideFooter
+          disableColumnMenu
           sx={{
-            height: '100%',
+            flex: 1,
             border: 'none',
+
+            '& .MuiDataGrid-columnHeaders': {
+              whiteSpace: 'nowrap',
+            },
+            '& .MuiDataGrid-columnHeaderTitle': {
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              fontWeight: 500,
+            },
+          
+            '& .MuiDataGrid-columnSeparator': {
+              opacity: 1,
+              visibility: 'visible',
+            },
+      
+            '& .MuiDataGrid-menuIconButton': {
+              display: 'none',
+            },
+           
+            '& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell': {
+              padding: '0 !important',
+            },
           }}
         />
       </Box>
@@ -184,7 +266,9 @@ const UserPartList: React.FC = () => {
           p: 2,
         }}
       >
-        <Typography variant="body1">{`${startIndex}–${endIndex} of ${totalElements}`}</Typography>
+        <Typography variant="body1">
+          {`${startIndex}–${endIndex} of ${totalElements}`}
+        </Typography>
         <Box>
           <Button
             variant="contained"
@@ -215,7 +299,11 @@ const UserPartList: React.FC = () => {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         {feedback ? (
-          <Alert onClose={() => setFeedback(null)} severity={feedback.severity} sx={{ width: '100%' }}>
+          <Alert
+            onClose={() => setFeedback(null)}
+            severity={feedback.severity}
+            sx={{ width: '100%' }}
+          >
             {feedback.message}
           </Alert>
         ) : undefined}
