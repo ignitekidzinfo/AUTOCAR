@@ -20,7 +20,7 @@ const cardItems = [
   { title: 'Add New Stock', icon: <ShoppingCartIcon fontSize="large" />, link: '/admin/transaction' },
   { title: 'View All Stock', icon: <DirectionsCarIcon fontSize="large" />, link: '/admin/transaction-list' },
   { title: 'View by Partname', icon: <BookOnlineIcon fontSize="large" />, link: '/admin/booking' },
-  { title: 'Manage Stock', icon: <BuildIcon fontSize="large" />, link: '/admin/service-queue' },
+    { title: 'Manage Stock', icon: <BuildIcon fontSize="large" />, link: '/admin/transaction' },
   { title: 'Stock By Date', icon: <HistoryIcon fontSize="large" />, link: '/admin/service-history' },
   { title: 'Counter Sale', icon: <PointOfSaleIcon fontSize="large" />, link: '/admin/counter-sale' }
 ];
