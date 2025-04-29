@@ -1,12 +1,10 @@
-interface InvoiceFormData {
-    // Left side (Customer Details)
+export interface InvoiceFormData {
     customerName: string;
     customerAddress: string;
     customerMobile: string;
     customerAadharNo: string;
     customerGstin: string;
   
-    // Right side (Invoice/Vehicle Details)
     invoiceNo: string;
     date: string;
     jobcardNo: string;
@@ -14,7 +12,6 @@ interface InvoiceFormData {
     model: string;
     kmsDriven: string;
   
-    // SPARES table
     spares: {
       srNo: number;
       particulars: string;
@@ -28,7 +25,6 @@ interface InvoiceFormData {
       amount: number;
     }[];
   
-    // LABOUR WORK table
     labour: {
       srNo: number;
       particulars: string;
@@ -42,7 +38,6 @@ interface InvoiceFormData {
       amount: number;
     }[];
   
-    // Totals
     subTotal: number;
     totalAmount: number;
     advanceAmount: number;

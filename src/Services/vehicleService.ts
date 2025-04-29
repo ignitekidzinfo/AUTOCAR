@@ -34,7 +34,7 @@ export const VehicleListData = async () => {
   
   export const VehicleUpdate = async ( vData : VehicleFormData) => {
     try{
-      const response = await apiClient.put(`vehicle-reg/update?vehicleRegId=${vData.vehicleRegId}` , vData);
+      const response = await apiClient.patch(`vehicle-reg/update?vehicleRegId=${vData.vehicleRegId}` , vData);
       return response.data;
     }catch(error) { 
       console.error("Error fetching spare parts:", error);

@@ -11,6 +11,8 @@ import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import SideMenuMobile from './SideMenuMobile';
 import MenuButton from './MenuButton';
 import ColorModeIconDropdown from '.././theme/ColorModeIconDropdown';
+import { Link } from 'react-router-dom';
+import HomeIcon from '@mui/icons-material/Home';
 
 const Toolbar = styled(MuiToolbar)({
   width: '100%',
@@ -27,6 +29,23 @@ const Toolbar = styled(MuiToolbar)({
     pb: 0,
   },
 });
+
+// Styled Link component for the header
+const HomeLink = styled(Link)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  textDecoration: 'none',
+  gap: theme.spacing(1),
+  transition: 'all 0.2s ease',
+  cursor: 'pointer',
+  color: 'inherit',
+  '&:hover': {
+    opacity: 0.8,
+  },
+  '&:active': {
+    opacity: 0.6,
+  },
+}));
 
 export default function AppNavbar() {
   const [open, setOpen] = React.useState(false);
@@ -58,16 +77,36 @@ export default function AppNavbar() {
             gap: 1,
           }}
         >
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ justifyContent: 'center', mr: 'auto' }}
+          <HomeLink 
+            to="/" 
+            aria-label="Go to home page"
+            sx={{ 
+              mr: 'auto',
+              py: 0.5,
+            }}
           >
-            <CustomIcon />
-            <Typography variant="h4" component="h1" sx={{ color: 'text.primary' }}>
-              Dashboards
-            </Typography>
-          </Stack>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ justifyContent: 'center', alignItems: 'center' }}
+            >
+              <CustomIcon />
+              <Typography 
+                variant="h6" 
+                component="h1" 
+                sx={{ 
+                  color: 'text.primary', 
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5
+                }}
+              >
+                <HomeIcon sx={{ fontSize: '1.2rem', color: 'primary.main', mr: 0.5 }} />
+                Auto Care
+              </Typography>
+            </Stack>
+          </HomeLink>
           <ColorModeIconDropdown />
           <MenuButton aria-label="menu" onClick={toggleDrawer(true)}>
             <MenuRoundedIcon />

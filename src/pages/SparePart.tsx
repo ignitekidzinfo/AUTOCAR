@@ -3,6 +3,11 @@ import { useNavigate } from "react-router-dom";
 import apiClient from "Services/apiService";
 import { motion } from "framer-motion";
 import { FiAlertCircle, FiX } from "react-icons/fi";
+import React from "react";
+import storageUtils from '../utils/storageUtils';
+
+const FiXIcon = FiX as React.FC<{ size?: number } & React.SVGProps<SVGSVGElement>>;
+const FiAlertCircleIcon = FiAlertCircle as React.FC<{ size?: number } & React.SVGProps<SVGSVGElement>>;
 
 interface SparePartType {
   sparePartId: number;
@@ -25,10 +30,9 @@ function SparePart() {
   const navigate = useNavigate();
 
   let userRole: string = "";
-  const storedDecodedToken = localStorage.getItem("userData");
-  if (storedDecodedToken) {
-    const parsedToken = JSON.parse(storedDecodedToken);
-    userRole = parsedToken.authorities[0];
+  const userData = storageUtils.getUserData();
+  if (userData) {
+    userRole = userData.authorities?.[0] || "";
   }
 
   const fetchSpareParts = async (page: number = currentPage) => {
@@ -38,7 +42,6 @@ function SparePart() {
 
       let url = "";
       if (searchQuery.trim()) {
-      
         url = `/Filter/searchBarFilter?searchBarInput=${encodeURIComponent(
           searchQuery
         )}&page=${page}&size=${size}`;
@@ -54,7 +57,6 @@ function SparePart() {
         setTotalPages(response.data.totalPages);
         setCurrentPage(response.data.currentPage);
       } else if (response.data && Array.isArray(response.data.list)) {
-
         setSpareParts(response.data.list);
         setTotalPages(1);
         setCurrentPage(0);
@@ -76,13 +78,11 @@ function SparePart() {
 
   useEffect(() => {
     fetchSpareParts();
-   
   }, []);
 
   useEffect(() => {
     setCurrentPage(0); 
     fetchSpareParts(0);
-  
   }, [searchQuery]);
 
   const handleSearch = () => {
@@ -119,7 +119,6 @@ function SparePart() {
       <div className="flex justify-center mt-6">
         <nav>
           <ul className="flex items-center space-x-2">
-    
             <li>
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
@@ -190,14 +189,12 @@ function SparePart() {
 
   return (
     <div className="w-full min-h-screen bg-gray-50 p-4">
-  
       <h1 className="text-4xl font-bold text-center mb-8 text-gray-800">
         Spare Parts
       </h1>
 
       <div className="flex justify-center mb-8">
         <div className="flex items-center">
-       
           <div className="relative">
             <input
               type="text"
@@ -211,17 +208,15 @@ function SparePart() {
               placeholder="Search spare parts..."
               className="w-80 border border-gray-300 p-2 rounded-l-lg pr-10 focus:outline-none"
             />
-    
             {searchQuery && (
               <button
                 onClick={clearSearch}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
               >
-                <FiX />
+                <FiXIcon />
               </button>
             )}
           </div>
-
           <button
             onClick={handleSearch}
             className="bg-blue-500 text-white px-4 py-2 rounded-r-lg hover:opacity-90 transition"
@@ -232,7 +227,6 @@ function SparePart() {
       </div>
 
       {loading ? (
-       
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {[...Array(8)].map((_, index) => (
             <div
@@ -248,14 +242,13 @@ function SparePart() {
           ))}
         </div>
       ) : error ? (
-       
         <motion.div
           initial={{ opacity: 0, y: -20, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.5 }}
           className="flex flex-col items-center justify-center h-[40vh]"
         >
-          <FiAlertCircle className="text-red-500 mb-4" size={64} />
+          <FiAlertCircleIcon className="text-red-500 mb-4" size={64} />
           <p className="text-red-500 text-lg mb-6">{error}</p>
           <div className="flex gap-4">
             <button
@@ -266,7 +259,6 @@ function SparePart() {
             </button>
             <button
               onClick={() => {
-              
                 setSearchQuery("");
               }}
               className="bg-gray-300 text-gray-800 px-6 py-2 rounded-lg hover:bg-gray-400 transition"
@@ -276,7 +268,6 @@ function SparePart() {
           </div>
         </motion.div>
       ) : (
-        
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {spareParts.length > 0 ? (
@@ -311,7 +302,6 @@ function SparePart() {
                       />
                     )}
                   </div>
-
                   <div className="p-4 text-center">
                     <h2 className="text-xl font-semibold text-gray-800 mb-2">
                       {sparePart.partName}
@@ -331,7 +321,6 @@ function SparePart() {
               </p>
             )}
           </div>
-
           {renderPagination()}
         </>
       )}

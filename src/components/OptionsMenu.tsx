@@ -10,6 +10,8 @@ import ListItemIcon, { listItemIconClasses } from '@mui/material/ListItemIcon';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import MenuButton from './MenuButton';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const MenuItem = styled(MuiMenuItem)({
   margin: '2px 0',
@@ -17,6 +19,9 @@ const MenuItem = styled(MuiMenuItem)({
 
 export default function OptionsMenu() {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  
   const open = Boolean(anchorEl);
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -24,6 +29,24 @@ export default function OptionsMenu() {
   const handleClose = () => {
     setAnchorEl(null);
   };
+  
+  const handleLogout = () => {
+    handleClose();
+    try {
+      // Force immediate redirect to prevent auth state issues
+      window.localStorage.removeItem('token');
+      window.localStorage.removeItem('userData');
+      navigate('/signIn');
+      // Then call the context logout for complete cleanup
+      setTimeout(() => {
+        logout();
+      }, 100);
+    } catch (error) {
+      console.error('Logout error:', error);
+      window.location.href = '/signIn';
+    }
+  };
+  
   return (
     <React.Fragment>
       <MenuButton
@@ -60,17 +83,18 @@ export default function OptionsMenu() {
         <MenuItem onClick={handleClose}>Settings</MenuItem>
         <Divider />
         <MenuItem
-          onClick={handleClose}
+          onClick={handleLogout}
           sx={{
             [`& .${listItemIconClasses.root}`]: {
               ml: 'auto',
               minWidth: 0,
             },
+            color: 'error.main',
           }}
         >
           <ListItemText>Logout</ListItemText>
           <ListItemIcon>
-            <LogoutRoundedIcon fontSize="small" />
+            <LogoutRoundedIcon fontSize="small" sx={{ color: 'error.main' }}/>
           </ListItemIcon>
         </MenuItem>
       </Menu>

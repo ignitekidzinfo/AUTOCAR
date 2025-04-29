@@ -1,15 +1,13 @@
 import { alpha, Theme } from '@mui/material/styles';
-import type { PickersProComponents } from '@mui/x-date-pickers-pro/themeAugmentation';
 import type { PickerComponents } from '@mui/x-date-pickers/themeAugmentation';
 import { pickersYearClasses, pickersMonthClasses, pickersDayClasses } from '@mui/x-date-pickers';
 import { menuItemClasses } from '@mui/material/MenuItem';
-import { gray, brand } from '../.././theme/themePrimitives';
+import { gray, brand } from '../../theme/themePrimitives';
 
-/* eslint-disable import/prefer-default-export */
-export const datePickersCustomizations: PickersProComponents<Theme> & PickerComponents<Theme> = {
+export const datePickersCustomizations: PickerComponents<Theme> = {
   MuiPickersPopper: {
     styleOverrides: {
-      paper: ({ theme }) => ({
+      paper: ({ theme }: { theme: Theme }) => ({
         marginTop: 4,
         borderRadius: theme.shape.borderRadius,
         border: `1px solid ${theme.palette.divider}`,
@@ -32,7 +30,7 @@ export const datePickersCustomizations: PickersProComponents<Theme> & PickerComp
   MuiPickersArrowSwitcher: {
     styleOverrides: {
       spacer: { width: 16 },
-      button: ({ theme }) => ({
+      button: ({ theme }: { theme: Theme }) => ({
         backgroundColor: 'transparent',
         color: theme.palette.grey[500],
         ...theme.applyStyles('dark', {
@@ -51,7 +49,7 @@ export const datePickersCustomizations: PickersProComponents<Theme> & PickerComp
   },
   MuiPickersMonth: {
     styleOverrides: {
-      monthButton: ({ theme }) => ({
+      monthButton: ({ theme }: { theme: Theme }) => ({
         fontSize: theme.typography.body1.fontSize,
         color: theme.palette.grey[600],
         padding: theme.spacing(0.5),
@@ -91,7 +89,7 @@ export const datePickersCustomizations: PickersProComponents<Theme> & PickerComp
   },
   MuiPickersYear: {
     styleOverrides: {
-      yearButton: ({ theme }) => ({
+      yearButton: ({ theme }: { theme: Theme }) => ({
         fontSize: theme.typography.body1.fontSize,
         color: theme.palette.grey[600],
         padding: theme.spacing(0.5),
@@ -132,7 +130,7 @@ export const datePickersCustomizations: PickersProComponents<Theme> & PickerComp
   },
   MuiPickersDay: {
     styleOverrides: {
-      root: ({ theme }) => ({
+      root: ({ theme }: { theme: Theme }) => ({
         fontSize: theme.typography.body1.fontSize,
         color: theme.palette.grey[600],
         padding: theme.spacing(0.5),

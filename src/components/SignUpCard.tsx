@@ -1,10 +1,8 @@
 import * as React from 'react';
+import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-// import Checkbox from '@mui/material/Checkbox';
-// import CssBaseline from '@mui/material/CssBaseline';
 import Divider from '@mui/material/Divider';
-// import FormControlLabel from '@mui/material/FormControlLabel';
 import FormLabel from '@mui/material/FormLabel';
 import FormControl from '@mui/material/FormControl';
 import Link from '@mui/material/Link';
@@ -12,134 +10,185 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import MuiCard from '@mui/material/Card';
-import { styled } from '@mui/material/styles';
-import AppTheme from '../theme/AppTheme';
-// import ColorModeSelect from '../theme/ColorModeSelect';
-// import { GoogleIcon, FacebookIcon, SitemarkIcon } from '../components/CustomIcons';
+import { styled, useTheme, alpha } from '@mui/material/styles';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { SendOTP, signUpUser } from '../Services/userService';
 import OTPComponent from './OTPComponent';
-import { ArrowBack } from "@mui/icons-material";
-
+import { 
+  ArrowBack, 
+  Email as EmailIcon, 
+  Person as PersonIcon,
+  Phone as PhoneIcon,
+  Home as HomeIcon,
+  Lock as LockIcon,
+  Visibility,
+  VisibilityOff,
+  CheckCircle as CheckCircleIcon,
+  InfoOutlined
+} from "@mui/icons-material";
+import { InputAdornment, IconButton, CircularProgress } from '@mui/material';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   alignSelf: 'center',
   width: '100%',
-  padding: theme.spacing(4),
-  gap: theme.spacing(2),
+  padding: theme.spacing(5),
+  gap: theme.spacing(3),
   margin: 'auto',
-  boxShadow:
-    'hsla(220, 30%, 5%, 0.05) 0px 5px 15px 0px, hsla(220, 25%, 10%, 0.05) 0px 15px 35px -5px',
+  boxShadow: theme.shadows[8],
+  borderRadius: theme.shape.borderRadius * 2,
   [theme.breakpoints.up('sm')]: {
-    width: '450px',
+    width: '500px',
   },
-  ...theme.applyStyles('dark', {
-    boxShadow:
-      'hsla(220, 30%, 5%, 0.5) 0px 5px 15px 0px, hsla(220, 25%, 10%, 0.08) 0px 15px 35px -5px',
-  }),
-}));
-
-const SignUpContainer = styled(Stack)(({ theme }) => ({
-
-  minHeight: '100%',
-  padding: theme.spacing(2),
-  [theme.breakpoints.up('sm')]: {
-    padding: theme.spacing(4),
-  },
+  backgroundColor: theme.palette.mode === 'dark' ? alpha(theme.palette.background.paper, 0.8) : theme.palette.background.paper,
+  backdropFilter: 'blur(10px)',
+  position: 'relative',
+  overflow: 'hidden',
   '&::before': {
     content: '""',
-    display: 'block',
     position: 'absolute',
-    zIndex: -1,
-    inset: 0,
-    backgroundImage:
-      'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 97%), hsl(0, 0%, 100%))',
-    backgroundRepeat: 'no-repeat',
-    ...theme.applyStyles('dark', {
-      backgroundImage:
-        'radial-gradient(at 50% 50%, hsla(210, 100%, 16%, 0.5), hsl(220, 30%, 5%))',
-    }),
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '5px',
+    background: 'linear-gradient(90deg, #1976d2, #42a5f5)',
+  }
+}));
+
+const LogoWrapper = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  justifyContent: 'center',
+  marginBottom: theme.spacing(2),
+}));
+
+const Logo = styled('div')(({ theme }) => ({
+  width: '60px',
+  height: '60px',
+  background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+  borderRadius: '50%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'white',
+  fontSize: '24px',
+  fontWeight: 'bold',
+  boxShadow: theme.shadows[3],
+}));
+
+const StyledButton = styled(Button)(({ theme }) => ({
+  padding: theme.spacing(1.5),
+  borderRadius: theme.shape.borderRadius * 1.5,
+  fontWeight: 600,
+  textTransform: 'none',
+  fontSize: '1rem',
+  boxShadow: theme.shadows[2],
+  transition: 'all 0.3s ease',
+  background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+  '&:hover': {
+    boxShadow: theme.shadows[4],
+    transform: 'translateY(-2px)',
   },
 }));
 
-export default function SignUp(props: { disableCustomTheme?: boolean }) {
-  const [emailError, setEmailError] = React.useState(false);
-  const [emailErrorMessage, setEmailErrorMessage] = React.useState('');
-  const [passwordError, setPasswordError] = React.useState(false);
-  const [passwordErrorMessage, setPasswordErrorMessage] = React.useState('');
-  const [nameError, setNameError] = React.useState(false);
-  const [lNameError, setLNameError] = React.useState(false);
-  const [mobileNoError, setMobileNoError] = React.useState(false);
-  const [addressError ,setAddressError] = React.useState(false);
-  const [nameErrorMessage, setNameErrorMessage] = React.useState('');
-  const [lNameErrorMessage, setLNameErrorMessage] = React.useState('');
-  const [mobileNoErrorMessage , setMobileNoErrorMessage] = React.useState('');
-  const [addressErrorMessage , setAddressErrorMessage] = React.useState('');
-  const [otpOpen, setOtpClosed] = React.useState(false);
-  const [email, setEmail ] = React.useState<string>("");
-  const [isVerify , setIsVerify] = React.useState(false);
+const BackLink = styled(RouterLink)(({ theme }) => ({
+  textDecoration: 'none',
+  display: 'flex',
+  alignItems: 'center',
+  color: theme.palette.text.secondary,
+  fontWeight: 500,
+  marginBottom: theme.spacing(2),
+  transition: 'color 0.2s ease',
+  '&:hover': {
+    color: theme.palette.primary.main,
+  },
+}));
+
+export default function SignUpCard() {
+  const theme = useTheme();
+  const [emailError, setEmailError] = useState(false);
+  const [emailErrorMessage, setEmailErrorMessage] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+  const [passwordErrorMessage, setPasswordErrorMessage] = useState('');
+  const [nameError, setNameError] = useState(false);
+  const [lNameError, setLNameError] = useState(false);
+  const [mobileNoError, setMobileNoError] = useState(false);
+  const [addressError, setAddressError] = useState(false);
+  const [nameErrorMessage, setNameErrorMessage] = useState('');
+  const [lNameErrorMessage, setLNameErrorMessage] = useState('');
+  const [mobileNoErrorMessage, setMobileNoErrorMessage] = useState('');
+  const [addressErrorMessage, setAddressErrorMessage] = useState('');
+  const [otpOpen, setOtpClosed] = useState(false);
+  const [email, setEmail] = useState<string>('');
+  const [isVerify, setIsVerify] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fname, setFname] = useState('');
+  const [lname, setLname] = useState('');
+  const [password, setPassword] = useState('');
+  const [mobileNo, setMobileNo] = useState('');
+  const [address, setAddress] = useState('');
   const navigate = useNavigate();
 
-  const validateInputs = () => {
-    const email = document.getElementById('email') as HTMLInputElement;
-    const password = document.getElementById('password') as HTMLInputElement;
-    const name = document.getElementById('name') as HTMLInputElement;
-    const lname = document.getElementById('lname') as HTMLInputElement;
-    const mobileNo = document.getElementById('mobileNo') as HTMLInputElement;
-    const address = document.getElementById('address') as HTMLInputElement;
+  const handleTogglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
 
+  const validateInputs = () => {
     let isValid = true;
 
-    if (!email.value || !/\S+@\S+\.\S+/.test(email.value)) {
+    if (!isVerify) {
       setEmailError(true);
-      setEmailErrorMessage('Please enter a valid email address.');
+      setEmailErrorMessage('Email verification is required before registration');
+      isValid = false;
+    } else if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      setEmailError(true);
+      setEmailErrorMessage('Please enter a valid email address');
       isValid = false;
     } else {
       setEmailError(false);
       setEmailErrorMessage('');
     }
 
-    if (!password.value || password.value.length < 6) {
+    if (!password || password.length < 6) {
       setPasswordError(true);
-      setPasswordErrorMessage('Password must be at least 6 characters long.');
+      setPasswordErrorMessage('Password must be at least 6 characters long');
       isValid = false;
     } else {
       setPasswordError(false);
       setPasswordErrorMessage('');
     }
 
-    if (!name.value || name.value.length < 1) {
+    if (!fname || fname.length < 1) {
       setNameError(true);
-      setNameErrorMessage('First Name is required.');
+      setNameErrorMessage('First Name is required');
       isValid = false;
     } else {
       setNameError(false);
       setNameErrorMessage('');
     }
 
-    if (!lname.value || lname.value.length < 1) {
+    if (!lname || lname.length < 1) {
         setLNameError(true);
-        setLNameErrorMessage('Last Name is required.');
+      setLNameErrorMessage('Last Name is required');
         isValid = false;
       } else {
         setLNameError(false);
         setLNameErrorMessage('');
       }
 
-      if (!mobileNo.value || !/^\d{10}$/.test(mobileNo.value)) {
+    if (!mobileNo || !/^\d{10}$/.test(mobileNo)) {
         setMobileNoError(true);
-        setMobileNoErrorMessage('Please enter a valid 10-digit mobile number.');
+      setMobileNoErrorMessage('Please enter a valid 10-digit mobile number');
         isValid = false;
       } else {
         setMobileNoError(false);
         setMobileNoErrorMessage('');
       }
 
-      if (!address.value || address.value.length < 1) {
+    if (!address || address.length < 1) {
         setAddressError(true);
-        setAddressErrorMessage('Address is required.');
+      setAddressErrorMessage('Address is required');
         isValid = false;
       } else {
         setAddressError(false);
@@ -147,255 +196,363 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
       }
 
     return isValid;
-    
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); 
   
-    if (nameError || emailError || passwordError || lNameError || addressError || mobileNoError) {
+    if (!validateInputs()) {
       return; 
     }
+
+    setIsLoading(true);
   
     try {
-    
       const formData = {
-        fname: (event.currentTarget.elements.namedItem("fname") as HTMLInputElement)?.value,
-        lname: (event.currentTarget.elements.namedItem("lname") as HTMLInputElement)?.value,
-        email: (event.currentTarget.elements.namedItem("email") as HTMLInputElement)?.value,
-        password: (event.currentTarget.elements.namedItem("password") as HTMLInputElement)?.value,
-        mobileNumber: (event.currentTarget.elements.namedItem("mobileNo") as HTMLInputElement)?.value,
-        address: (event.currentTarget.elements.namedItem("address") as HTMLInputElement)?.value,
+        fname: fname,
+        lname: lname,
+        email: email,
+        password: password,
+        mobileNumber: mobileNo,
+        address: address,
         role: 'USER'
       };
+      
       const response = await signUpUser(formData);
-      if(response.code == 200){
+      if (response.code == 200) {
         console.log("User signed up successfully:", response);
         alert("Sign-up successful!");
         navigate("/signIn");
-      }else{
+      } else {
         alert("Something is wrong");
       }
-  
     } catch (err) {
       console.error("Error signing up:", err);
       alert("Sign-up failed. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
   
-  const handleSendOtpToVerfyMail = async () =>{
+  const handleSendOtpToVerfyMail = async () => {
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      setEmailError(true);
+      setEmailErrorMessage('Please enter a valid email address');
+      return;
+    }
     
-    try{
-      const data ={
-        email: (document.getElementById('email') as HTMLInputElement)?.value || ""
-      }
+    setIsLoading(true);
+    
+    try {
+      const data = {
+        email: email
+      };
+      
       const response = await SendOTP(data);
-      if(response.errorCode == "NOT_FOUND"){
-        alert(response.errorMessage)
-      }else{
-        console.log("send OTP successfully",response);
+      if (response.errorCode == "NOT_FOUND") {
+        alert(response.errorMessage);
+      } else {
+        console.log("send OTP successfully", response);
         alert("Send OTP successfully");
       }
       setOtpClosed(true);
-    }catch(err){
-      console.error("Error Send OTP:", err);
-      alert("OTP send failed. Please try again.");
-    }
+    } catch (err) {
+      console.error("Error sending OTP:", err);
+      alert("Failed to send OTP. Please try again.");
+    } finally {
+      setIsLoading(false);
   }
+  };
 
   const handleOpen = () => {
-    const email = document.getElementById('email') as HTMLInputElement;
-  
-    if (!email.value || !/\S+@\S+\.\S+/.test(email.value)) {
-      setEmailError(true);
-      setEmailErrorMessage('Please enter a valid email address.');
-      return; 
-    } else {
-      setEmail(email.value);
-      setEmailError(false);
-      setEmailErrorMessage('');
-    }
-  
-    handleSendOtpToVerfyMail();
-    
+    setOtpClosed(true);
+  };
+
+  const handleClose = () => {
+    setOtpClosed(false);
   };
   
-  const handleVerifiedEmail = () =>{
-    setOtpClosed(false)
-  }
+  const handleVerifiedEmail = () => {
+    setIsVerify(true);
+  };
+
   const handleVerifySuccess = () => {
     setIsVerify(true); 
     setOtpClosed(false); 
   };
 
   return (
-    <AppTheme {...props}>
-    
-      <SignUpContainer direction="column" justifyContent="space-between">
-        <Card variant="outlined">
-          <RouterLink to="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", color: "inherit" }}>
-            <ArrowBack sx={{ mr: 1 }} /> Car Auto Care
-          </RouterLink>
+    <Card>
+      <LogoWrapper>
+        <Logo>AC</Logo>
+      </LogoWrapper>
  
           <Typography
             component="h1"
             variant="h4"
-            sx={{ width: '100%', fontSize: 'clamp(2rem, 10vw, 2.15rem)' }}
+        sx={{
+          width: '100%',
+          textAlign: 'center',
+          fontWeight: 700,
+          marginBottom: 1,
+          background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+        }}
+      >
+        Create Account
+      </Typography>
+      
+      <Typography
+        variant="body1"
+        color="text.secondary"
+        sx={{ textAlign: 'center', mb: 3 }}
+      >
+        Join Auto Care today
+      </Typography>
+      
+      <Typography
+        variant="body2"
+        color="primary"
+        sx={{ 
+          textAlign: 'center', 
+          mb: 2, 
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 0.5,
+          backgroundColor: alpha(theme.palette.primary.main, 0.1),
+          padding: 1,
+          borderRadius: 1
+        }}
           >
-            Sign up
+        <InfoOutlined fontSize="small" />
+        Email verification is required to create an account
           </Typography>
+      
           <Box
             component="form"
             onSubmit={handleSubmit}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+        noValidate
+        sx={{ display: 'flex', flexDirection: 'column', width: '100%', gap: 2 }}
           >
-            <FormControl>
-              <FormLabel htmlFor="fname">First name</FormLabel>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <FormControl variant="outlined" sx={{ flex: 1 }}>
+            <FormLabel htmlFor="fname" sx={{ mb: 1, fontWeight: 500 }}>First Name</FormLabel>
               <TextField
-                autoComplete="First name"
-                name="fname"
-                required
-                fullWidth
-                id="name"
-                placeholder="Jon"
                 error={nameError}
                 helperText={nameErrorMessage}
-                color={nameError ? 'error' : 'primary'}
+              id="name"
+              name="fname"
+              placeholder="John"
+              autoComplete="given-name"
+              size="medium"
+              fullWidth
+              value={fname}
+              onChange={(e) => setFname(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon color="action" />
+                  </InputAdornment>
+                ),
+                sx: { borderRadius: 1.5 }
+              }}
               />
             </FormControl>
-            <FormControl>
-              <FormLabel htmlFor="lname">Last name</FormLabel>
+          
+          <FormControl variant="outlined" sx={{ flex: 1 }}>
+            <FormLabel htmlFor="lname" sx={{ mb: 1, fontWeight: 500 }}>Last Name</FormLabel>
               <TextField
-                autoComplete="Last name"
-                name="lname"
-                required
-                fullWidth
-                id="lname"
-                placeholder="Snow"
                 error={lNameError}
                 helperText={lNameErrorMessage}
-                color={lNameError ? 'error' : 'primary'}
+              id="lname"
+              name="lname"
+              placeholder="Doe"
+              autoComplete="family-name"
+              size="medium"
+              fullWidth
+              value={lname}
+              onChange={(e) => setLname(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon color="action" />
+                  </InputAdornment>
+                ),
+                sx: { borderRadius: 1.5 }
+              }}
               />
             </FormControl>
-            <FormControl>
-              <FormLabel htmlFor="mobileNo">Contact No</FormLabel>
+        </Box>
+
+        <FormControl variant="outlined">
+          <FormLabel htmlFor="email" sx={{ mb: 1, fontWeight: 500, display: 'flex', alignItems: 'center' }}>
+            Email Address
+            {isVerify && (
+              <CheckCircleIcon sx={{ ml: 1, color: 'success.main', fontSize: 18 }} />
+            )}
+          </FormLabel>
+          <Box sx={{ display: 'flex', gap: 1 }}>
               <TextField
-                autoComplete="Contact No"
-                name="mobileNo"
+              error={emailError}
+              helperText={emailErrorMessage}
+              id="email"
+              name="email"
+              type="email"
+              placeholder="your@email.com"
+              autoComplete="email"
                 required
                 fullWidth
-                id="mobileNo"
-                placeholder="1234567890"
-                error={mobileNoError}
-                helperText={mobileNoErrorMessage}
-                color={mobileNoError ? 'error' : 'primary'}
-              />
-            </FormControl>
-            <FormControl>
-              <FormLabel htmlFor="email">Email</FormLabel>
-              <TextField
-                required
-                fullWidth
-                id="email"
-                placeholder="your@email.com"
-                name="email"
-                autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isVerify}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <EmailIcon color="action" />
+                  </InputAdornment>
+                ),
+                sx: { borderRadius: 1.5 }
+              }}
+            />
+            {!isVerify && (
+              <Button
                 variant="outlined"
-                error={emailError}
-                helperText={emailErrorMessage}
-                color={passwordError ? 'error' : 'primary'}
-              />
-            </FormControl>
-            <Link
-                component={Button}
-                onClick={isVerify ? undefined : handleOpen} 
-                variant="body2"
-                sx={{ alignSelf: "center" }}
+                onClick={handleSendOtpToVerfyMail}
+                disabled={isLoading}
+                sx={{ 
+                  whiteSpace: 'nowrap',
+                  borderRadius: 1.5,
+                  minWidth: '120px'
+                }}
               >
-                {isVerify ? "Verified" : "Verify"}
-              </Link>
-          {isVerify ?(
-            <>
-            <FormControl>
-              <FormLabel htmlFor="password">Password</FormLabel>
+                {isLoading ? <CircularProgress size={24} /> : otpOpen ? 'OTP Sent' : 'Verify Email'}
+              </Button>
+            )}
+          </Box>
+        </FormControl>
+
+        <FormControl variant="outlined">
+          <FormLabel htmlFor="mobileNo" sx={{ mb: 1, fontWeight: 500 }}>Mobile Number</FormLabel>
               <TextField
+            error={mobileNoError}
+            helperText={mobileNoErrorMessage}
+            id="mobileNo"
+            name="mobileNo"
+            placeholder="1234567890"
+            autoComplete="tel"
                 required
                 fullWidth
-                name="password"
-                placeholder="••••••"
-                type="password"
-                id="password"
-                autoComplete="new-password"
-                variant="outlined"
+            value={mobileNo}
+            onChange={(e) => setMobileNo(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <PhoneIcon color="action" />
+                </InputAdornment>
+              ),
+              sx: { borderRadius: 1.5 }
+            }}
+          />
+        </FormControl>
+
+        <FormControl variant="outlined">
+          <FormLabel htmlFor="password" sx={{ mb: 1, fontWeight: 500 }}>Password</FormLabel>
+          <TextField
                 error={passwordError}
                 helperText={passwordErrorMessage}
-                color={passwordError ? 'error' : 'primary'}
+            id="password"
+            name="password"
+            type={showPassword ? 'text' : 'password'}
+            placeholder="••••••••"
+            autoComplete="new-password"
+            required
+            fullWidth
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LockIcon color="action" />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={handleTogglePasswordVisibility}
+                    edge="end"
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+              sx: { borderRadius: 1.5 }
+            }}
               />
             </FormControl>
-            <FormControl>
-              <FormLabel htmlFor="mobileNo">Address</FormLabel>
+
+        <FormControl variant="outlined">
+          <FormLabel htmlFor="address" sx={{ mb: 1, fontWeight: 500 }}>Address</FormLabel>
               <TextField
-                autoComplete="Address"
+            error={addressError}
+            helperText={addressErrorMessage}
+            id="address"
                 name="address"
+            placeholder="Your address"
+            autoComplete="street-address"
                 required
                 fullWidth
-                id="address"
-                placeholder="Abc"
-                error={addressError}
-                helperText={addressErrorMessage}
-                color={addressError ? 'error' : 'primary'}
+            multiline
+            rows={2}
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start" sx={{ alignSelf: 'flex-start', pt: 1 }}>
+                  <HomeIcon color="action" />
+                </InputAdornment>
+              ),
+              sx: { borderRadius: 1.5 }
+            }}
               />
             </FormControl>
-            {/* <FormControlLabel
-              control={<Checkbox value="allowExtraEmails" color="primary" />}
-              label="I want to receive updates via email."
-            /> */}
-            <Button
+
+        <StyledButton 
               type="submit"
               fullWidth
               variant="contained"
-              onClick={validateInputs}
-            >
-              Sign up
-            </Button>
-            </>
-          ) : undefined }
-          </Box>
-          <Divider>
-            <Typography sx={{ color: 'text.secondary' }}>or</Typography>
-          </Divider>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* <Button
-              fullWidth
-              variant="outlined"
-              onClick={() => alert('Sign up with Google')}
-              startIcon={<GoogleIcon />}
-            >
-              Sign up with Google
-            </Button>
-            <Button
-              fullWidth
-              variant="outlined"
-              onClick={() => alert('Sign up with Facebook')}
-              startIcon={<FacebookIcon />}
-            >
-              Sign up with Facebook
-            </Button> */}
+          disabled={isLoading || !isVerify}
+          sx={{ mt: 3 }}
+        >
+          {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign Up'}
+        </StyledButton>
+
             <Typography sx={{ textAlign: 'center' }}>
               Already have an account?{' '}
               <Link
                 component={RouterLink}
                 to="/signIn"
-                variant="body2"
-                sx={{ alignSelf: 'center' }}
+            sx={{ 
+              fontWeight: 600, 
+              color: theme.palette.primary.main,
+              textDecoration: 'none',
+              '&:hover': {
+                textDecoration: 'underline',
+              }
+            }}
               >
                 Sign in
               </Link>
             </Typography>
-            <OTPComponent open={otpOpen} handleClose={handleVerifiedEmail} email={email} isVerifySuccess={handleVerifySuccess}/>
           </Box>
+      <OTPComponent 
+        open={otpOpen} 
+        email={email}
+        handleClose={handleClose}
+        isVerifySuccess={handleVerifySuccess}
+      />
         </Card>
-      </SignUpContainer>
-    </AppTheme>
   );
 }

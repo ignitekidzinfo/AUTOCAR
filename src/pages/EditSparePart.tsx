@@ -4,8 +4,7 @@ import axios from "axios";
 import { ArrowLeft, Save, X, Trash2, Upload } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SparePartGetByID } from "Services/SparePartService";
-
-const API_URL = "https://carauto01-production-8b0b.up.railway.app";
+import apiClient from "Services/apiService";
 
 function EditSparePart() {
   const { id } = useParams();
@@ -113,8 +112,8 @@ function EditSparePart() {
       setIsBreaking(true);
       setTimeout(async () => {
         try {
-          await axios.delete(
-            `${API_URL}/sparePartManagement/delete/${id}?photoIndex=${deleteIndex}`,
+          await apiClient.delete(
+            `/sparePartManagement/delete/${id}?photoIndex=${deleteIndex}`,
             {
               headers: { "Content-Type": "application/json" },
             }
@@ -142,7 +141,7 @@ function EditSparePart() {
       }, 1000);
     } else if (deleteType === "sparePart") {
       try {
-        await axios.delete(`${API_URL}/sparePartManagement/delete/${id}`);
+        await apiClient.delete(`/sparePartManagement/delete/${id}`);
         setShowDeleteConfirmation(false);
         setMessage("Spare part deleted successfully.");
         setMessageType("success");
@@ -178,13 +177,26 @@ function EditSparePart() {
         formData.append("photos", file);
       });
 
-      await axios.patch(
-        `${API_URL}/sparePartManagement/update/${id}`,
+      const response = await apiClient.patch(
+        `/sparePartManagement/update/${id}`,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
         }
       );
+
+      if (response.data) {
+        setSparePart({
+          ...response.data,
+          price: response.data.price?.toString() || "",
+          sGST: response.data.sgst?.toString() || "",   
+          cGST: response.data.cgst?.toString() || "",   
+          totalGST: response.data.totalGST?.toString() || "", 
+          buyingPrice: response.data.buyingPrice?.toString() || "",
+          partNumber: response.data.partNumber || "",
+          photo: response.data.photo || [],
+        });
+      }
 
       setMessage("Spare part updated successfully.");
       setMessageType("success");

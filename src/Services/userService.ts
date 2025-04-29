@@ -1,6 +1,6 @@
 import apiClient from "./apiService";
 import { ForgetPassword, SignInData, SignUpData, updatePasswordData, VerifyEmail } from '../types/User';
-import ForgotPassword from "../components/ForgotPassword";
+import logger from "../utils/logger";
 
 
 export const signUpUser = async ( userData : SignUpData ) =>{
@@ -8,7 +8,7 @@ export const signUpUser = async ( userData : SignUpData ) =>{
             const response = await apiClient.post("/user/registerUser",userData);
             return response.data;
         }catch(error){
-            console.error('Error save user' ,error);
+            logger.error('Error save user', error);
             throw new Error('Failed to save user');
         }
 }
@@ -18,7 +18,7 @@ export const SignInUser = async (userloginData : SignInData) => {
         const response = await apiClient.post("/jwt/login",userloginData);
         return response.data;
     }catch(error) {
-         console.log('Error login user', error);
+         logger.error('Error login user', error);
          throw new Error("failed to login user");
     }
 }
@@ -28,7 +28,7 @@ export const SendOTP = async (emailData : ForgetPassword) => {
         const response = await apiClient.post(`/emailVerification/send-otp`, emailData);
         return response.data;
     }catch(error){
-        console.log(`Error to send OTP` , error);
+        logger.error(`Error to send OTP`, error);
         throw new Error(error instanceof Error ? error.message : "Send OTP Error");
     }
 }
@@ -38,7 +38,7 @@ export const userForgetPassword = async (forgetData : ForgetPassword) => {
         const response = await apiClient.post(`/user/forgot-password?email=${forgetData.email}`);
         return response.data;
     }catch(error){
-        console.log(`Error to send OTP` , error);
+        logger.error(`Error to send OTP`, error);
         throw new Error("Send OTP Error")
     }
 }
@@ -48,7 +48,7 @@ export const VerifyEmailOtp = async (verifyData : VerifyEmail) =>{
         const response = await apiClient.post(`/emailVerification/verify-otp`, verifyData);
         return response.data;
     }catch(error){
-        console.log(`Error to verified OTP` , error);
+        logger.error(`Error to verified OTP`, error);
         throw new Error("Send OTP Error") 
     }
 }
@@ -58,7 +58,7 @@ export const ResetPasswordAPI = async ( passwordData : updatePasswordData  ) => 
         const response = await apiClient.post(`/user/update-password`, passwordData);
         return response.data;
     }catch(error){
-        console.log(`Error to password reset` , error);
+        logger.error(`Error to password reset`, error);
         throw new Error("password reset faild") 
     }
 }

@@ -9,7 +9,6 @@ import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import AppTheme from '../theme/AppTheme';
 import Stack from '@mui/material/Stack';
-// import { GoogleIcon, FacebookIcon, SitemarkIcon } from './CustomIcons';
 import { ResetPasswordAPI } from '../Services/userService';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 

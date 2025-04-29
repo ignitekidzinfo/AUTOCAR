@@ -146,7 +146,7 @@ function Home() {
       <div
         className="relative h-[300px] md:h-[600px] flex flex-col items-center justify-center bg-center bg-no-repeat"
         style={{
-          backgroundImage: `url('/Ps.png')`,
+          backgroundImage: `url('/ps.png')`,
           backgroundSize: "cover",
         }}
       >
@@ -160,7 +160,7 @@ function Home() {
             transition={{ duration: 0.7, ease: "easeOut" }}
             className="text-4xl md:text-6xl font-bold mb-4"
           >
-            Car Spare Parts & Accessories
+            Premium Car Servicing & Repairs
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}

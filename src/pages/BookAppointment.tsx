@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import apiClient from "Services/apiService";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { CheckCircle, XCircle } from "lucide-react"; 
+import { CheckCircle, XCircle } from "lucide-react";
+import DatePicker from "react-datepicker"; // Import DatePicker
+import "react-datepicker/dist/react-datepicker.css"; // Import DatePicker CSS
 
 function BookAppointment() {
   const navigate = useNavigate();
@@ -18,21 +18,31 @@ function BookAppointment() {
     manufacturedYear: "",
     kilometerDriven: "",
     fuelType: "",
-    workType: "",
     vehicleProblem: "",
     pickUpAndDropService: "false",
+    workType: "", // new field for Work Type
     userId: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showSuccessModal, setShowSuccessModal] = useState(false); 
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // On mount, set the userId from localStorage if available
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId");
+    if (storedUserId) {
+      setFormData((prevData) => ({ ...prevData, userId: storedUserId }));
+    }
+  }, []);
 
   const handleDateChange = (date: Date | null) => {
     setFormData({ ...formData, appointmentDate: date ? date.toISOString() : "" });
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
   ) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -43,6 +53,7 @@ function BookAppointment() {
     setLoading(true);
     setError("");
 
+    // Set the appointment time to current time while preserving date
     const now = new Date();
     const appointmentDateTime = new Date(formData.appointmentDate);
     appointmentDateTime.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
@@ -55,7 +66,7 @@ function BookAppointment() {
     try {
       const response = await apiClient.post("/appointments/add", payload);
       if (response.status === 200) {
-        setShowSuccessModal(true); 
+        setShowSuccessModal(true);
       }
     } catch (err) {
       setError("Failed to book appointment. Please try again.");
@@ -67,7 +78,7 @@ function BookAppointment() {
 
   const closeSuccessModal = () => {
     setShowSuccessModal(false);
-    navigate("/"); 
+    navigate("/");
   };
 
   return (
@@ -82,10 +93,28 @@ function BookAppointment() {
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-6 text-center">
             Book Your Appointment
           </h2>
+          {error && (
+            <p className="text-red-500 mb-4 text-center">{error}</p>
+          )}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Appointment Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Customer Name
+                Appointment Date <span className="text-red-600">*</span>
+              </label>
+              <DatePicker
+                selected={formData.appointmentDate ? new Date(formData.appointmentDate) : null}
+                onChange={handleDateChange}
+                dateFormat="yyyy-MM-dd"
+                minDate={new Date()}
+                required
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
+              />
+            </div>
+            {/* Customer Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Customer Name <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -96,24 +125,26 @@ function BookAppointment() {
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
               />
             </div>
-
+            {/* Mobile Number with validation */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Mobile Number
+                Mobile Number <span className="text-red-600">*</span>
               </label>
               <input
                 type="tel"
                 name="mobileNo"
                 value={formData.mobileNo}
                 onChange={handleChange}
+                pattern="[0-9]{10}"
+                title="Mobile number must be 10 digits"
                 required
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
               />
             </div>
-
+            {/* Vehicle Number */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Vehicle Number
+                Vehicle Number <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -124,10 +155,10 @@ function BookAppointment() {
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
               />
             </div>
-
+            {/* Vehicle Maker */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Vehicle Maker
+                Vehicle Maker <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -138,10 +169,10 @@ function BookAppointment() {
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
               />
             </div>
-
+            {/* Vehicle Model */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Vehicle Model
+                Vehicle Model <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -152,10 +183,10 @@ function BookAppointment() {
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
               />
             </div>
-
+            {/* Manufactured Year */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Manufactured Year
+                Manufactured Year <span className="text-red-600">*</span>
               </label>
               <input
                 type="number"
@@ -166,10 +197,10 @@ function BookAppointment() {
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
               />
             </div>
-
+            {/* Kilometer Driven */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Kilometer Driven
+                Kilometer Driven <span className="text-red-600">*</span>
               </label>
               <input
                 type="number"
@@ -180,10 +211,10 @@ function BookAppointment() {
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
               />
             </div>
-
+            {/* Fuel Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Fuel Type
+                Fuel Type <span className="text-red-600">*</span>
               </label>
               <select
                 name="fuelType"
@@ -200,79 +231,42 @@ function BookAppointment() {
                 <option value="LPG">LPG</option>
               </select>
             </div>
-
+            {/* Work Type Dropdown */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Work Type
+                Work Type <span className="text-red-600">*</span>
               </label>
-              <input
-                type="text"
+              <select
                 name="workType"
                 value={formData.workType}
                 onChange={handleChange}
                 required
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
-              />
+              >
+                <option value="">Select Work Type</option>
+                <option value="Bodyshop">Bodyshop</option>
+                <option value="Workshop">Workshop</option>
+                <option value="LPG">LPG</option>
+                <option value="CNG">CNG</option>
+              </select>
             </div>
-
+            {/* Vehicle Problem */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Vehicle Problem
+                Vehicle Problem <span className="text-red-600">*</span>
               </label>
               <textarea
                 name="vehicleProblem"
                 value={formData.vehicleProblem}
                 onChange={handleChange}
+                required
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
               ></textarea>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Pickup and Drop Service
-              </label>
-              <select
-                name="pickUpAndDropService"
-                value={formData.pickUpAndDropService}
-                onChange={handleChange}
-                required
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
-              >
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                User ID
-              </label>
-              <input
-                type="number"
-                name="userId"
-                value={formData.userId}
-                onChange={handleChange}
-                required
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Appointment Date
-              </label>
-              <DatePicker
-                selected={
-                  formData.appointmentDate ? new Date(formData.appointmentDate) : null
-                }
-                onChange={handleDateChange}
-                dateFormat="yyyy-MM-dd"
-                minDate={new Date()}
-                required
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white text-gray-700"
-              />
-            </div>
-
+            {/* Hidden User ID */}
+            {formData.userId && (
+              <input type="hidden" name="userId" value={formData.userId} />
+            )}
             <div className="flex justify-center">
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -308,7 +302,6 @@ function BookAppointment() {
             </div>
           </form>
         </div>
-
         <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
           <h3 className="text-2xl font-bold text-gray-800 mb-6">
             Vehicle Servicing Tips
@@ -339,7 +332,6 @@ function BookAppointment() {
           </div>
         </div>
       </motion.div>
-
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div

@@ -1,16 +1,7 @@
-import * as React from 'react';
 import Grid from '@mui/material/Grid2';
 import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Copyright from '../internals/components/Copyright';
-import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart';
-import ArticleIcon from '@mui/icons-material/Article';
-import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
-import GarageIcon from '@mui/icons-material/Garage';
-import CustomizedDataGrid from '../components/CustomizedDataGrid';
-
-
 
 export default function ManageUsers() {
   return (

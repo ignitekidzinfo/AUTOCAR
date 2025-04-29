@@ -1,21 +1,29 @@
+// TransactionAll.tsx
 import React, { useEffect } from "react";
 import apiClient from "Services/apiService";
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import CustomizedDataGrid from 'components/CustomizedDataGrid';
 import Copyright from 'internals/components/Copyright';
-import { Button, FormControl, InputLabel, MenuItem, OutlinedInput, Select } from '@mui/material';
+import {
+  Button,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  OutlinedInput,
+  Select,
+  TextField
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { GridRowsProp, GridColDef } from '@mui/x-data-grid';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import InputAdornment from '@mui/material/InputAdornment';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateRangePicker } from '@mui/x-date-pickers-pro/DateRangePicker';
-import { DemoContainer } from '@mui/x-date-pickers/internals/demo';
-import { SingleInputDateRangeField } from '@mui/x-date-pickers-pro/SingleInputDateRangeField';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { Theme } from '@mui/material/styles';
 
 interface Transaction {
   sparePartTransactionId: number;
@@ -39,6 +47,7 @@ const TransactionAll = () => {
   const [selectedType, setSelectedType] = React.useState<string>("");
   const [textInput, setTextInput] = React.useState<string>("");
   const [selectedStatus, setSelectedStatus] = React.useState<string>("");
+  // Date range state as a tuple [startDate, endDate]
   const [dateValue, setDateValue] = React.useState<[any, any]>([null, null]);
   const navigate = useNavigate();
 
@@ -65,7 +74,7 @@ const TransactionAll = () => {
         setRows(formattedRows);
       }
     } catch (error) {
-      console.log("error");
+      console.log("error", error);
     }
   };
 
@@ -84,7 +93,7 @@ const TransactionAll = () => {
     },
     {
       field: 'partName',
-      headerName: 'Path Name',
+      headerName: 'Part Name',
       headerAlign: 'right',
       align: 'right',
       flex: 1,
@@ -156,7 +165,7 @@ const TransactionAll = () => {
     },
     {
       field: 'vehicleRegId',
-      headerName: 'Vehicle Registartion No',
+      headerName: 'Vehicle Registration No',
       headerAlign: 'right',
       align: 'right',
       flex: 1,
@@ -172,7 +181,12 @@ const TransactionAll = () => {
 
   return (
     <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: (theme: Theme) => theme.spacing(2) }}
+      >
         <Typography component="h2" variant="h6">
           Vehicle Transaction List
         </Typography>
@@ -180,8 +194,8 @@ const TransactionAll = () => {
           Add Transaction
         </Button>
       </Stack>
-      <Grid container spacing={2} columns={12} sx={{ mb: (theme) => theme.spacing(2) }}>
-        <Grid size={{ xs: 12, sm: 12, md: 12, lg: 12 }} container spacing={2} sx={{ display: 'flex', gap: 2 }}>
+      <Grid container spacing={2} columns={12} sx={{ mb: (theme: Theme) => theme.spacing(2) }}>
+        <Grid container spacing={2} sx={{ display: 'flex', gap: 2 }}>
           <FormControl sx={{ width: { xs: "100%", md: "25ch" } }}>
             <InputLabel>Select Type</InputLabel>
             <Select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} size="medium">
@@ -191,7 +205,7 @@ const TransactionAll = () => {
               <MenuItem value="Appointment Number">Appointment Number</MenuItem>
             </Select>
           </FormControl>
-          {selectedType === "Vehicle ID" || selectedType === "Appointment Number" ? (
+          {(selectedType === "Vehicle ID" || selectedType === "Appointment Number") && (
             <FormControl sx={{ width: { xs: "100%", md: "25ch" } }} variant="outlined">
               <OutlinedInput
                 size="small"
@@ -206,18 +220,23 @@ const TransactionAll = () => {
                 }
               />
             </FormControl>
-          ) : null}
+          )}
           {selectedType === "Date Range" && (
             <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <DemoContainer components={["SingleInputDateRangeField"]}>
-                <DateRangePicker
-                  slots={{ field: SingleInputDateRangeField }}
-                  name="allowedRange"
-                  value={dateValue}
-                  onChange={(newValue) => setDateValue(newValue)}
-                  format="DD/MM/YYYY"
+              <Stack direction="row" spacing={2}>
+                <DatePicker
+                  label="Start Date"
+                  value={dateValue[0]}
+                  onChange={(newStart) => setDateValue([newStart, dateValue[1]])}
+                  slots={{ textField: TextField }}
                 />
-              </DemoContainer>
+                <DatePicker
+                  label="End Date"
+                  value={dateValue[1]}
+                  onChange={(newEnd) => setDateValue([dateValue[0], newEnd])}
+                  slots={{ textField: TextField }}
+                />
+              </Stack>
             </LocalizationProvider>
           )}
           {selectedType === "Status" && (
@@ -233,7 +252,7 @@ const TransactionAll = () => {
         </Grid>
       </Grid>
       <Grid container spacing={2} columns={12}>
-        <Grid size={{ xs: 12, lg: 12 }}>
+        <Grid item xs={12}>
           <CustomizedDataGrid columns={columns} rows={rows} />
         </Grid>
       </Grid>

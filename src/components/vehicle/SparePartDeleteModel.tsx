@@ -1,4 +1,3 @@
-import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -43,7 +42,7 @@ export default function SparePartDeleteModel({ open , onClose , deleteItemId ,on
 
   return (
     <div>
-      {/* <Button onClick={handleOpen}>Open modal</Button> */}
+
       <Modal
         open={open}
         onClose={onClose}

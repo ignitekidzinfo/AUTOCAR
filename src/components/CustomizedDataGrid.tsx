@@ -1,19 +1,32 @@
-import * as React from 'react';
 import { DataGrid } from '@mui/x-data-grid';
-import {  GridColDef, GridRowsProp } from '@mui/x-data-grid';
+import { GridColDef, GridRowsProp } from '@mui/x-data-grid';
+import { useEffect, useState } from 'react';
 
 interface CustomizedDataGridProps {
-  columns: GridColDef[]; // Columns type
-  rows: GridRowsProp; // Rows type
-  checkboxSelection? : boolean;
-
+  columns: GridColDef[]; 
+  rows: GridRowsProp; 
+  checkboxSelection?: boolean;
+  autoHeight?: boolean;
 }
 
-export default function CustomizedDataGrid({columns ,rows ,checkboxSelection = true} : CustomizedDataGridProps) {
+export default function CustomizedDataGrid({
+  columns,
+  rows,
+  checkboxSelection = true,
+  autoHeight = false,
+}: CustomizedDataGridProps) {
+  const [localRows, setLocalRows] = useState<GridRowsProp>(rows);
+  
+  useEffect(() => {
+    console.log('CustomizedDataGrid received new rows:', rows);
+    setLocalRows(rows);
+  }, [rows]);
+
   return (
     <DataGrid
-      checkboxSelection ={checkboxSelection}
-      rows={rows}
+      autoHeight={autoHeight}
+      checkboxSelection={checkboxSelection}
+      rows={localRows}
       columns={columns}
       getRowClassName={(params) =>
         params.indexRelativeToCurrentPage % 2 === 0 ? 'even' : 'odd'

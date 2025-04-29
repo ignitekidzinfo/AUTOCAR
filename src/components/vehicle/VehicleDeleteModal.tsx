@@ -1,12 +1,11 @@
-import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Modal from '@mui/material/Modal';
-import { VehicleDelete } from 'Services/vehicleService';
+import apiClient from 'Services/apiService';
 
 const style = {
-  position: 'absolute',
+  position: 'absolute' as 'absolute',
   top: '50%',
   left: '50%',
   transform: 'translate(-50%, -50%)',
@@ -18,30 +17,31 @@ const style = {
 };
 
 interface DeleteModalProps {
-  open : boolean ;
+  open: boolean;
   onClose: () => void;
-  deleteItemId? : number | undefined;
+  deleteItemId?: number;
 }
 
-export default function VehicleDeleteModal({ open , onClose , deleteItemId} : DeleteModalProps) {
-  // const [open, setOpen] = React.useState(false);
-  // const handleOpen = () => setOpen(true);
-  // const handleClose = () => setOpen(false);
+export default function VehicleDeleteModal({
+  open,
+  onClose,
+  deleteItemId,
+}: DeleteModalProps) {
   const handleDeleteRequest = async () => {
     if (deleteItemId === undefined) {
       console.error("Delete ID is undefined");
       return;
     }
-    try{
-      const response = await VehicleDelete(deleteItemId);
-    }catch(error){
-      console.log("Delete id unsuccessfully" , error)
+    try {
+      await apiClient.delete(`/vehicle-reg/delete?vehicleRegId=${deleteItemId}`);
+      onClose();
+    } catch (error) {
+      console.error("Error deleting vehicle:", error);
     }
-  }
+  };
 
   return (
     <div>
-      {/* <Button onClick={handleOpen}>Open modal</Button> */}
       <Modal
         open={open}
         onClose={onClose}
@@ -50,18 +50,18 @@ export default function VehicleDeleteModal({ open , onClose , deleteItemId} : De
       >
         <Box sx={style}>
           <Typography id="modal-modal-title" variant="h6" component="h2">
-              Delete Vehicle
+            Delete Vehicle
           </Typography>
           <Typography id="modal-modal-description" sx={{ mt: 2 }}>
-          {deleteItemId !== undefined
-        ? `Are you sure you want to delete vehicle ?`
-        : "No vehicle selected for deletion."}
+            {deleteItemId !== undefined
+              ? `Are you sure you want to delete this vehicle?`
+              : "No vehicle selected for deletion."}
           </Typography>
           <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between" }}>
-            <Button 
-              variant="contained" 
-              color="error" 
-              onClick={handleDeleteRequest} 
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleDeleteRequest}
               disabled={deleteItemId === undefined}
             >
               Confirm Delete

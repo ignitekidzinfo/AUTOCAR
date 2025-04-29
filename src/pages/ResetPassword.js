@@ -10,7 +10,6 @@ import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import AppTheme from '../theme/AppTheme';
 import Stack from '@mui/material/Stack';
-// import { GoogleIcon, FacebookIcon, SitemarkIcon } from './CustomIcons';
 import { ResetPasswordAPI } from '../Services/userService';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 const Card = styled(MuiCard)(({ theme }) => ({
@@ -53,7 +52,7 @@ export default function ResetPassword(props) {
                 token
             };
             const response = await ResetPasswordAPI(data);
-            if (response.code == 200) {
+            if (response.code === 200) {
                 console.log("Password reset successful:", response);
                 alert("Password reset successful!");
                 navigate("/signIn"); 

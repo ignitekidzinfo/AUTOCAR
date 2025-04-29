@@ -159,19 +159,19 @@ function MyAddSparePart() {
         </button>
       </header>
 
-      <div className="flex-grow flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-5xl border border-gray-100">
-          <h1 className="text-3xl font-bold text-gray-800 mb-8 text-center flex items-center justify-center gap-2">
-            <Package className="h-8 w-8 text-blue-600" />
+      <div className="flex-grow flex items-center justify-center p-3 sm:p-4">
+        <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 md:p-8 w-full max-w-5xl border border-gray-100">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mb-6 sm:mb-8 text-center flex items-center justify-center gap-2">
+            <Package className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 text-blue-600" />
             Add New Spare Part
           </h1>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <Tag className="h-5 w-5 text-blue-600" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
+              <div className="space-y-1 sm:space-y-2">
+                <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                  <Tag className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                   Part Name
                 </label>
                 <input
@@ -179,15 +179,15 @@ function MyAddSparePart() {
                   name="partName"
                   value={formData.partName}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., Brake Pad Set"
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <Factory className="h-5 w-5 text-blue-600" />
+              <div className="space-y-1 sm:space-y-2">
+                <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                  <Factory className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                   Manufacturer
                 </label>
                 <input
@@ -195,15 +195,15 @@ function MyAddSparePart() {
                   name="manufacturer"
                   value={formData.manufacturer}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., Bosch"
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <Hash className="h-5 w-5 text-blue-600" />
+              <div className="space-y-1 sm:space-y-2">
+                <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                  <Hash className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                   Selling Price (INR)
                 </label>
                 <input
@@ -211,16 +211,16 @@ function MyAddSparePart() {
                   name="price"
                   value={formData.price}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter selling price"
                   min="0"
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <Hash className="h-5 w-5 text-blue-600" />
+              <div className="space-y-1 sm:space-y-2">
+                <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                  <Hash className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                   Part Number
                 </label>
                 <input
@@ -228,17 +228,17 @@ function MyAddSparePart() {
                   name="partNumber"
                   value={formData.partNumber}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., BP-2023-XL"
                   required
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <Info className="h-5 w-5 text-blue-600" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
+              <div className="space-y-1 sm:space-y-2">
+                <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                  <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                   SGST (%)
                 </label>
                 <input
@@ -246,16 +246,16 @@ function MyAddSparePart() {
                   name="sGST"
                   value={formData.sGST}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., 9"
                   min="0"
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <Info className="h-5 w-5 text-blue-600" />
+              <div className="space-y-1 sm:space-y-2">
+                <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                  <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                   CGST (%)
                 </label>
                 <input
@@ -263,16 +263,16 @@ function MyAddSparePart() {
                   name="cGST"
                   value={formData.cGST}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., 9"
                   min="0"
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <Info className="h-5 w-5 text-blue-600" />
+              <div className="space-y-1 sm:space-y-2">
+                <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                  <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                   Total GST (%)
                 </label>
                 <input
@@ -280,16 +280,16 @@ function MyAddSparePart() {
                   name="totalGST"
                   value={formData.totalGST}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., 18"
                   min="0"
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="flex items-center text-gray-700 font-medium gap-2">
-                  <Hash className="h-5 w-5 text-blue-600" />
+              <div className="space-y-1 sm:space-y-2">
+                <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                  <Hash className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                   Buying Price (INR)
                 </label>
                 <input
@@ -297,7 +297,7 @@ function MyAddSparePart() {
                   name="buyingPrice"
                   value={formData.buyingPrice}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter buying price"
                   min="0"
                   required
@@ -305,27 +305,27 @@ function MyAddSparePart() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="flex items-center text-gray-700 font-medium gap-2">
-                <Info className="h-5 w-5 text-blue-600" />
+            <div className="space-y-1 sm:space-y-2">
+              <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                 Description
               </label>
               <textarea
                 name="description"
                 value={formData.description}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                rows={4}
+                className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows={3}
                 placeholder="Detailed description of the spare part..."
                 required
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="flex items-center text-gray-700 font-medium gap-2">
-                <UploadCloud className="h-5 w-5 text-blue-600" />
+            <div className="space-y-1 sm:space-y-2">
+              <label className="flex items-center text-gray-700 text-sm sm:text-base font-medium gap-2">
+                <UploadCloud className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                 Product Photos
-                <span className="text-sm text-gray-500">(Required)</span>
+                <span className="text-xs sm:text-sm text-gray-500">(Required)</span>
               </label>
 
               <div
@@ -333,11 +333,11 @@ function MyAddSparePart() {
                   uploadError
                     ? "border-red-500 bg-red-50"
                     : "border-gray-200 hover:border-blue-400"
-                } rounded-xl p-6 text-center transition-all cursor-pointer group`}
+                } rounded-xl p-4 sm:p-6 text-center transition-all cursor-pointer group`}
                 onClick={() => document.getElementById("fileUpload")?.click()}
               >
                 <UploadCloud
-                  className={`h-12 w-12 mx-auto mb-4 ${
+                  className={`h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 mx-auto mb-2 sm:mb-4 ${
                     uploadError
                       ? "text-red-500"
                       : "text-gray-400 group-hover:text-blue-500"
@@ -346,13 +346,13 @@ function MyAddSparePart() {
                 <p
                   className={`${
                     uploadError ? "text-red-600" : "text-gray-600"
-                  } mb-2`}
+                  } mb-1 sm:mb-2 text-sm sm:text-base`}
                 >
                   {uploadError
                     ? "Please upload at least one photo"
                     : "Click or drag to upload images"}
                 </p>
-                <p className="text-sm text-gray-500">
+                <p className="text-xs sm:text-sm text-gray-500">
                   Supported formats: JPG, PNG (max 5MB each)
                 </p>
                 <input
@@ -366,7 +366,7 @@ function MyAddSparePart() {
               </div>
 
               {imagePreviews.length > 0 && (
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="mt-3 sm:mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
                   {imagePreviews.map((preview, index) => (
                     <div
                       key={index}
@@ -380,9 +380,9 @@ function MyAddSparePart() {
                       <button
                         type="button"
                         onClick={() => handleRemoveImage(index)}
-                        className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full shadow-sm hover:bg-white transition-colors"
+                        className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-white/90 p-1 sm:p-1.5 rounded-full shadow-sm hover:bg-white transition-colors"
                       >
-                        <X className="h-4 w-4 text-gray-700 hover:text-red-600" />
+                        <X className="h-3 w-3 sm:h-4 sm:w-4 text-gray-700 hover:text-red-600" />
                       </button>
                     </div>
                   ))}
@@ -392,17 +392,17 @@ function MyAddSparePart() {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-400 flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 text-white py-2.5 sm:py-3.5 rounded-lg text-sm sm:text-base font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-400 flex items-center justify-center gap-2"
               disabled={isSubmitting}
             >
               {isSubmitting ? (
                 <>
-                  <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="h-3 w-3 sm:h-4 sm:w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   Adding Part...
                 </>
               ) : (
                 <>
-                  <Package className="h-5 w-5" />
+                  <Package className="h-4 w-4 sm:h-5 sm:w-5" />
                   Add Spare Part
                 </>
               )}

@@ -11,6 +11,7 @@ import {
   Edit,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import storageUtils from '../utils/storageUtils';
 
 type SparePartType = {
   id: string;
@@ -42,14 +43,13 @@ function SparePartDetails() {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   
   let userRole = "";
-  const storedDecodedToken = localStorage.getItem("userData");
-  if (storedDecodedToken) {
-    const parsedToken = JSON.parse(storedDecodedToken);
-    userRole = parsedToken.authorities[0];
+  const userData = storageUtils.getUserData();
+  if (userData) {
+    userRole = userData.authorities?.[0] || "";
   }
   
   useEffect(() => {
-    const storedPincode = localStorage.getItem("pincode");
+    const storedPincode = storageUtils.getItem("pincode");
     if (storedPincode) {
       setPincode(storedPincode);
       setDeliveryMessage(`Delivering to ${storedPincode}`);
@@ -79,7 +79,7 @@ function SparePartDetails() {
   
   const handlePincodeSubmit = () => {
     if (pincode) {
-      localStorage.setItem("pincode", pincode);
+      storageUtils.setItem("pincode", pincode);
       setDeliveryMessage(`Delivering to ${pincode}`);
       setShowPincodePopup(false);
     }
