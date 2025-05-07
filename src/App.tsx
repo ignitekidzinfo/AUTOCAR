@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Box, Button, Snackbar, Alert } from '@mui/material';
 import NavigationMenu from './components/navigation/NavigationMenu';
-import ConsoleSanitizer from './utils/ConsoleSanitizer';
+// import ConsoleSanitizer from './utils/ConsoleSanitizer';
 import logger from './utils/logger';
 import TermsAndConditionsList from './components/Terms/TermsAndConditionsList';
 import AddTermsAndConditions from './components/Terms/AddTermsAndConditions';
@@ -108,17 +108,9 @@ const AuthGuard: React.FC<{
   requiredRoles?: string[];
   children: React.ReactNode;
 }> = ({ user, requiredRoles = [], children }) => {
-  // Only check if token is completely invalid (expired/malformed), 
-  // not simply to enforce re-login on page reload
-  const isValid = isTokenValid();
+  // Don't perform automatic token validation on component mount
+  // This prevents logout loops when navigating between authenticated routes
   
-  if (!isValid && user.isAuthenticated) {
-    // If token is explicitly invalid but user state shows authenticated,
-    // only then force a token check and redirection
-    forceCheckTokenValidity();
-    return null; // Return null while redirection is happening
-  }
-
   if (!user.isAuthenticated) {
     return <Navigate to="/signIn" />;
   }
@@ -178,7 +170,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
     <Router>
-      <ConsoleSanitizer />
+      {/* <ConsoleSanitizer /> */}
       
       {/* Add the session expiration handler if user is authenticated */}
       {user.isAuthenticated && <SessionExpirationHandler />}

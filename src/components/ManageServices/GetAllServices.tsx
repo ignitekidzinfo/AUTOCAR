@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Box,
   Paper,
@@ -14,6 +14,7 @@ import {
   Stack,
   styled,
   TextField,
+  CircularProgress,
 } from "@mui/material";
 import { FaEdit, FaTrash } from "react-icons/fa";
 import apiClient from "Services/apiService";
@@ -28,6 +29,16 @@ interface ServiceData {
   serviceRate: number;
   totalGst: number;
 }
+
+// Cache configuration
+const CACHE_KEY = 'services_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+// Global services cache
+let servicesCache = {
+  data: null as ServiceData[] | null,
+  timestamp: 0
+};
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   width: "100%",
@@ -53,22 +64,72 @@ const GetAllServices: React.FC = () => {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const fetchServices = async () => {
+  // Try to load from localStorage on component initialization
+  useEffect(() => {
+    try {
+      const cachedData = localStorage.getItem(CACHE_KEY);
+      if (cachedData) {
+        const { data, timestamp } = JSON.parse(cachedData);
+        if (Date.now() - timestamp < CACHE_DURATION) {
+          setServices(data);
+          setLoading(false);
+          // Still fetch in background to update cache
+          fetchServices(false);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Error reading from cache:", error);
+    }
+    
+    // No valid cache, load fresh data
+    fetchServices(true);
+  }, []);
+
+  const fetchServices = useCallback(async (showLoading = true) => {
+    // Check in-memory cache first
+    if (!showLoading && servicesCache.data && (Date.now() - servicesCache.timestamp < CACHE_DURATION)) {
+      setServices(servicesCache.data);
+      return;
+    }
+    
+    if (showLoading) {
+      setLoading(true);
+    }
+    
     try {
       const response = await apiClient.get("/services/getAll");
-      setServices(response.data);
+      const data = response.data;
+      
+      // Update state
+      setServices(data);
+      setLoading(false);
+      
+      // Update in-memory cache
+      servicesCache = {
+        data,
+        timestamp: Date.now()
+      };
+      
+      // Update localStorage cache
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data,
+          timestamp: Date.now()
+        }));
+      } catch (error) {
+        console.error("Error saving to localStorage:", error);
+      }
     } catch (error: any) {
+      setLoading(false);
       setMessage(
         "Error fetching services: " +
           (error.response?.data?.message || error.message)
       );
     }
-  };
-
-  useEffect(() => {
-    fetchServices();
   }, []);
 
   const handleEdit = (id: number) => {
@@ -83,8 +144,13 @@ const GetAllServices: React.FC = () => {
   const confirmDeleteService = async () => {
     if (deleteId !== null) {
       try {
-        await apiClient.delete(`/services/${deleteId}`);
+        await apiClient.delete(`/services/delete/${deleteId}`);
         setMessage("Service deleted successfully.");
+        
+        // Clear caches after mutation
+        servicesCache = { data: null, timestamp: 0 };
+        localStorage.removeItem(CACHE_KEY);
+        
         fetchServices();
       } catch (error: any) {
         setMessage(
@@ -104,8 +170,7 @@ const GetAllServices: React.FC = () => {
 
   const filteredServices = services.filter((service) =>
     Object.values(service).some((value) =>
-      value
-        .toString()
+      String(value)
         .toLowerCase()
         .includes(searchTerm.toLowerCase())
     )
@@ -137,51 +202,57 @@ const GetAllServices: React.FC = () => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>
-                  <strong>S.No</strong>
-                </TableCell>
-                <TableCell>
-                  <strong>Name</strong>
-                </TableCell>
-                <TableCell>
-                  <strong>Service Rate</strong>
-                </TableCell>
-                <TableCell>
-                  <strong>Actions</strong>
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredServices.map((service, index) => (
-                <TableRow key={service.serviceId}>
-                  <TableCell>{index + 1}</TableCell>
-                  <TableCell>{service.serviceName}</TableCell>
-                  <TableCell>{service.serviceRate}</TableCell>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
                   <TableCell>
-                    <Stack direction="row" spacing={1}>
-                      <IconButton
-                        onClick={() => handleEdit(service.serviceId)}
-                        color="primary"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        onClick={() => handleDelete(service.serviceId)}
-                        color="error"
-                      >
-                        <TrashIcon />
-                      </IconButton>
-                    </Stack>
+                    <strong>S.No</strong>
+                  </TableCell>
+                  <TableCell>
+                    <strong>Name</strong>
+                  </TableCell>
+                  <TableCell>
+                    <strong>Service Rate</strong>
+                  </TableCell>
+                  <TableCell>
+                    <strong>Actions</strong>
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {filteredServices.map((service, index) => (
+                  <TableRow key={service.serviceId}>
+                    <TableCell>{index + 1}</TableCell>
+                    <TableCell>{service.serviceName}</TableCell>
+                    <TableCell>{service.serviceRate}</TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={1}>
+                        <IconButton
+                          onClick={() => handleEdit(service.serviceId)}
+                          color="primary"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          onClick={() => handleDelete(service.serviceId)}
+                          color="error"
+                        >
+                          <TrashIcon />
+                        </IconButton>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </StyledPaper>
       {confirmDelete && (
         <Paper

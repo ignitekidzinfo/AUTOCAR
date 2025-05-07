@@ -44,8 +44,9 @@ export const isTokenValid = (): boolean => {
       const expTime = Number(decoded.exp) * 1000;
       const currentTime = Date.now();
       
-      // Add buffer time (30 seconds) to prevent edge cases and ensure early validation
-      return expTime > (currentTime + 30000);
+      // Use a shorter buffer time (5 seconds) to consider token valid
+      // Previously it was 30 seconds which may have been too aggressive
+      return expTime > (currentTime - 5000);
     } catch (decodeError) {
       // If token can't be decoded, it's invalid
       logger.error('Failed to decode token:', decodeError);
@@ -65,20 +66,52 @@ export const forceCheckTokenValidity = (): void => {
     return;
   }
   
-  if (!isTokenValid()) {
-    // Token is expired or invalid, clear auth data
-    clearAuthData();
+  try {
+    const token = secureStorage.getItem('token');
     
-    // Save current location for redirect after login
-    secureStorage.setItem('redirectAfterLogin', currentPath);
+    // If no token exists at all, redirect to login
+    if (!token) {
+      // Don't redirect automatically - just log this condition
+      // This prevents a loop when token is being set but hasn't been stored yet
+      logger.warn('No token found during validity check');
+      return;
+    }
     
-    // Show toast notification
-    toast.error('Your session has expired. Please sign in again.');
-    
-    // Redirect to login page
-    setTimeout(() => {
-      window.location.href = '/signIn';
-    }, 1000);
+    try {
+      const decoded = jwtDecode<DecodedToken>(token);
+      
+      // Ensure exp exists
+      if (!decoded.exp) {
+        logger.warn('Token is missing expiration time');
+        return;
+      }
+      
+      const expTime = Number(decoded.exp) * 1000;
+      const currentTime = Date.now();
+      
+      // Only redirect if token is truly expired
+      // Add a 30-second grace period to prevent edge cases
+      if (expTime <= currentTime - 30000) {
+        // Token is expired, clear auth data
+        clearAuthData();
+        
+        // Save current location for redirect after login
+        secureStorage.setItem('redirectAfterLogin', currentPath);
+        
+        // Show toast notification
+        toast.error('Your session has expired. Please sign in again.');
+        
+        // Redirect to login page with a delay
+        setTimeout(() => {
+          window.location.href = '/signIn';
+        }, 1000);
+      }
+    } catch (decodeError) {
+      // If token can't be decoded, log error but don't automatically redirect
+      logger.error('Failed to decode token:', decodeError);
+    }
+  } catch (error) {
+    logger.error('Error validating token:', error);
   }
 };
 
@@ -102,7 +135,8 @@ export const getDecodedToken = (): DecodedToken | null => {
     const expTime = Number(decoded.exp) * 1000;
     const currentTime = Date.now();
     
-    if (expTime <= currentTime) {
+    // Use the same 30-second grace period as in other functions
+    if (expTime <= currentTime - 30000) {
       logger.warn('Token expired');
       return null;
     }

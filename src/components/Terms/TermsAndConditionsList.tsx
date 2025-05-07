@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -25,6 +25,16 @@ import { apiClient } from '../../utils/apiClient';
 import { useNotification } from '../common/Notification';
 import logger from '../../utils/logger';
 
+// Cache configuration
+const CACHE_KEY = 'terms_conditions_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// In-memory cache to avoid localStorage overhead
+let termsCache = {
+  data: null as TermsDto[] | null,
+  timestamp: 0
+};
+
 // Updated to match backend DTO (ManageTermsDto)
 interface TermsDto {
   manageTermsId: number;
@@ -34,7 +44,8 @@ interface TermsDto {
 
 const TermsAndConditionsList: React.FC = () => {
   const [terms, setTerms] = useState<TermsDto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [notification, setNotification] = useState<{message: string, open: boolean}>({
@@ -44,15 +55,62 @@ const TermsAndConditionsList: React.FC = () => {
   const navigate = useNavigate();
   const { showNotification, clearNotifications } = useNotification();
 
-  const fetchTerms = async () => {
+  // Prefetch cache data immediately on component mount
+  useEffect(() => {
+    const prefetchFromCache = () => {
+      try {
+        // Check memory cache first (fastest)
+        if (termsCache.data && Date.now() - termsCache.timestamp < CACHE_DURATION) {
+          setTerms(termsCache.data);
+          setInitialLoading(false);
+          return true;
+        }
+        
+        // Try localStorage next
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        if (cachedData) {
+          const { data, timestamp } = JSON.parse(cachedData);
+          if (Date.now() - timestamp < CACHE_DURATION) {
+            setTerms(data);
+            
+            // Update memory cache too
+            termsCache = { data, timestamp };
+            
+            setInitialLoading(false);
+            return true;
+          }
+        }
+        
+        return false;
+      } catch (error) {
+        logger.error("Cache error:", error);
+        return false;
+      }
+    };
+    
+    // If we couldn't use cache, we'll fetch fresh data
+    if (!prefetchFromCache()) {
+      fetchTerms(true);
+    } else {
+      // If we used cache, still fetch updated data in the background
+      fetchTerms(false);
+    }
+    
+    // Clear any existing notifications when component unmounts
+    return () => {
+      clearNotifications();
+    };
+  }, []); // Empty dependency array ensures it only runs once on mount
+
+  const fetchTerms = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setInitialLoading(true);
+      }
+      
       setError(null);
       
-      console.log("Attempting to fetch terms and conditions from API...");
       const response = await apiClient.get('manageTerms/all');
-      
-      console.log("API Response:", response.data);
       
       // Auto-close notification after 3 seconds
       setTimeout(() => {
@@ -80,75 +138,87 @@ const TermsAndConditionsList: React.FC = () => {
           termsData = [];
         }
         
-        // Debug data
-        console.log("Processed terms data:", termsData);
-        
         // Update state with processed data
         setTerms(termsData || []);
+        
+        // Cache the data
+        termsCache = {
+          data: termsData || [],
+          timestamp: Date.now()
+        };
+        
+        // Also cache in localStorage for persistence
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data: termsData || [],
+          timestamp: Date.now()
+        }));
       } else {
-        console.warn("No data in API response");
+        logger.warn("No data in API response");
         setError('Failed to fetch terms and conditions - no data returned');
-        setTerms([]);
+        
+        // Only clear terms if we don't already have some
+        if (terms.length === 0) {
+          setTerms([]);
+        }
       }
     } catch (error) {
-      console.error("Error in fetchTerms:", error);
       logger.error('Error fetching terms and conditions:', error);
       setError('Error connecting to server. Please try again later.');
-      setTerms([]);
+      
+      // Only clear terms if we don't already have some
+      if (terms.length === 0) {
+        setTerms([]);
+      }
+      
       showNotification({
         message: 'Failed to connect to server',
         type: 'error',
       });
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
-  };
+  }, [showNotification, terms.length]);
 
-  useEffect(() => {
-    // Fetch terms only once when component mounts
-    fetchTerms();
-    
-    // Clear any existing notifications when component unmounts
-    return () => {
-      clearNotifications();
-    };
-  }, []); // Empty dependency array ensures it only runs once on mount
-
-  const handleAdd = () => {
-    console.log("Navigating to add terms page");
+  const handleAdd = useCallback(() => {
     navigate('/admin/terms/add');
-  };
+  }, [navigate]);
 
-  const handleEdit = (id: number) => {
-    // More detailed logs
-    console.log(`Navigating to edit page for term ID: ${id}`);
-    console.log(`Current URL: ${window.location.href}`);
-    console.log(`Target URL: /admin/terms/edit/${id}`);
-    
-    // Use complete path
+  const handleEdit = useCallback((id: number) => {
     navigate(`/admin/terms/edit/${id}`);
-    
-    // After navigation attempt
-    setTimeout(() => {
-      console.log(`URL after navigation: ${window.location.href}`);
-    }, 500);
-  };
+  }, [navigate]);
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = useCallback(async (id: number) => {
     if (window.confirm('Are you sure you want to delete this terms and condition?')) {
       try {
+        setLoading(true);
         const response = await apiClient.delete(`manageTerms/delete?id=${id}`);
         if (response.data && response.data.success) {
+          // Optimistic UI update
+          const updatedTerms = terms.filter(term => term.manageTermsId !== id);
+          setTerms(updatedTerms);
+          
+          // Update cache
+          termsCache = {
+            data: updatedTerms,
+            timestamp: Date.now()
+          };
+          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            data: updatedTerms,
+            timestamp: Date.now()
+          }));
+          
           showNotification({
             message: 'Terms and condition deleted successfully',
             type: 'success',
           });
-          fetchTerms();
         } else {
           showNotification({
             message: response.data?.message || 'Failed to delete terms and condition',
             type: 'error',
           });
+          
+          // Refresh data in background
+          fetchTerms(false);
         }
       } catch (error) {
         logger.error('Error deleting terms and condition:', error);
@@ -156,30 +226,95 @@ const TermsAndConditionsList: React.FC = () => {
           message: 'Failed to delete terms and condition',
           type: 'error',
         });
+        
+        // Refresh data in background
+        fetchTerms(false);
+      } finally {
+        setLoading(false);
       }
     }
-  };
+  }, [terms, fetchTerms, showNotification]);
 
-  const handleCloseNotification = () => {
+  const handleCloseNotification = useCallback(() => {
     setNotification(prev => ({...prev, open: false}));
-  };
+  }, []);
 
-  const handleRefresh = () => {
-    fetchTerms();
-  };
+  const handleRefresh = useCallback(() => {
+    fetchTerms(true);
+  }, [fetchTerms]);
 
-  const filteredTerms = terms.filter((term) => {
-    if (!searchTerm) return true;
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  // Memoize filtered terms to avoid recalculation on every render
+  const filteredTerms = useMemo(() => {
+    if (!searchTerm) return terms;
     
     const searchLower = searchTerm.toLowerCase();
-    return (
+    return terms.filter((term) => (
       term.selectNoteOn?.toLowerCase().includes(searchLower) ||
       term.writeTerms?.toLowerCase().includes(searchLower)
-    );
-  });
+    ));
+  }, [terms, searchTerm]);
 
-  console.log("Rendering with terms:", terms);
-  console.log("Filtered terms length:", filteredTerms.length);
+  // Memoize table rows to prevent re-rendering of all rows when only one changes
+  const tableRows = useMemo(() => {
+    return filteredTerms.map((term, index) => (
+      <TableRow 
+        key={term.manageTermsId || index}
+        sx={{ '&:nth-of-type(odd)': { backgroundColor: '#f9f9f9' } }}
+      >
+        <TableCell sx={{ verticalAlign: 'top', py: 2 }}>{index + 1}</TableCell>
+        <TableCell sx={{ verticalAlign: 'top', py: 2 }}>{term.selectNoteOn || 'Job Card'}</TableCell>
+        <TableCell sx={{
+          width: '75%',
+          whiteSpace: 'normal',
+          wordBreak: 'break-word',
+          padding: '16px',
+          lineHeight: '1.5',
+          verticalAlign: 'top'
+        }}>
+          {term.writeTerms || ''}
+        </TableCell>
+        <TableCell align="center" sx={{ verticalAlign: 'top', py: 2 }}>
+          <IconButton 
+            onClick={() => {
+              if (!term.manageTermsId) {
+                showNotification({
+                  message: 'Cannot edit: Missing term ID',
+                  type: 'error',
+                });
+                return;
+              }
+              handleEdit(term.manageTermsId);
+            }} 
+            size="small" 
+            color="primary"
+            disabled={!term.manageTermsId}
+          >
+            <EditIcon />
+          </IconButton>
+        </TableCell>
+      </TableRow>
+    ));
+  }, [filteredTerms, handleEdit, showNotification]);
+
+  // Memoize empty state component
+  const emptyState = useMemo(() => (
+    <Box sx={{ textAlign: 'center', p: 2 }}>
+      <Typography variant="body1">No terms and conditions found</Typography>
+      <Button
+        variant="outlined"
+        color="primary"
+        onClick={handleRefresh}
+        sx={{ mt: 2 }}
+        size="small"
+      >
+        Refresh
+      </Button>
+    </Box>
+  ), [handleRefresh]);
 
   return (
     <Box sx={{ 
@@ -215,7 +350,7 @@ const TermsAndConditionsList: React.FC = () => {
               size="small"
               placeholder="Search..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
             />
             <Button
               variant="contained"
@@ -235,24 +370,11 @@ const TermsAndConditionsList: React.FC = () => {
           </Alert>
         )}
 
-        {loading ? (
+        {initialLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
             <CircularProgress />
           </Box>
-        ) : terms.length === 0 ? (
-          <Box sx={{ textAlign: 'center', p: 2 }}>
-            <Typography variant="body1">No terms and conditions found</Typography>
-            <Button
-              variant="outlined"
-              color="primary"
-              onClick={handleRefresh}
-              sx={{ mt: 2 }}
-              size="small"
-            >
-              Refresh
-            </Button>
-          </Box>
-        ) : (
+        ) : terms.length === 0 ? emptyState : (
           <TableContainer sx={{ width: '100%', overflowX: 'auto' }}>
             <Table sx={{ minWidth: 650, tableLayout: 'fixed' }}>
               <TableHead>
@@ -264,46 +386,7 @@ const TermsAndConditionsList: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredTerms.map((term, index) => (
-                  <TableRow 
-                    key={term.manageTermsId || index}
-                    sx={{ '&:nth-of-type(odd)': { backgroundColor: '#f9f9f9' } }}
-                  >
-                    <TableCell sx={{ verticalAlign: 'top', py: 2 }}>{index + 1}</TableCell>
-                    <TableCell sx={{ verticalAlign: 'top', py: 2 }}>{term.selectNoteOn || 'Job Card'}</TableCell>
-                    <TableCell sx={{
-                      width: '75%',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      padding: '16px',
-                      lineHeight: '1.5',
-                      verticalAlign: 'top'
-                    }}>
-                      {term.writeTerms || ''}
-                    </TableCell>
-                    <TableCell align="center" sx={{ verticalAlign: 'top', py: 2 }}>
-                      <IconButton 
-                        onClick={() => {
-                          if (!term.manageTermsId) {
-                            console.error("Cannot edit: No manageTermsId found for this term");
-                            showNotification({
-                              message: 'Cannot edit: Missing term ID',
-                              type: 'error',
-                            });
-                            return;
-                          }
-                          console.log("Clicked edit for ID:", term.manageTermsId);
-                          handleEdit(term.manageTermsId);
-                        }} 
-                        size="small" 
-                        color="primary"
-                        disabled={!term.manageTermsId}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {tableRows}
               </TableBody>
             </Table>
           </TableContainer>

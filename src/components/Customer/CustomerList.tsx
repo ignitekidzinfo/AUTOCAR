@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "Services/apiService";
 import {
@@ -38,12 +38,19 @@ import {
   Search as SearchIcon,
 } from "@mui/icons-material";
 
+// Memory cache for customer data to improve loading speed
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+let customerCache = {
+  data: null as Customer[] | null,
+  timestamp: 0
+};
+
 interface Customer {
   email: string;
-  firstName: string;
-  lastName?: string;
+  firstName: string | null;
+  lastName?: string | null;
   mobileNumber: number;
-  address: string;
+  address: string | null;
 }
 
 const CustomerList: React.FC = () => {
@@ -53,15 +60,38 @@ const CustomerList: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
 
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
-  const fetchCustomers = async () => {
+  // Optimized fetch function with caching
+  const fetchCustomers = useCallback(async () => {
     setLoading(true);
+    
     try {
+      // Check if we have cached data that's still fresh
+      if (customerCache.data && (Date.now() - customerCache.timestamp < CACHE_DURATION)) {
+        console.log("Using cached customer data");
+        setCustomers(customerCache.data);
+        setLoading(false);
+        return;
+      }
+      
+      console.log("Fetching fresh customer data");
       const response = await apiClient.get("/user/getAllUsers");
-      setCustomers(response.data.list); // Use 'list' from response
+      
+      // Validate and sanitize data
+      const customerData = response.data?.list || [];
+      const sanitizedData = customerData.map((customer: any) => ({
+        ...customer,
+        firstName: customer.firstName || null,
+        lastName: customer.lastName || null,
+        address: customer.address || null
+      }));
+      
+      // Update cache
+      customerCache = {
+        data: sanitizedData,
+        timestamp: Date.now()
+      };
+      
+      setCustomers(sanitizedData);
       setError(null);
     } catch (error) {
       console.error("Error fetching customers:", error);
@@ -69,12 +99,22 @@ const CustomerList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Load data on component mount
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   const handleDelete = async (email: string) => {
     try {
       await apiClient.delete(`/customers/${email}`);
+      
+      // Update local state
       setCustomers((prev) => prev.filter((c) => c.email !== email));
+      
+      // Clear cache to ensure fresh data on next load
+      customerCache.data = null;
     } catch (error) {
       console.error("Error deleting customer:", error);
       setError("Failed to delete customer. Please try again.");
@@ -83,9 +123,17 @@ const CustomerList: React.FC = () => {
     }
   };
 
-  const renderCustomerName = (customer: Customer) => {
-    const fullName = `${customer.firstName} ${customer.lastName || ""}`.trim();
-    const initials = customer.firstName.charAt(0) + (customer.lastName ? customer.lastName.charAt(0) : "");
+  // Safely render customer name with null checks
+  const renderCustomerName = useCallback((customer: Customer) => {
+    // Safely handle null or undefined values
+    const firstName = customer.firstName || '';
+    const lastName = customer.lastName || '';
+    const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
+    
+    // Safe way to get initials
+    const firstInitial = firstName && firstName.length > 0 ? firstName.charAt(0) : '?';
+    const lastInitial = lastName && lastName.length > 0 ? lastName.charAt(0) : '';
+    const initials = (firstInitial + lastInitial).toUpperCase();
     
     return (
       <Stack direction="row" spacing={1.5} alignItems="center">
@@ -98,14 +146,86 @@ const CustomerList: React.FC = () => {
             fontWeight: 'bold'
           }}
         >
-          {initials}
+          {initials || '?'}
         </Avatar>
         <Typography variant="body1" fontWeight="medium">
           {fullName}
         </Typography>
       </Stack>
     );
-  };
+  }, [theme]);
+
+  // Memoize the customer list to prevent unnecessary re-renders
+  const customerList = useMemo(() => {
+    if (!customers.length) return null;
+    
+    return customers.map((customer, index) => (
+      <TableRow 
+        key={customer.email || index} 
+        hover
+        sx={{ 
+          '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+          '&:last-child td, &:last-child th': { border: 0 }
+        }}
+      >
+        <TableCell>{index + 1}</TableCell>
+        <TableCell>{renderCustomerName(customer)}</TableCell>
+        <TableCell>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <LocationIcon fontSize="small" color="action" />
+            <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {customer.address || 'No address'}
+            </Typography>
+          </Stack>
+        </TableCell>
+        <TableCell>
+          <Chip 
+            icon={<PhoneIcon />} 
+            label={customer.mobileNumber || 'N/A'} 
+            size="small" 
+            variant="outlined"
+            sx={{ borderRadius: 1.5 }}
+          />
+        </TableCell>
+        <TableCell>
+          <Typography variant="body2" color="text.secondary">-</Typography>
+        </TableCell>
+        <TableCell>
+          <Typography variant="body2" color="text.secondary">-</Typography>
+        </TableCell>
+        <TableCell>
+          <Stack direction="row" spacing={1} justifyContent="center">
+            <Tooltip title="Edit Customer">
+              <IconButton 
+                size="small" 
+                color="primary"
+                onClick={() => console.log("Edit", customer.email)}
+                sx={{ 
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) }
+                }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete Customer">
+              <IconButton 
+                size="small" 
+                color="error"
+                onClick={() => handleDelete(customer.email)}
+                sx={{ 
+                  bgcolor: alpha(theme.palette.error.main, 0.1),
+                  '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.2) }
+                }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </TableCell>
+      </TableRow>
+    ));
+  }, [customers, renderCustomerName, theme, handleDelete]);
 
   return (
     <Box
@@ -147,7 +267,7 @@ const CustomerList: React.FC = () => {
               sx={{ borderRadius: 2 }}
             >
               Add New Customer
-        </Button>
+            </Button>
           </Stack>
         </Box>
 
@@ -208,74 +328,9 @@ const CustomerList: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-            {customers.length > 0 ? (
-              customers.map((customer, index) => (
-                      <TableRow 
-                        key={index} 
-                        hover
-                        sx={{ 
-                          '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
-                          '&:last-child td, &:last-child th': { border: 0 }
-                        }}
-                      >
-                        <TableCell>{index + 1}</TableCell>
-                        <TableCell>{renderCustomerName(customer)}</TableCell>
-                        <TableCell>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <LocationIcon fontSize="small" color="action" />
-                            <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {customer.address}
-                            </Typography>
-                          </Stack>
-                        </TableCell>
-                        <TableCell>
-                          <Chip 
-                            icon={<PhoneIcon />} 
-                            label={customer.mobileNumber} 
-                            size="small" 
-                            variant="outlined"
-                            sx={{ borderRadius: 1.5 }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="text.secondary">-</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="text.secondary">-</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Stack direction="row" spacing={1} justifyContent="center">
-                            <Tooltip title="Edit Customer">
-                              <IconButton 
-                                size="small" 
-                                color="primary"
-                      onClick={() => console.log("Edit", customer.email)}
-                                sx={{ 
-                                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) }
-                                }}
-                              >
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete Customer">
-                              <IconButton 
-                                size="small" 
-                                color="error"
-                      onClick={() => handleDelete(customer.email)}
-                                sx={{ 
-                                  bgcolor: alpha(theme.palette.error.main, 0.1),
-                                  '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.2) }
-                                }}
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-              ))
-            ) : (
+                  {customers.length > 0 ? (
+                    customerList
+                  ) : (
                     <TableRow>
                       <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>

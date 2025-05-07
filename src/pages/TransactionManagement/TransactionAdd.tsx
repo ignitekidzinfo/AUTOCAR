@@ -194,6 +194,7 @@ const TransactionAdd: React.FC = () => {
   const [partSuggestions, setPartSuggestions] = useState<SparePartDto[]>([]);
   const [selectedPart, setSelectedPart] = useState<SparePartDto | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
   const [gstBreakdown, setGstBreakdown] = useState<GSTBreakdown>(initialGSTBreakdown);
 
@@ -234,11 +235,27 @@ const TransactionAdd: React.FC = () => {
     }
   };
 
+  // Debounce the search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300); // 300ms delay
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [searchTerm]);
+
+  // Add effect to trigger search when debounced term changes
+  useEffect(() => {
+    if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
+      fetchPartsBySearch(debouncedSearchTerm);
+    }
+  }, [debouncedSearchTerm]);
+
   const handlePartInputChange = (event: any, value: string, reason: string) => {
     setSearchTerm(value);
-    if (value.length >= 2) {
-      fetchPartsBySearch(value);
-    } else {
+    if (value.length < 2) {
       setPartSuggestions([]);
     }
   };
@@ -263,12 +280,17 @@ const TransactionAdd: React.FC = () => {
   };
 
   const handleSelectVendor = (event: any, newValue: Vendor | null) => {
+    console.log("Vendor selected:", newValue);
     setSelectedVendor(newValue);
     setCreateData((prev) => ({
       ...prev,
       name: newValue ? newValue.name : "",
       vendorId: newValue ? newValue.vendorId : undefined,
     }));
+    console.log("Updated vendor data:", {
+      name: newValue ? newValue.name : "",
+      vendorId: newValue ? newValue.vendorId : undefined
+    });
   };
 
   const handleCreateChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -284,7 +306,9 @@ const TransactionAdd: React.FC = () => {
     setCreateData(prev => ({
       ...initialCreateData,
       name: prev.name,
-      billNo: prev.billNo
+      billNo: prev.billNo,
+      vendorId: prev.vendorId,
+      userId: prev.userId
     }));
     setSelectedPart(null);
     setSearchTerm("");
@@ -294,8 +318,21 @@ const TransactionAdd: React.FC = () => {
   const calculateGSTValues = (price: number, quantity: number, gstPercentage: number) => {
     const taxableAmount = price * quantity;
     const gstAmount = (taxableAmount * gstPercentage) / 100;
+    
+    // Explicitly calculate CGST and SGST as half of total GST
     const cgst = gstPercentage > 0 ? gstAmount / 2 : 0;
     const sgst = gstPercentage > 0 ? gstAmount / 2 : 0;
+    
+    console.log("GST Calculation:", {
+      price,
+      quantity, 
+      taxableAmount,
+      gstPercentage,
+      gstAmount,
+      cgst,
+      sgst,
+      totalAmount: taxableAmount + gstAmount
+    });
     
     return {
       taxableAmount,
@@ -369,9 +406,23 @@ const TransactionAdd: React.FC = () => {
   const handleCreateSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      if (!createData.vendorId) {
+      console.log("Submit data check - vendor:", { 
+        vendorId: createData.vendorId, 
+        name: createData.name,
+        selectedVendor 
+      });
+      
+      if (!createData.vendorId || !selectedVendor) {
         setFeedback({
-          message: "Please select a vendor",
+          message: "Please select a vendor from the dropdown list",
+          severity: "error"
+        });
+        return;
+      }
+      
+      if (!createData.partNumber) {
+        setFeedback({
+          message: "Please select a spare part",
           severity: "error"
         });
         return;
@@ -383,10 +434,17 @@ const TransactionAdd: React.FC = () => {
         partName: createData.partName,
         partNumber: createData.partNumber,
         description: createData.description,
-        vendorId: createData.vendorId
+        vendorId: createData.vendorId,
+        totalsgst: createData.gstPercentage || 0
       };
       
       console.log("Submitting transaction with vendor ID:", dataToSubmit.vendorId);
+      console.log("GST details:", {
+        gstPercentage: dataToSubmit.gstPercentage,
+        cgst: dataToSubmit.cgst,
+        sgst: dataToSubmit.sgst,
+        totalsgst: dataToSubmit.totalsgst
+      });
       const response = await apiClient.post("/sparePartTransactions/add", dataToSubmit);
       
       const recentTransaction: RecentTransaction = {
@@ -457,6 +515,7 @@ const TransactionAdd: React.FC = () => {
               getOptionLabel={(option) => option.name}
               onChange={handleSelectVendor}
               value={selectedVendor}
+              isOptionEqualToValue={(option, value) => option.vendorId === value.vendorId}
               renderInput={(params) => <TextField {...params} label="Vendor Name" />}
             />
           </FormGrid>

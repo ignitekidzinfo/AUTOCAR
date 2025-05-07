@@ -1,19 +1,26 @@
-import { DataGrid } from '@mui/x-data-grid';
+import { DataGrid, DataGridProps } from '@mui/x-data-grid';
 import { GridColDef, GridRowsProp } from '@mui/x-data-grid';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 
-interface CustomizedDataGridProps {
+interface CustomizedDataGridProps extends Partial<DataGridProps> {
   columns: GridColDef[]; 
   rows: GridRowsProp; 
   checkboxSelection?: boolean;
   autoHeight?: boolean;
+  disableVirtualization?: boolean;
+  disableRowSelectionOnClick?: boolean;
+  keepNonExistentRowsSelected?: boolean;
 }
 
-export default function CustomizedDataGrid({
+const CustomizedDataGrid = memo(function CustomizedDataGrid({
   columns,
   rows,
   checkboxSelection = true,
   autoHeight = false,
+  disableVirtualization = false,
+  disableRowSelectionOnClick = false,
+  keepNonExistentRowsSelected = false,
+  ...rest
 }: CustomizedDataGridProps) {
   const [localRows, setLocalRows] = useState<GridRowsProp>(rows);
   
@@ -37,6 +44,9 @@ export default function CustomizedDataGrid({
       pageSizeOptions={[10, 20, 50]}
       disableColumnResize
       density="compact"
+      disableVirtualization={disableVirtualization}
+      disableRowSelectionOnClick={disableRowSelectionOnClick}
+      keepNonExistentRowsSelected={keepNonExistentRowsSelected}
       slotProps={{
         filterPanel: {
           filterFormProps: {
@@ -63,6 +73,9 @@ export default function CustomizedDataGrid({
           },
         },
       }}
+      {...rest}
     />
   );
-}
+});
+
+export default CustomizedDataGrid;

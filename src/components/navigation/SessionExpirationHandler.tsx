@@ -103,16 +103,16 @@ const SessionExpirationHandler: React.FC<SessionExpirationHandlerProps> = ({
   const checkExpiration = () => {
     const expTime = getTimeUntilExpiration();
     
-    // Only perform immediate logout if token is actually expired
-    // Not if it's just missing (which might happen on refresh)
-    if (expTime !== null && expTime <= 0) {
-      performSecureLogout();
+    // Skip the check entirely if we can't determine the expiration time
+    // This prevents problems during initial login when the token might not be fully stored yet
+    if (expTime === null) {
       return;
     }
     
-    if (expTime === null) {
-      // Token missing or invalid, but don't immediately logout
-      // This prevents immediate logout on page refresh
+    // Only perform immediate logout if token is actually significantly expired
+    // (more than 1 minute past expiration)
+    if (expTime <= -60000) {
+      performSecureLogout();
       return;
     }
     
@@ -142,19 +142,22 @@ const SessionExpirationHandler: React.FC<SessionExpirationHandlerProps> = ({
         setWarningOpen(false);
         setCriticalOpen(true);
       }, expTime - criticalTime);
-    } else {
-      // Already in critical time
+    } else if (expTime > 0) {
+      // Only show critical warning if there's still time left
       setCriticalOpen(true);
     }
   };
     
   // Set up event listeners and timers
   useEffect(() => {
-    // Initial check
-    checkExpiration();
+    // Delay the initial check by 2 seconds to avoid race conditions during login
+    const initialCheckTimer = setTimeout(() => {
+      checkExpiration();
+    }, 2000);
     
-    // Set up interval to check every 5 minutes instead of every minute
-    intervalRef.current = setInterval(checkExpiration, 5 * 60 * 1000);
+    // Set up interval to check every 10 minutes instead of every 5 minutes
+    // This reduces the frequency of checks that could cause logout issues
+    intervalRef.current = setInterval(checkExpiration, 10 * 60 * 1000);
     
     // Set up user activity listeners
     const activityEvents = ['mousedown', 'keypress', 'scroll', 'touchstart'];
@@ -174,6 +177,7 @@ const SessionExpirationHandler: React.FC<SessionExpirationHandlerProps> = ({
     
     // Cleanup function
     return () => {
+      clearTimeout(initialCheckTimer);
       clearAllTimers();
       
       // Remove event listeners

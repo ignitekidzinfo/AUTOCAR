@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -46,6 +46,16 @@ import {
 } from '@mui/icons-material';
 import apiClient from 'Services/apiService';
 
+// Cache configuration
+const CACHE_KEY = 'notes_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// In-memory cache to avoid localStorage overhead
+let notesCache = {
+  data: null as ManageNoteDto[] | null,
+  timestamp: 0
+};
+
 interface ManageNoteDto {
   manageNoteId?: number;
   selectNoteOn: string;
@@ -58,36 +68,58 @@ interface ApiResponse {
   data?: any;
 }
 
-// Get icon based on note type
-const getNoteTypeIcon = (type: string) => {
+// Get icon based on note type - memoized with a simple cache
+const noteTypeIconCache: Record<string, React.ReactElement> = {};
+const getNoteTypeIcon = (type: string): React.ReactElement => {
+  if (noteTypeIconCache[type]) return noteTypeIconCache[type];
+  
+  let icon: React.ReactElement;
   switch (type) {
     case 'Quotation':
-      return <FileCopyIcon fontSize="small" />;
+      icon = <FileCopyIcon fontSize="small" />;
+      break;
     case 'Job Card':
-      return <AssignmentIcon fontSize="small" />;
+      icon = <AssignmentIcon fontSize="small" />;
+      break;
     case 'Sale Invoice':
-      return <DescriptionIcon fontSize="small" />;
+      icon = <DescriptionIcon fontSize="small" />;
+      break;
     case 'Counter Sale':
-      return <LocalOfferIcon fontSize="small" />;
+      icon = <LocalOfferIcon fontSize="small" />;
+      break;
     default:
-      return <LocalOfferIcon fontSize="small" />;
+      icon = <LocalOfferIcon fontSize="small" />;
   }
+  
+  noteTypeIconCache[type] = icon;
+  return icon;
 };
 
-// Get color based on note type
+// Get color based on note type - memoized with a simple cache
+const noteTypeColorCache: Record<string, 'primary' | 'secondary' | 'success' | 'info'> = {};
 const getNoteTypeColor = (type: string): 'primary' | 'secondary' | 'success' | 'info' => {
+  if (noteTypeColorCache[type]) return noteTypeColorCache[type];
+  
+  let color: 'primary' | 'secondary' | 'success' | 'info';
   switch (type) {
     case 'Quotation':
-      return 'primary';
+      color = 'primary';
+      break;
     case 'Job Card':
-      return 'secondary';
+      color = 'secondary';
+      break;
     case 'Sale Invoice':
-      return 'success';
+      color = 'success';
+      break;
     case 'Counter Sale':
-      return 'info';
+      color = 'info';
+      break;
     default:
-      return 'info';
+      color = 'info';
   }
+  
+  noteTypeColorCache[type] = color;
+  return color;
 };
 
 const NotesList: React.FC = () => {
@@ -95,7 +127,8 @@ const NotesList: React.FC = () => {
   const [notes, setNotes] = useState<ManageNoteDto[]>([]);
   const [filteredNotes, setFilteredNotes] = useState<ManageNoteDto[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [openViewDialog, setOpenViewDialog] = useState<boolean>(false);
   const [currentNote, setCurrentNote] = useState<ManageNoteDto>({ selectNoteOn: '', writeNote: '' });
@@ -104,81 +137,150 @@ const NotesList: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
 
-  // Fetch notes from API
-  const fetchNotes = async () => {
-    setLoading(true);
+  // Prefetch cache data immediately on component mount
+  useEffect(() => {
+    const prefetchFromCache = () => {
+      try {
+        // Check memory cache first (fastest)
+        if (notesCache.data && Date.now() - notesCache.timestamp < CACHE_DURATION) {
+          setNotes(notesCache.data);
+          setFilteredNotes(notesCache.data);
+          setInitialLoading(false);
+          return true;
+        }
+        
+        // Try localStorage next
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        if (cachedData) {
+          const { data, timestamp } = JSON.parse(cachedData);
+          if (Date.now() - timestamp < CACHE_DURATION) {
+            setNotes(data);
+            setFilteredNotes(data);
+            
+            // Update memory cache too
+            notesCache = { data, timestamp };
+            
+            setInitialLoading(false);
+            return true;
+          }
+        }
+        
+        return false;
+      } catch (error) {
+        console.error("Cache error:", error);
+        return false;
+      }
+    };
+    
+    // If we couldn't use cache, we'll fetch fresh data
+    if (!prefetchFromCache()) {
+      fetchNotes(true);
+    } else {
+      // If we used cache, still fetch updated data in the background
+      fetchNotes(false);
+    }
+  }, []);
+
+  // Memoized fetch function to avoid recreating on renders
+  const fetchNotes = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setInitialLoading(true);
+    }
     setError(null);
+    
     try {
       const timestamp = new Date().getTime();
       const response = await apiClient.get(`/manageNotes/all?_t=${timestamp}`) as any;
       const payload = response.data;
-
+      
+      let notesData: ManageNoteDto[] = [];
       if (Array.isArray(payload)) {
-        setNotes(payload);
-        setFilteredNotes(payload);
+        notesData = payload;
       } else if (payload?.data && Array.isArray(payload.data)) {
-        setNotes(payload.data);
-        setFilteredNotes(payload.data);
+        notesData = payload.data;
       } else {
         throw new Error('Unexpected data format from server');
       }
+      
+      // Update state
+      setNotes(notesData);
+      
+      // Apply filter if search is active
+      if (searchQuery.trim()) {
+        const filtered = filterNotes(notesData, searchQuery);
+        setFilteredNotes(filtered);
+      } else {
+        setFilteredNotes(notesData);
+      }
+      
+      // Cache the data
+      notesCache = {
+        data: notesData,
+        timestamp: Date.now()
+      };
+      
+      // Also cache in localStorage for persistence
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        data: notesData,
+        timestamp: Date.now()
+      }));
+      
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Error fetching notes');
-      setNotes([]);
-      setFilteredNotes([]);
+      
+      // Don't clear notes if we already have cached data
+      if (notes.length === 0) {
+        setNotes([]);
+        setFilteredNotes([]);
+      }
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
-  };
+  }, [searchQuery]);
 
-  // Initial load
-  useEffect(() => {
-    fetchNotes();
+  // Memoized filter function
+  const filterNotes = useCallback((notesData: ManageNoteDto[], query: string) => {
+    if (!query.trim()) return notesData;
+    
+    const queryLowerCase = query.toLowerCase().trim();
+    return notesData.filter(note => 
+      note.writeNote.toLowerCase().includes(queryLowerCase) || 
+      note.selectNoteOn.toLowerCase().includes(queryLowerCase) ||
+      (note.manageNoteId?.toString().includes(queryLowerCase))
+    );
   }, []);
 
-  // Filter notes based on search query
+  // Filter notes when search query changes
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredNotes(notes);
-      return;
-    }
+    setFilteredNotes(filterNotes(notes, searchQuery));
+  }, [filterNotes, notes, searchQuery]);
 
-    const query = searchQuery.toLowerCase().trim();
-    const filtered = notes.filter(note => 
-      note.writeNote.toLowerCase().includes(query) || 
-      note.selectNoteOn.toLowerCase().includes(query) ||
-      (note.manageNoteId?.toString().includes(query))
-    );
-    
-    setFilteredNotes(filtered);
-  }, [searchQuery, notes]);
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
-  };
+  }, []);
 
-  const handleAddNote = () => {
+  const handleAddNote = useCallback(() => {
     setCurrentNote({ selectNoteOn: '', writeNote: '' });
     setOpenDialog(true);
-  };
+  }, []);
 
-  const handleEditNote = (note: ManageNoteDto) => {
+  const handleEditNote = useCallback((note: ManageNoteDto) => {
     setCurrentNote({ ...note });
     setOpenDialog(true);
-  };
+  }, []);
 
-  const handleViewNote = (note: ManageNoteDto) => {
+  const handleViewNote = useCallback((note: ManageNoteDto) => {
     setViewNote(note);
     setOpenViewDialog(true);
-  };
+  }, []);
 
-  const handleCloseViewDialog = () => {
+  const handleCloseViewDialog = useCallback(() => {
     setOpenViewDialog(false);
     setViewNote(null);
-  };
+  }, []);
 
-  const handleDeleteNote = async (id?: number, event?: React.MouseEvent) => {
+  const handleDeleteNote = useCallback(async (id?: number, event?: React.MouseEvent) => {
     if (event) {
       event.stopPropagation(); // Prevent card click when clicking delete
     }
@@ -194,7 +296,19 @@ const NotesList: React.FC = () => {
 
       if (success) {
         // Optimistic UI update - immediately remove the note from the list
-        setNotes(prev => prev.filter(note => note.manageNoteId !== id));
+        const updatedNotes = notes.filter(note => note.manageNoteId !== id);
+        setNotes(updatedNotes);
+        setFilteredNotes(filterNotes(updatedNotes, searchQuery));
+        
+        // Update cache
+        notesCache = {
+          data: updatedNotes,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data: updatedNotes,
+          timestamp: Date.now()
+        }));
         
         setSuccessMessage('Note deleted successfully');
         setOpenSnackbar(true);
@@ -205,14 +319,13 @@ const NotesList: React.FC = () => {
       console.error(err);
       setError(err.message || 'Error deleting note');
       setOpenSnackbar(true);
-      // Refresh to ensure UI and server are in sync after error
-      fetchNotes();
+      fetchNotes(false); // Quietly refresh in the background
     } finally {
       setLoading(false);
     }
-  };
+  }, [notes, filterNotes, searchQuery, fetchNotes]);
 
-  const handleSaveNote = async () => {
+  const handleSaveNote = useCallback(async () => {
     if (!currentNote.writeNote || !currentNote.selectNoteOn) {
       setError('Please fill all required fields');
       setOpenSnackbar(true);
@@ -222,12 +335,13 @@ const NotesList: React.FC = () => {
     setLoading(true);
     setError(null);
     
-    // 1. First close the dialog to ensure it disappears immediately
+    // Close the dialog to ensure it disappears immediately
     setOpenDialog(false);
     
     try {
       const timestamp = new Date().getTime();
       let response: any;
+      let updatedNotes: ManageNoteDto[];
 
       if (currentNote.manageNoteId) {
         // Update existing note
@@ -238,12 +352,22 @@ const NotesList: React.FC = () => {
         
         if (response.data?.success) {
           // Immediately update the UI with the edited note
-          setNotes(prev => 
-            prev.map(note => note.manageNoteId === currentNote.manageNoteId 
-              ? {...currentNote} 
-              : note
-            )
+          updatedNotes = notes.map(note => 
+            note.manageNoteId === currentNote.manageNoteId ? {...currentNote} : note
           );
+          setNotes(updatedNotes);
+          setFilteredNotes(filterNotes(updatedNotes, searchQuery));
+          
+          // Update cache
+          notesCache = {
+            data: updatedNotes,
+            timestamp: Date.now()
+          };
+          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            data: updatedNotes,
+            timestamp: Date.now()
+          }));
+          
           setSuccessMessage('Note updated successfully');
         } else {
           throw new Error(response.data?.message || 'Update failed');
@@ -262,11 +386,23 @@ const NotesList: React.FC = () => {
           if (newNoteId) {
             // Add the new note to the state
             const newNote = {...currentNote, manageNoteId: newNoteId};
-            setNotes(prev => [...prev, newNote]);
+            updatedNotes = [...notes, newNote];
+            setNotes(updatedNotes);
+            setFilteredNotes(filterNotes(updatedNotes, searchQuery));
+            
+            // Update cache
+            notesCache = {
+              data: updatedNotes,
+              timestamp: Date.now()
+            };
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
+              data: updatedNotes,
+              timestamp: Date.now()
+            }));
+            
             setSuccessMessage('Note created successfully');
           } else {
-            // Fallback if we don't get the ID back
-            await fetchNotes();
+            fetchNotes(false); // Quietly refresh in the background
             setSuccessMessage('Note created successfully');
           }
         } else {
@@ -279,40 +415,154 @@ const NotesList: React.FC = () => {
       console.error(err);
       setError(err.message || 'Error saving note');
       setOpenSnackbar(true);
-      // Refresh in case of error
-      fetchNotes();
+      fetchNotes(false); // Quietly refresh in the background
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentNote, notes, filterNotes, searchQuery, fetchNotes]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setCurrentNote(prev => ({ ...prev, [name]: value }));
-  };
+  }, []);
 
-  const handleSelectChange = (e: SelectChangeEvent) => {
+  const handleSelectChange = useCallback((e: SelectChangeEvent) => {
     const { name, value } = e.target;
     setCurrentNote(prev => ({ ...prev, [name]: value }));
-  };
+  }, []);
 
-  const handleCloseSnackbar = () => {
+  const handleCloseSnackbar = useCallback(() => {
     setOpenSnackbar(false);
     setError(null);
     setSuccessMessage(null);
-  };
+  }, []);
 
-  const handleCloseDialog = () => {
+  const handleCloseDialog = useCallback(() => {
     setOpenDialog(false);
-  };
+  }, []);
 
-  const handleEditFromView = () => {
+  const handleEditFromView = useCallback(() => {
     if (viewNote) {
       setCurrentNote({ ...viewNote });
       setOpenViewDialog(false);
       setOpenDialog(true);
     }
-  };
+  }, [viewNote]);
+
+  // Memoized empty state component
+  const EmptyState = useMemo(() => (
+    <Paper sx={{ p: 5, textAlign: 'center', borderRadius: 2, bgcolor: theme.palette.grey[50] }}>
+      <NotesIcon sx={{ fontSize: 60, color: theme.palette.grey[400], mb: 2 }} />
+      <Typography variant="h6" color="textSecondary">
+        {searchQuery ? "No notes match your search criteria." : "No notes yet. Click \"Add Note\" to create."}
+      </Typography>
+    </Paper>
+  ), [searchQuery, theme.palette.grey]);
+
+  // Memoize note cards to avoid re-rendering all cards when only one changes
+  const renderNoteCards = useMemo(() => {
+    return filteredNotes.map(note => (
+      <Grid item xs={12} sm={6} md={4} key={`note-${note.manageNoteId}`}>
+        <Card 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100%',
+            transition: 'all 0.3s ease',
+            borderRadius: 2,
+            overflow: 'hidden',
+            position: 'relative',
+            '&:hover': {
+              transform: 'translateY(-5px)',
+              boxShadow: 8
+            },
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '4px',
+              backgroundColor: (() => {
+                const colorType = getNoteTypeColor(note.selectNoteOn);
+                return theme.palette[colorType].main;
+              })()
+            }
+          }} 
+          elevation={3}
+        >
+          <CardActionArea 
+            onClick={() => handleViewNote(note)}
+            sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch', height: '100%' }}
+          >
+            <CardContent sx={{ flexGrow: 1, pb: 1, pt: 3 }}>
+              <Chip
+                icon={getNoteTypeIcon(note.selectNoteOn)}
+                label={note.selectNoteOn}
+                size="small"
+                color={getNoteTypeColor(note.selectNoteOn)}
+                sx={{ mb: 2, fontWeight: 'medium' }}
+              />
+              <Typography 
+                variant="body1" 
+                sx={{ 
+                  fontWeight: 'bold',
+                  mb: 2,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  lineHeight: '1.5em',
+                  maxHeight: '4.5em' // 3 lines x 1.5em
+                }}
+              >
+                {note.writeNote}
+              </Typography>
+              {note.manageNoteId && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                  ID: {note.manageNoteId}
+                </Typography>
+              )}
+            </CardContent>
+          </CardActionArea>
+          <Divider />
+          <CardActions sx={{ p: 1, justifyContent: 'space-between', bgcolor: theme.palette.grey[50] }}>
+            <Box>
+              <Tooltip title="Edit">
+                <IconButton 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditNote(note);
+                  }} 
+                  disabled={loading}
+                  size="small"
+                  color="primary"
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Delete">
+                <IconButton 
+                  color="error" 
+                  onClick={(e) => handleDeleteNote(note.manageNoteId, e)} 
+                  disabled={loading}
+                  size="small"
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <Tooltip title="Click to view full note">
+              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', pr: 1 }}>
+                Click to view
+              </Typography>
+            </Tooltip>
+          </CardActions>
+        </Card>
+      </Grid>
+    ));
+  }, [filteredNotes, theme, loading, handleViewNote, handleEditNote, handleDeleteNote]);
 
   return (
     <Container maxWidth="lg">
@@ -397,122 +647,15 @@ const NotesList: React.FC = () => {
           </Paper>
         )}
 
-        {loading && (
+        {initialLoading && (
           <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mt: 4, mb: 4 }}>
             <CircularProgress size={40} />
           </Box>
         )}
 
-        {!loading && filteredNotes.length === 0 ? (
-          <Paper sx={{ p: 5, textAlign: 'center', borderRadius: 2, bgcolor: theme.palette.grey[50] }}>
-            <NotesIcon sx={{ fontSize: 60, color: theme.palette.grey[400], mb: 2 }} />
-            <Typography variant="h6" color="textSecondary">
-              {searchQuery ? "No notes match your search criteria." : "No notes yet. Click \"Add Note\" to create."}
-            </Typography>
-          </Paper>
-        ) : (
+        {!initialLoading && filteredNotes.length === 0 ? EmptyState : (
           <Grid container spacing={3}>
-            {filteredNotes.map(note => (
-              <Grid item xs={12} sm={6} md={4} key={`note-${note.manageNoteId}`}>
-                <Card 
-                  sx={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    height: '100%',
-                    transition: 'all 0.3s ease',
-                    borderRadius: 2,
-                    overflow: 'hidden',
-                    position: 'relative',
-                    '&:hover': {
-                      transform: 'translateY(-5px)',
-                      boxShadow: 8
-                    },
-                    '&::before': {
-                      content: '""',
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '4px',
-                      backgroundColor: (() => {
-                        const colorType = getNoteTypeColor(note.selectNoteOn);
-                        return theme.palette[colorType].main;
-                      })()
-                    }
-                  }} 
-                  elevation={3}
-                >
-                  <CardActionArea 
-                    onClick={() => handleViewNote(note)}
-                    sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch', height: '100%' }}
-                  >
-                    <CardContent sx={{ flexGrow: 1, pb: 1, pt: 3 }}>
-                      <Chip
-                        icon={getNoteTypeIcon(note.selectNoteOn)}
-                        label={note.selectNoteOn}
-                        size="small"
-                        color={getNoteTypeColor(note.selectNoteOn)}
-                        sx={{ mb: 2, fontWeight: 'medium' }}
-                      />
-                      <Typography 
-                        variant="body1" 
-                        sx={{ 
-                          fontWeight: 'bold',
-                          mb: 2,
-                          display: '-webkit-box',
-                          WebkitLineClamp: 3,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          lineHeight: '1.5em',
-                          maxHeight: '4.5em' // 3 lines x 1.5em
-                        }}
-                      >
-                        {note.writeNote}
-                      </Typography>
-                      {note.manageNoteId && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                          ID: {note.manageNoteId}
-                        </Typography>
-                      )}
-                    </CardContent>
-                  </CardActionArea>
-                  <Divider />
-                  <CardActions sx={{ p: 1, justifyContent: 'space-between', bgcolor: theme.palette.grey[50] }}>
-                    <Box>
-                      <Tooltip title="Edit">
-                        <IconButton 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditNote(note);
-                          }} 
-                          disabled={loading}
-                          size="small"
-                          color="primary"
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete">
-                        <IconButton 
-                          color="error" 
-                          onClick={(e) => handleDeleteNote(note.manageNoteId, e)} 
-                          disabled={loading}
-                          size="small"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                    <Tooltip title="Click to view full note">
-                      <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', pr: 1 }}>
-                        Click to view
-                      </Typography>
-                    </Tooltip>
-                  </CardActions>
-                </Card>
-              </Grid>
-            ))}
+            {renderNoteCards}
           </Grid>
         )}
       </Box>

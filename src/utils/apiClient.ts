@@ -194,19 +194,12 @@ apiClient.interceptors.request.use(
     logger.debug(`API Request: ${config.method?.toUpperCase()} ${config.url}`, 
       config.params ? { params: config.params } : '');
     
-    // Always check token validity before every request
-    if (window.location.pathname !== '/signIn' && !config.url?.includes('auth/login')) {
-      if (!isTokenValid()) {
-        // If token is invalid, reject the request and redirect
-        forceCheckTokenValidity();
-        return Promise.reject(new Error('Token expired'));
-      }
-    }
+    // Don't check token validity before every request as this causes logout loops
+    // Only add token if it exists
     
-    // Check if token is valid before making the request
     const token = storageUtils.getAuthToken();
     if (token) {      
-      // Token is valid, add to headers
+      // Add token to headers
       if (config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -279,22 +272,31 @@ apiClient.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       logger.warn('Received 401 Unauthorized - Token may be expired or invalid');
       
-      // Store current path for redirect after login if not on login page
-      const currentPath = window.location.pathname;
-      if (currentPath !== '/signIn') {
+      // Count 401 errors to prevent multiple redirects
+      const unauthorized401Count = parseInt(sessionStorage.getItem('unauthorized401Count') || '0');
+      sessionStorage.setItem('unauthorized401Count', (unauthorized401Count + 1).toString());
+      
+      // Only redirect after multiple 401s to prevent redirect loops
+      // Also check if we're already on the login page
+      if (unauthorized401Count > 3 && window.location.pathname !== '/signIn') {
+        // Store current path for redirect after login
+        const currentPath = window.location.pathname;
         secureStorage.setItem('redirectAfterLogin', currentPath);
+        
+        // Clear token
+        storageUtils.clearAuthData();
+        
+        // Show toast notification
+        toast.error('Your session has expired. Please sign in again.');
+        
+        // Reset 401 counter
+        sessionStorage.setItem('unauthorized401Count', '0');
+        
+        // Redirect to login after a delay
+        setTimeout(() => {
+          window.location.href = '/signIn';
+        }, 1500);
       }
-      
-      // Clear token and redirect to login
-      storageUtils.clearAuthData();
-      
-      // Show toast notification
-      toast.error('Your session has expired. Please sign in again.');
-      
-      // Small delay to allow toast to be seen before redirect
-      setTimeout(() => {
-        window.location.href = '/signIn';
-      }, 1500);
     }
     
     // Log error responses (sanitized)

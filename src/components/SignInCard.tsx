@@ -120,7 +120,8 @@ export default function SignInCard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    forceCheckTokenValidity();
+    // Don't force token validity check on the login page
+    // This prevents potential redirect loops
   }, []);
 
   useEffect(() => {
@@ -179,20 +180,41 @@ export default function SignInCard() {
           return;
         }
 
+        // Clear any existing auth data
         storageUtils.clearAuthData(); 
         
-        secureStorage.setItem("token", response);
-        secureStorage.setItem("userData", decodedToken);
+        // Reset 401 counter on successful login
+        sessionStorage.setItem('unauthorized401Count', '0');
         
-        const redirectPath = secureStorage.getItem("redirectAfterLogin");
-        if (redirectPath) {
-          secureStorage.removeItem("redirectAfterLogin");
-          navigate(redirectPath);
-          toast.success("Welcome back! Your session has been restored.");
-        } else {
-          navigate("/");
-          toast.success("Signed in successfully!");
+        // Store new token and user data using Promise.all to handle both async operations
+        await Promise.all([
+          secureStorage.setItem("token", response),
+          secureStorage.setItem("userData", decodedToken)
+        ]);
+        
+        // Verify token is stored correctly
+        const storedToken = storageUtils.getAuthToken();
+        if (!storedToken) {
+          logger.warn("Token storage verification failed - trying again");
+          // Try one more time with a small delay
+          await new Promise(resolve => setTimeout(resolve, 300));
+          await secureStorage.setItem("token", response);
         }
+        
+        // Success message
+        toast.success("Signed in successfully!");
+        
+        // Add a longer delay to ensure token is properly stored before redirecting
+        setTimeout(() => {
+          const redirectPath = secureStorage.getItem("redirectAfterLogin");
+          if (redirectPath) {
+            secureStorage.removeItem("redirectAfterLogin");
+            navigate(redirectPath);
+            toast.success("Welcome back! Your session has been restored.");
+          } else {
+            navigate("/");
+          }
+        }, 1000);
       } catch (decodeError) {
         logger.error("Failed to decode token:", decodeError);
         toast.error("Invalid authentication token received from server");

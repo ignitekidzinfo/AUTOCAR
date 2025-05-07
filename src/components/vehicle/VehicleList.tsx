@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Grid from '@mui/material/Grid';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -23,6 +23,7 @@ import {
   Card,
   CardContent,
   useTheme,
+  Alert,
 } from '@mui/material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { GridCellParams, GridRowsProp, GridColDef } from '@mui/x-data-grid';
@@ -43,12 +44,23 @@ import ReactDatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import PreviewIcon from '@mui/icons-material/Preview';
 import { Print, FilterListOutlined, Add as AddIcon } from '@mui/icons-material';
-import ReceiptIcon from '@mui/icons-material/Receipt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { filter } from 'types/SparePart';
-import { Theme } from '@mui/material/styles';
-import apiClient from 'Services/apiService';
+import apiClient from 'utils/apiClient';
+
+// Constants for improved performance
+const PAGE_SIZE = 25;
+const DEBOUNCE_DELAY = 300;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 3000;
+const SCROLL_THRESHOLD = 200;
+const ERROR_DISPLAY_DURATION = 5000;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minute cache
+const MEMORY_CACHE_SIZE = 50; // Maximum number of items in memory cache
+
+// In-memory cache for ultra-fast access
+const memoryCache: Map<string, {data: any, timestamp: number}> = new Map();
 
 interface Vehicle {
   vehicleRegId: string;
@@ -65,14 +77,188 @@ interface Vehicle {
   hasInvoice?: boolean;
 }
 
-export async function checkInvoiceStatus(vehicleRegId: string): Promise<boolean> {
+interface PaginatedResponse {
+  content: Vehicle[];
+  totalPages: number;
+  totalElements: number;
+  currentPage: number;
+}
+
+// Check if data is cached and fresh
+function getCachedData<T>(key: string): T | null {
   try {
-    console.log(`Checking invoice status for vehicle ${vehicleRegId}...`);
-    const response = await apiClient.get(`/api/vehicle-invoices/search/vehicle-reg/${vehicleRegId}`);
-    console.log(`Invoice response for vehicle ${vehicleRegId}:`, response.data);
+    // First check memory cache for the fastest performance
+    const memoryCached = memoryCache.get(key);
+    if (memoryCached && Date.now() - memoryCached.timestamp < CACHE_TTL) {
+      return memoryCached.data as T;
+    }
+    
+    // Then check localStorage
+    const cached = localStorage.getItem(key);
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (data.timestamp && Date.now() - data.timestamp < CACHE_TTL) {
+        // Update memory cache for next time
+        if (memoryCache.size >= MEMORY_CACHE_SIZE) {
+          // Remove oldest item if cache is full
+          const oldestKey = memoryCache.keys().next().value;
+          if (oldestKey !== undefined) {
+            memoryCache.delete(oldestKey);
+          }
+        }
+        memoryCache.set(key, {data, timestamp: Date.now()});
+        return data as T;
+      }
+    }
+  } catch (e) {
+    console.error('Error reading cache:', e);
+    // Cleanup corrupted data
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Ignore any errors during cleanup
+    }
+  }
+  return null;
+}
+
+// Save data to both caches
+function saveToCache<T>(key: string, data: T): void {
+  try {
+    // Save to localStorage first (which could fail if data is too large)
+    localStorage.setItem(key, JSON.stringify({
+      ...data,
+      timestamp: Date.now()
+    }));
+    
+    // Then update memory cache
+    if (memoryCache.size >= MEMORY_CACHE_SIZE) {
+      // Remove oldest item if cache is full
+      const oldestKey = memoryCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        memoryCache.delete(oldestKey);
+      }
+    }
+    memoryCache.set(key, {data, timestamp: Date.now()});
+  } catch (e) {
+    console.error('Error saving to cache:', e);
+    // Try to save a smaller version if data is too large
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      try {
+        // For vehicle data, we can trim unnecessary fields
+        if (typeof data === 'object' && data !== null && 'vehicles' in data) {
+          const trimmedData = {
+            ...data,
+            vehicles: (data as any).vehicles.map((v: Vehicle) => ({
+              vehicleRegId: v.vehicleRegId,
+              vehicleNumber: v.vehicleNumber,
+              customerName: v.customerName,
+              customerMobileNumber: v.customerMobileNumber,
+              status: v.status,
+              date: v.date
+            }))
+          };
+          localStorage.setItem(key, JSON.stringify({
+            ...trimmedData,
+            timestamp: Date.now()
+          }));
+        }
+      } catch {
+        // Ignore any errors during retry
+      }
+    }
+  }
+}
+
+// Optimized batch check function - only checks what's absolutely necessary
+export async function batchCheckInvoiceStatus(vehicleIds: string[]): Promise<Record<string, boolean>> {
+  if (!vehicleIds.length) return {};
+  
+  // If there's already a check in progress, return empty
+  if ((window as any).__batchCheckInProgress) return {};
+  
+  // Initialize cached results
+  const cachedResults: Record<string, boolean> = {};
+  let uncheckedIds: string[] = [];
+  
+  // First check localStorage for cached results
+  vehicleIds.forEach(id => {
+    const cacheKey = `invoice_${id}`;
+    const cached = localStorage.getItem(cacheKey);
+    
+    if (cached !== null) {
+      cachedResults[id] = cached === 'true';
+    } else {
+      uncheckedIds.push(id);
+    }
+  });
+  
+  // Return immediately if all results are cached
+  if (!uncheckedIds.length) return cachedResults;
+  
+  // Limit to first 3 IDs to make faster and avoid errors
+  uncheckedIds = uncheckedIds.slice(0, 3);
+  
+  // Set in-progress flag and record time
+  (window as any).__batchCheckInProgress = true;
+  
+  try {
+    // Check each ID individually to avoid batch API issues
+    for (const id of uncheckedIds) {
+      try {
+        // Use proper endpoint for single invoice check
+        const response = await apiClient.get(`/api/vehicle-invoices/search/vehicle-reg/${id}`, {
+          timeout: 2000
+        });
+        
+        // Process the result
+        const hasInvoice = Array.isArray(response.data) && response.data.length > 0;
+        cachedResults[id] = hasInvoice;
+        
+        // Cache the result
+        localStorage.setItem(`invoice_${id}`, String(hasInvoice));
+        
+        // Add a small delay between requests to prevent rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.warn(`Invoice check failed for ID ${id}:`, error);
+        // Set default to false on error
+        cachedResults[id] = false;
+        localStorage.setItem(`invoice_${id}`, 'false');
+      }
+    }
+  } catch (error) {
+    console.warn('Invoice checks failed:', error);
+  } finally {
+    // Reset flag after a delay to prevent immediate re-requests
+    setTimeout(() => {
+      (window as any).__batchCheckInProgress = false;
+    }, 1000);
+  }
+  
+  return cachedResults;
+}
+
+// Legacy function for backward compatibility - now with caching and timeout
+export async function checkInvoiceStatus(vehicleRegId: string): Promise<boolean> {
+  // In-memory cache to avoid repeated calls
+  const cacheKey = `invoice_${vehicleRegId}`;
+  
+  // Check sessionStorage cache first
+  const cached = sessionStorage.getItem(cacheKey);
+  if (cached !== null) {
+    return cached === 'true';
+  }
+  
+  try {
+    const response = await apiClient.get(`/api/vehicle-invoices/search/vehicle-reg/${vehicleRegId}`, {
+      timeout: 2000 // Short timeout to prevent blocking UI
+    });
 
     const hasInvoice = Array.isArray(response.data) && response.data.length > 0;
-    console.log(`Vehicle ${vehicleRegId} has invoice:`, hasInvoice);
+    
+    // Cache the result in sessionStorage
+    sessionStorage.setItem(cacheKey, hasInvoice.toString());
     
     return hasInvoice;
   } catch (error) {
@@ -87,6 +273,7 @@ export default function VehicleList() {
   const listType = searchParams.get("listType");
   const theme = useTheme();
 
+  // Core state
   const [rows, setRows] = React.useState<GridRowsProp>([]);
   const [open, setOpen] = React.useState<boolean>(false);
   const [selectedId, setSelectedId] = React.useState<string>("");
@@ -94,95 +281,325 @@ export default function VehicleList() {
   const [selectedType, setSelectedType] = React.useState<string>("");
   const [textInput, setTextInput] = React.useState<string>("");
   const [loading, setLoading] = React.useState<boolean>(false);
+  const [initialLoad, setInitialLoad] = useState<boolean>(true);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState<boolean>(false);
-
-  // New local search state for filtering the data grid rows
   const [localSearchTerm, setLocalSearchTerm] = useState<string>("");
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [totalElements, setTotalElements] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(0);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [invoiceStatusCache, setInvoiceStatusCache] = useState<Record<string, boolean>>({});
 
-  const handleDelete = (id: string) => {
-    setSelectedId(id);
-    setOpen(true);
-  };
-
-  // Renders the action buttons in the last column
-  function renderActionButtons(params: GridCellParams) {
+  // Refs
+  const loadingRef = useRef<boolean>(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const lastElementRef = useRef<HTMLDivElement | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Optimized function to process vehicle data for display
+  const processVehicleData = useCallback((vehicles: Vehicle[], append = false) => {
+    if (!vehicles.length) return [];
+    
+    // Skip invoice status checks on initial load for speed
+    return vehicles.map((vehicle: Vehicle, index: number) => ({
+      id: append ? rows.length + index + 1 : index + 1,
+      date: vehicle.date ?? '',
+      vehicleNoName: vehicle.vehicleNumber ?? '',
+      customerMobile: vehicle.customerName 
+        ? `${vehicle.customerName} - ${vehicle.customerMobileNumber ?? ''}`
+        : '',
+      status: vehicle.status ?? '',
+      advance: vehicle.advancePayment ?? 0,
+      superwiser: vehicle.superwiser ?? '',
+      technician: vehicle.technician ?? '',
+      worker: vehicle.worker ?? '',
+      kilometer: vehicle.kmsDriven ?? 0,
+      vehicleRegId: vehicle.vehicleRegId,
+      hasInvoice: false // Set initially to false, update later async
+    }));
+  }, [rows.length]);
+  
+  // Separate function to update invoice status asynchronously
+  const updateInvoiceStatus = useCallback(async (vehicleIds: string[]) => {
+    if (!vehicleIds.length) return;
+    
+    // Only update if not already updating
+    if ((window as any).__updateInProgress) return;
+    
+    // Debounce and limit to visible vehicles
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        (window as any).__updateInProgress = true;
+        
+        // Only check first 3 visible vehicles to avoid performance impact
+        const visibleIds = vehicleIds.slice(0, 3);
+        if (!visibleIds.length) return;
+        
+        const statuses = await batchCheckInvoiceStatus(visibleIds);
+        if (!Object.keys(statuses).length) return;
+        
+        // Update cache and state efficiently
+        setInvoiceStatusCache(prev => ({...prev, ...statuses}));
+        
+        setRows(currentRows => {
+          const hasChanges = currentRows.some(row => 
+            row.vehicleRegId && statuses[row.vehicleRegId] !== undefined && 
+            row.hasInvoice !== statuses[row.vehicleRegId]
+          );
+          
+          if (!hasChanges) return currentRows;
+          
+          return currentRows.map(row => {
+            if (row.vehicleRegId && statuses[row.vehicleRegId] !== undefined) {
+              return {...row, hasInvoice: statuses[row.vehicleRegId]};
+            }
+            return row;
+          });
+        });
+      } finally {
+        (window as any).__updateInProgress = false;
+      }
+    }, DEBOUNCE_DELAY * 2);
+  }, []);
+  
+  // Fast fetch function - prioritizes speed over completeness
+  const fetchVehicles = useCallback(async (pageNumber: number, append = false) => {
+    if (loadingRef.current) return;
+    
+    if (totalPages > 0 && pageNumber >= totalPages) {
+      setHasMore(false);
+      return;
+    }
+    
+    // Set loading state
+    setLoading(true);
+    loadingRef.current = true;
+    
+    try {
+      // Check cache first for fast loading
+      const cacheKey = `vehicle_data_${listType || 'all'}_${pageNumber}`;
+      const cachedData = getCachedData<{
+        vehicles: Vehicle[],
+        totalElements: number,
+        totalPages: number,
+        hasMore: boolean,
+        timestamp: number
+      }>(cacheKey);
+      
+      // Disable cache for debugging - set to false in production
+      const disableCache = false;
+      
+      if (!disableCache && cachedData && cachedData.vehicles) {
+        // Use cached data immediately
+        const processedRows = processVehicleData(cachedData.vehicles, append);
+        
+        setCurrentPage(pageNumber);
+        setTotalElements(cachedData.totalElements || 0);
+        setTotalPages(cachedData.totalPages || 1);
+        setHasMore(cachedData.hasMore);
+        
+        if (append) {
+          setRows(prev => [...prev, ...processedRows]);
+        } else {
+          setRows(processedRows);
+        }
+        
+        loadingRef.current = false;
+        setLoading(false);
+        setInitialLoad(false);
+        
+        // Don't automatically check invoice status after loading cached data
+        // This prevents unnecessary API calls
+        return;
+      }
+      
+      // Fetch fresh data
+      try {
+        let data;
+        
+        if (listType) {
+          const statusFilter = listType === 'serviceQueue' 
+            ? 'waiting,inprogress' 
+            : listType === 'serviceHistory' ? 'complete' : '';
+          
+          console.log(`Fetching vehicles with status: ${statusFilter}`);
+          
+          // Use the imported service function instead of direct API call with timestamp
+          const res = await GetVehicleByStatus({ status: statusFilter });
+          data = res.data;
+          console.log('Vehicle data received:', data ? (Array.isArray(data) ? data.length : 'object') : 'none');
+        } else {
+          console.log(`Fetching all vehicles`);
+          
+          // Use the imported service function instead of direct API call with timestamp
+          const res = await VehicleListData();
+          data = res.data;
+          console.log('Vehicle data received:', data ? (Array.isArray(data) ? data.length : 'object') : 'none');
+        }
+        
+        // Process array data
+        let vehicles: Vehicle[] = [];
+        let totalCount = 0;
+        let pageCount = 0;
+        
+        if (Array.isArray(data)) {
+          totalCount = data.length;
+          pageCount = Math.ceil(totalCount / PAGE_SIZE);
+          
+          // Apply client-side pagination
+          const startIndex = pageNumber * PAGE_SIZE;
+          const endIndex = startIndex + PAGE_SIZE;
+          vehicles = data.slice(startIndex, endIndex);
+        } else if (data?.content && Array.isArray(data.content)) {
+          vehicles = data.content;
+          totalCount = data.totalElements || vehicles.length;
+          pageCount = data.totalPages || 1;
+        }
+        
+        // Calculate if there's more data
+        const hasMoreData = pageNumber < pageCount - 1;
+        
+        // Cache the data using the optimized method
+        saveToCache(cacheKey, {
+          vehicles,
+          totalElements: totalCount,
+          totalPages: pageCount,
+          hasMore: hasMoreData
+        });
+        
+        // Process and display data
+        const processedRows = processVehicleData(vehicles, append);
+        
+        setCurrentPage(pageNumber);
+        setTotalElements(totalCount);
+        setTotalPages(pageCount);
+        setHasMore(hasMoreData);
+        
+        if (append) {
+          setRows(prev => [...prev, ...processedRows]);
+        } else {
+          setRows(processedRows);
+        }
+        
+        setError(null);
+        
+        // Completely disable automatic invoice status checks
+        // Let user actions trigger checks instead
+      } catch (error: any) {
+        console.error("Error fetching data:", error);
+        setError('Failed to load data. Please try again.');
+      }
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+      setInitialLoad(false);
+    }
+  }, [listType, processVehicleData, totalPages]);
+  
+  // Initial data load
+  useEffect(() => {
+    // Start loading immediately
+    fetchVehicles(0, false);
+    
+    // Set up scrolling observer
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loadingRef.current && hasMore) {
+          fetchVehicles(currentPage + 1, true);
+        }
+      },
+      {
+        root: null,
+        rootMargin: `0px 0px ${SCROLL_THRESHOLD}px 0px`,
+        threshold: 0.1
+      }
+    );
+    
+    observerRef.current = observer;
+    
+    // Observe the last element if it exists
+    if (lastElementRef.current) {
+      observer.observe(lastElementRef.current);
+    }
+    
+    return () => {
+      observer.disconnect();
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [fetchVehicles, hasMore, currentPage]);
+  
+  // Optimized action buttons with memoization
+  const renderActionButtons = useCallback((params: GridCellParams) => {
+    if (!params.row.vehicleRegId) {
+      return <CircularProgress size={20} />;
+    }
+    
+    const vehicleId = params.row.vehicleRegId;
+    
+    const handleNavigation = (e: React.MouseEvent, path: string) => {
+      e.stopPropagation();
+      e.preventDefault();
+      navigate(path);
+    };
+    
     return (
       <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-        <Tooltip title="Edit Vehicle">
         <IconButton
           color="primary"
-            size="small"
-            sx={{ 
-              backgroundColor: alpha(theme.palette.primary.main, 0.1),
-              '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.2) }
-            }}
-          onClick={() => navigate(`/admin/vehicle/edit/${params.row.vehicleRegId}`)}
+          size="small"
+          onClick={(e) => handleNavigation(e, `/admin/vehicle/edit/${vehicleId}`)}
         >
-            <EditIcon fontSize="small" />
+          <EditIcon fontSize="small" />
         </IconButton>
-        </Tooltip>
         
-        <Tooltip title="Delete Vehicle">
         <IconButton
-            color="error"
-            size="small"
-            sx={{ 
-              backgroundColor: alpha(theme.palette.error.main, 0.1),
-              '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.2) }
-            }}
-          onClick={() => handleDelete(params.row.vehicleRegId)}
+          color="error"
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDelete(vehicleId);
+          }}
         >
-            <DeleteIcon fontSize="small" />
+          <DeleteIcon fontSize="small" />
         </IconButton>
-        </Tooltip>
         
-        <Tooltip title="Manage Service Parts">
         <IconButton
-            color="info"
-            size="small"
-            sx={{ 
-              backgroundColor: alpha(theme.palette.info.main, 0.1),
-              '&:hover': { backgroundColor: alpha(theme.palette.info.main, 0.2) }
-            }}
-            onClick={() => navigate(`/admin/vehicle/add/servicepart/${params.row.vehicleRegId}`)}
+          color="info"
+          size="small"
+          onClick={(e) => handleNavigation(e, `/admin/vehicle/add/servicepart/${vehicleId}`)}
         >
-            <BuildIcon fontSize="small" />
+          <BuildIcon fontSize="small" />
         </IconButton>
-        </Tooltip>
         
-        <Tooltip title="View Details">
         <IconButton
-            color="success"
-            size="small"
-            sx={{ 
-              backgroundColor: alpha(theme.palette.success.main, 0.1),
-              '&:hover': { backgroundColor: alpha(theme.palette.success.main, 0.2) }
-            }}
-          onClick={() => navigate(`/admin/vehicle/view/${params.row.vehicleRegId}`)}
+          color="success"
+          size="small"
+          onClick={(e) => handleNavigation(e, `/admin/vehicle/view/${vehicleId}`)}
         >
-            <PreviewIcon fontSize="small" />
+          <PreviewIcon fontSize="small" />
         </IconButton>
-        </Tooltip>
         
-        <Tooltip title="Print">
         <IconButton
           color="secondary"
-            size="small"
-            sx={{ 
-              backgroundColor: alpha(theme.palette.secondary.main, 0.1),
-              '&:hover': { backgroundColor: alpha(theme.palette.secondary.main, 0.2) }
-            }}
-          onClick={() => navigate(`/admin/vehicle/view/${params.row.vehicleRegId}`)}
+          size="small"
+          onClick={(e) => handleNavigation(e, `/admin/vehicle/view/${vehicleId}`)}
         >
-            <Print fontSize="small" />
+          <Print fontSize="small" />
         </IconButton>
-        </Tooltip>
       </Box>
     );
-  }
-
-  // Function to render the invoice status column
-  function renderInvoiceStatus(params: GridCellParams) {
+  }, [navigate]);
+  
+  // Optimized column rendering
+  const renderInvoiceStatus = useCallback((params: GridCellParams) => {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {params.row.hasInvoice ? (
@@ -190,22 +607,21 @@ export default function VehicleList() {
             icon={<CheckCircleIcon fontSize="small" />}
             color="success"
             variant="outlined"
-            sx={{ minWidth: 35 }}
+            size="small"
           />
         ) : (
           <Chip
             icon={<CancelIcon fontSize="small" />}
             color="error"
             variant="outlined"
-            sx={{ minWidth: 35 }}
+            size="small"
           />
         )}
       </Box>
     );
-  }
-
-  // Function to render status with color-coded chip
-  function renderStatus(params: GridCellParams) {
+  }, []);
+  
+  const renderStatus = useCallback((params: GridCellParams) => {
     const status = params.value as string;
     let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';
     
@@ -219,13 +635,12 @@ export default function VehicleList() {
         color={color} 
         size="small" 
         variant="outlined"
-        sx={{ minWidth: 90 }}
       />
     );
-  }
-
-  // Updated columns with proper TypeScript typing
-  const columns: GridColDef[] = [
+  }, []);
+  
+  // Memoized columns definition to avoid recreating on each render
+  const columns = React.useMemo<GridColDef[]>(() => [
     { field: 'date', headerName: 'Date', flex: 1, minWidth: 100 },
     { field: 'vehicleNoName', headerName: 'Vehicle Number/Name', flex: 1, minWidth: 150 },
     { field: 'customerMobile', headerName: 'Customer & Mobile', flex: 1, minWidth: 150 },
@@ -253,37 +668,63 @@ export default function VehicleList() {
       )
     },
     { field: 'Action', headerName: 'Actions', flex: 1, minWidth: 250, renderCell: renderActionButtons },
-  ];
-
-  // Function to check invoice status for all vehicles
-  const checkInvoiceStatusForVehicles = async (vehicles: any[]) => {
-    const updatedVehicles = [];
-    setLoading(true);
+  ], [renderStatus, renderInvoiceStatus, renderActionButtons]);
+  
+  // Client-side filtering
+  const filteredRows = React.useMemo(() => {
+    const searchTerm = localSearchTerm.toLowerCase();
+    if (!searchTerm) return rows;
     
-    for (const vehicle of vehicles) {
-      try {
-        const hasInvoice = await checkInvoiceStatus(vehicle.vehicleRegId);
-        updatedVehicles.push({
-          ...vehicle,
-          hasInvoice
-        });
-      } catch (error) {
-        console.error(`Error checking invoice for vehicle ${vehicle.vehicleRegId}:`, error);
-        updatedVehicles.push({
-          ...vehicle,
-          hasInvoice: false
-        });
-      }
+    return rows.filter((row) => (
+      (row.vehicleNoName && row.vehicleNoName.toLowerCase().includes(searchTerm)) ||
+      (row.customerMobile && row.customerMobile.toLowerCase().includes(searchTerm)) ||
+      (row.status && row.status.toLowerCase().includes(searchTerm)) ||
+      (row.superwiser && row.superwiser.toLowerCase().includes(searchTerm)) ||
+      (row.technician && row.technician.toLowerCase().includes(searchTerm)) ||
+      (row.worker && row.worker.toLowerCase().includes(searchTerm))
+    ));
+  }, [rows, localSearchTerm]);
+  
+  // Handle search functions
+  const handleLocalSearch = useCallback((term: string) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
     
-    setLoading(false);
-    return updatedVehicles;
-  };
-
-  // Search logic with invoice status check
-  const handleSearch = async () => {
+    debounceTimerRef.current = setTimeout(() => {
+      setLocalSearchTerm(term.toLowerCase());
+    }, DEBOUNCE_DELAY);
+  }, []);
+  
+  const handleDelete = useCallback((id: string) => {
+    setSelectedId(id);
+    setOpen(true);
+  }, []);
+  
+  const handleApiError = useCallback((err: any, customMessage?: string) => {
+    console.error("API Error:", err);
+    
+    let errorMessage = customMessage || 'Failed to load data. Please try again.';
+    setError(errorMessage);
+    
+    setTimeout(() => {
+      setError(null);
+    }, ERROR_DISPLAY_DURATION);
+    
+    return errorMessage;
+  }, []);
+  
+  // Optimized search function
+  const handleSearch = useCallback(async () => {
+    if (isSearching) return;
+    
+    setIsSearching(true);
+    setLoading(true);
+    setError(null);
+    
     let requestData: filter = {};
     let response;
+    
     try {
       if (selectedType === 'Vehicle ID') {
         requestData = { vehicleRegId: textInput };
@@ -302,131 +743,80 @@ export default function VehicleList() {
         response = res.data;
       }
 
-      if (listType) {
-        let statusFilter = '';
-        if (listType === 'serviceQueue') {
-          statusFilter = 'waiting,inprogress';
-        } else if (listType === 'serviceHistory') {
-          statusFilter = 'complete';
-        }
-        const res = await GetVehicleByStatus({ status: statusFilter });
-        response = res.data;
-      }
-
       if (response && Array.isArray(response)) {
-        const formattedRows = response.map((vehicle: Vehicle, index: number) => ({
-          id: index + 1,
-          date: vehicle.date ?? '',
-          vehicleNoName: vehicle.vehicleNumber ?? '',
-          customerMobile: vehicle.customerName 
-            ? `${vehicle.customerName} - ${vehicle.customerMobileNumber ?? ''}`
-            : '',
-          status: vehicle.status ?? '',
-          advance: vehicle.advancePayment ?? 0,
-          superwiser: vehicle.superwiser ?? '',
-          technician: vehicle.technician ?? '',
-          worker: vehicle.worker ?? '',
-          kilometer: vehicle.kmsDriven ?? 0,
-          vehicleRegId: vehicle.vehicleRegId,
-          hasInvoice: false, // Default value, will be updated
-        }));
-        
-        // Check invoice status for all vehicles
-        const rowsWithInvoiceStatus = await checkInvoiceStatusForVehicles(formattedRows);
-        setRows(rowsWithInvoiceStatus);
+        const processedRows = processVehicleData(response);
+        setRows(processedRows);
+        setTotalElements(processedRows.length);
+        setTotalPages(1);
       } else if (response && typeof response === 'object') {
-        const singleRow = {
-          id: 1,
-          date: response.date ?? '',
-          vehicleNoName: response.vehicleNumber ?? '',
-          customerMobile: response.customerName
-            ? `${response.customerName} - ${response.customerMobileNumber ?? ''}`
-            : '',
-          status: response.status ?? '',
-          advance: response.advancePayment ?? 0,
-          superwiser: response.superwiser ?? '',
-          technician: response.technician ?? '',
-          worker: response.worker ?? '',
-          kilometer: response.kmsDriven ?? 0,
-          vehicleRegId: response.vehicleRegId,
-          hasInvoice: false, // Default value, will be updated
-        };
+        // Handle single vehicle result
+        const singleVehicle = response as Vehicle;
         
-        // Check invoice status for single vehicle
-        const hasInvoice = await checkInvoiceStatus(response.vehicleRegId);
-        setRows([{ ...singleRow, hasInvoice }]);
+        setRows([{
+          id: 1,
+          date: singleVehicle.date ?? '',
+          vehicleNoName: singleVehicle.vehicleNumber ?? '',
+          customerMobile: singleVehicle.customerName
+            ? `${singleVehicle.customerName} - ${singleVehicle.customerMobileNumber ?? ''}`
+            : '',
+          status: singleVehicle.status ?? '',
+          advance: singleVehicle.advancePayment ?? 0,
+          superwiser: singleVehicle.superwiser ?? '',
+          technician: singleVehicle.technician ?? '',
+          worker: singleVehicle.worker ?? '',
+          kilometer: singleVehicle.kmsDriven ?? 0,
+          vehicleRegId: singleVehicle.vehicleRegId,
+          hasInvoice: false
+        }]);
+        setTotalElements(1);
+        setTotalPages(1);
+        
+        // Check invoice status in background
+        setTimeout(() => {
+          updateInvoiceStatus([singleVehicle.vehicleRegId]);
+        }, 500);
       } else {
         setRows([]);
+        setTotalElements(0);
+        setTotalPages(0);
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      handleApiError(error, 'Search could not be completed. Please try again.');
+    } finally {
+      setLoading(false);
+      setIsSearching(false);
     }
-  };
-
-  // On mount, load the list with invoice status
-  useEffect(() => {
-    const getVehicleList = async () => {
-      try {
-        setLoading(true);
-        let data;
-        
-        if (listType) {
-          let statusFilter = '';
-          if (listType === 'serviceQueue') {
-            statusFilter = 'waiting,inprogress';
-          } else if (listType === 'serviceHistory') {
-            statusFilter = 'complete';
-          }
-          const res = await GetVehicleByStatus({ status: statusFilter });
-          data = res.data;
-        } else {
-          const res = await VehicleListData();
-          data = res.data;
-        }
-        
-        if (data && Array.isArray(data)) {
-          const formattedRows = data.map((vehicle: Vehicle, index: number) => ({
-            id: index + 1,
-            date: vehicle.date ?? '',
-            vehicleNoName: vehicle.vehicleNumber ?? '',
-            customerMobile: vehicle.customerName
-              ? `${vehicle.customerName} - ${vehicle.customerMobileNumber ?? ''}`
-              : '',
-            status: vehicle.status ?? '',
-            advance: vehicle.advancePayment ?? 0,
-            superwiser: vehicle.superwiser ?? '',
-            technician: vehicle.technician ?? '',
-            worker: vehicle.worker ?? '',
-            kilometer: vehicle.kmsDriven ?? 0,
-            vehicleRegId: vehicle.vehicleRegId,
-            hasInvoice: false, // Default value, will be updated
-          }));
-          
-          // Check invoice status for all vehicles
-          const rowsWithInvoiceStatus = await checkInvoiceStatusForVehicles(formattedRows);
-          setRows(rowsWithInvoiceStatus);
-        }
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching vehicle data:', error);
-        setLoading(false);
-      }
-    };
-    getVehicleList();
-  }, [listType]);
-
-  // Client-side filtering using the local search term:
-  const filteredRows = rows.filter((row) => {
-    const search = localSearchTerm.toLowerCase();
-    return (
-      row.vehicleNoName.toLowerCase().includes(search) ||
-      row.customerMobile.toLowerCase().includes(search) ||
-      (row.status && row.status.toLowerCase().includes(search)) ||
-      (row.superwiser && row.superwiser.toLowerCase().includes(search)) ||
-      (row.technician && row.technician.toLowerCase().includes(search)) ||
-      (row.worker && row.worker.toLowerCase().includes(search))
-    );
-  });
+  }, [dateValue, handleApiError, isSearching, processVehicleData, selectedType, textInput, updateInvoiceStatus]);
+  
+  // Loading skeleton for better UX
+  const SkeletonLoading = useCallback(() => (
+    <Box sx={{ p: 2 }}>
+      {[...Array(3)].map((_, index) => (
+        <Paper
+          key={index}
+          sx={{
+            p: 2,
+            mb: 2,
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: 2,
+            alignItems: 'center',
+            borderRadius: 2,
+            background: theme.palette.background.paper,
+          }}
+        >
+          <Box sx={{ width: { xs: '100%', sm: '15%' }, height: 24, bgcolor: alpha(theme.palette.primary.main, 0.1), borderRadius: 1 }} />
+          <Box sx={{ width: { xs: '100%', sm: '25%' }, height: 24, bgcolor: alpha(theme.palette.primary.main, 0.1), borderRadius: 1 }} />
+          <Box sx={{ width: { xs: '100%', sm: '20%' }, height: 24, bgcolor: alpha(theme.palette.primary.main, 0.1), borderRadius: 1 }} />
+          <Box sx={{ width: { xs: '100%', sm: '40%' }, height: 24, display: 'flex', gap: 1 }}>
+            {[...Array(4)].map((_, i) => (
+              <Box key={i} sx={{ flex: 1, height: 24, bgcolor: alpha(theme.palette.primary.main, 0.1), borderRadius: 1 }} />
+            ))}
+          </Box>
+        </Paper>
+      ))}
+    </Box>
+  ), [theme]);
 
   return (
     <Box sx={{ width: '100%', maxWidth: { xs: '100%', md: '1700px' }, p: 2 }}>
@@ -466,13 +856,12 @@ export default function VehicleList() {
         </Button>
       </Stack>
 
-          {/* Quick Search Box Above the Data Grid */}
+          {/* Quick Search Box */}
           <FormControl fullWidth sx={{ mb: 2 }}>
           <OutlinedInput
             size="small"
               placeholder="Quick search in results..."
-            value={localSearchTerm}
-            onChange={(e) => setLocalSearchTerm(e.target.value)}
+              onChange={(e) => handleLocalSearch(e.target.value)}
             startAdornment={
                 <InputAdornment position="start" sx={{ color: 'text.secondary' }}>
                 <SearchRoundedIcon fontSize="small" />
@@ -497,7 +886,6 @@ export default function VehicleList() {
             </Button>
       </Box>
 
-          {/* Advanced search section */}
           {showAdvancedSearch && (
             <Paper 
               elevation={0} 
@@ -584,13 +972,26 @@ export default function VehicleList() {
                     color="primary" 
                     fullWidth
                     onClick={handleSearch}
+                    disabled={isSearching}
                     sx={{ borderRadius: 2 }}
                   >
-            Search
+                    {isSearching ? 'Searching...' : 'Search'}
           </Button>
         </Grid>
       </Grid>
             </Paper>
+          )}
+
+          {error && (
+            <Box sx={{ mb: 2 }}>
+              <Alert 
+                severity="error" 
+                sx={{ borderRadius: 2 }}
+                onClose={() => setError(null)}
+              >
+                {error}
+              </Alert>
+            </Box>
           )}
 
           {/* Data grid section */}
@@ -603,32 +1004,60 @@ export default function VehicleList() {
             borderRadius: 2,
             border: `1px solid ${theme.palette.divider}`,
           }}>
-            {loading && (
-              <Box sx={{ 
-                position: 'absolute', 
-                top: 0, 
-                left: 0, 
-                right: 0, 
-                bottom: 0, 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                backgroundColor: alpha(theme.palette.background.paper, 0.7),
-                zIndex: 10
-              }}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <CircularProgress size={40} />
-                  <Typography variant="body2" sx={{ mt: 2 }}>
-                    Loading vehicle data...
+            {initialLoad ? (
+              <SkeletonLoading />
+            ) : (
+              <>
+                <CustomizedDataGrid 
+                  columns={columns} 
+                  rows={filteredRows}
+                  autoHeight={false}
+                  checkboxSelection={false}
+                  disableVirtualization={false}
+                  disableRowSelectionOnClick
+                  keepNonExistentRowsSelected={false}
+                />
+                
+                {loading && !initialLoad && !isSearching && (
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'center', 
+                  p: 2, 
+                  backgroundColor: alpha(theme.palette.background.paper, 0.6),
+                  borderTop: `1px solid ${theme.palette.divider}`,
+                }}>
+                  <CircularProgress size={24} thickness={5} sx={{ mr: 2 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading more vehicles...
                   </Typography>
                 </Box>
-            </Box>
+                )}
+              </>
             )}
             
-            <CustomizedDataGrid 
-              columns={columns} 
-              rows={filteredRows} 
-            />
+            {/* Intersection observer target element */}
+            <div ref={lastElementRef} style={{ height: 10, width: '100%' }} />
+          </Box>
+          
+          {/* Status footer */}
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            mt: 2,
+            p: 1,
+            backgroundColor: alpha(theme.palette.primary.main, 0.05),
+            borderRadius: 2
+          }}>
+            <Typography variant="body2" color="text.secondary">
+              {isSearching 
+                ? `Showing ${filteredRows.length} search results` 
+                : loading && !initialLoad
+                  ? `Loading ${rows.length} of ${totalElements} vehicles...`
+                  : `Showing ${rows.length} of ${totalElements} vehicles${!hasMore ? ' (all loaded)' : ''}`
+              }
+            </Typography>
           </Box>
         </CardContent>
       </Card>
