@@ -46,20 +46,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (token) {
       try {
         const decoded = jwtDecode<DecodedToken>(token);
-        if (decoded && decoded.exp * 1000 >= Date.now()) {
-          setIsAuthenticated(true);
-          setAuthorizedComponents(decoded.componentNames || []);
-          setUserRole(decoded.roles[0] || '');
-          setUserName(decoded.firstname || '');
-          console.log('Auth state:', {
-            isAuthenticated: true,
-            role: decoded.roles[0],
-            components: decoded.componentNames
-          });
-        } else {
-          console.log('Token expired');
-          storageUtils.clearAuthData();
-        }
+        setIsAuthenticated(true);
+        setAuthorizedComponents(decoded.componentNames || []);
+        setUserRole(decoded.roles[0] || '');
+        setUserName(decoded.firstname || '');
+        console.log('Auth state:', {
+          isAuthenticated: true,
+          role: decoded.roles[0],
+          components: decoded.componentNames
+        });
       } catch (error) {
         console.error('Invalid token:', error);
         storageUtils.clearAuthData();

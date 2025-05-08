@@ -757,7 +757,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Mobile No */}
+                  
                   <FormGrid>
                     <FormLabel htmlFor="customerMobileNumber">Mobile No*</FormLabel>
             <OutlinedInput

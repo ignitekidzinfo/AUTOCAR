@@ -700,59 +700,6 @@ export default function Dashboard() {
     }, 800); 
   }, [clearAllCookies]);
 
-  useEffect(() => {
-    const checkTokenExpiry = () => {
-      const token = storageUtils.getAuthToken();
-      if (token) {
-        try {
-          const decodedToken = jwtDecode<any>(token);
-          if (decodedToken.exp) {
-            // Get current time in seconds
-            const currentTime = Math.floor(Date.now() / 1000);
-            // Check if token will expire in the next 5 minutes (300 seconds)
-            const timeToExpiry = decodedToken.exp - currentTime;
-            
-            if (timeToExpiry < 300 && timeToExpiry > 0) {
-              // Show warning if token expires soon
-              setTokenExpiryWarning(true);
-              
-              // Set timeout to auto-logout when token expires
-              const timeoutMs = timeToExpiry * 1000; // Convert to milliseconds
-              const expiryTimeout = setTimeout(() => {
-                handleLogout();
-              }, timeoutMs);
-              
-              // Clear timeout on cleanup
-              return () => clearTimeout(expiryTimeout);
-            }
-          }
-        } catch (error) {
-          console.error("Error checking token expiry:", error);
-        }
-      }
-      
-      // Return empty cleanup function if no timeout was set
-      return () => {};
-    };
-    
-    // Check immediately
-    const cleanup = checkTokenExpiry();
-    
-    // Set interval for periodic checks
-    const interval = setInterval(() => {
-      // Clear previous cleanup
-      cleanup();
-      // Set new cleanup
-      checkTokenExpiry();
-    }, 60000); // Check every minute
-    
-    // Clear interval on component unmount
-    return () => {
-      clearInterval(interval);
-      cleanup();
-    };
-  }, [handleLogout]);
-
   return (
     <Box
       sx={{
@@ -1668,42 +1615,6 @@ export default function Dashboard() {
             Copyright © Auto Car Care Point {new Date().getFullYear()}. All rights reserved.
           </Typography>
         </Box>
-
-        <Snackbar
-          open={tokenExpiryWarning}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        >
-          <Alert 
-            severity="warning" 
-            variant="filled"
-            sx={{ 
-              width: '100%',
-              alignItems: 'center',
-              '& .MuiAlert-icon': { fontSize: '1.5rem' }
-            }}
-            action={
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button 
-                  color="inherit" 
-                  size="small" 
-                  onClick={() => setTokenExpiryWarning(false)}
-                >
-                  Dismiss
-                </Button>
-                <Button 
-                  color="inherit" 
-                  size="small" 
-                  variant="outlined"
-                  onClick={handleLogout}
-                >
-                  Logout Now
-                </Button>
-              </Box>
-            }
-          >
-            Your session will expire soon. You will be automatically logged out.
-          </Alert>
-        </Snackbar>
       </Container>
     </Box>
   );
