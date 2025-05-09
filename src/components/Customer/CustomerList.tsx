@@ -25,6 +25,11 @@ import {
   Avatar,
   Divider,
   Grid,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField
 } from "@mui/material";
 import {
   Edit as EditIcon,
@@ -51,6 +56,9 @@ interface Customer {
   lastName?: string | null;
   mobileNumber: number;
   address: string | null;
+  customerId?: string | number;
+  aadharNo?: string;
+  gstin?: string;
 }
 
 const CustomerList: React.FC = () => {
@@ -59,6 +67,10 @@ const CustomerList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const theme = useTheme();
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Optimized fetch function with caching
   const fetchCustomers = useCallback(async () => {
@@ -75,17 +87,16 @@ const CustomerList: React.FC = () => {
       
       console.log("Fetching fresh customer data");
       const response = await apiClient.get("/user/getAllUsers");
-      
-      // Validate and sanitize data
+    
       const customerData = response.data?.list || [];
       const sanitizedData = customerData.map((customer: any) => ({
         ...customer,
+        customerId: customer.userId,
         firstName: customer.firstName || null,
         lastName: customer.lastName || null,
         address: customer.address || null
       }));
       
-      // Update cache
       customerCache = {
         data: sanitizedData,
         timestamp: Date.now()
@@ -101,7 +112,6 @@ const CustomerList: React.FC = () => {
     }
   }, []);
 
-  // Load data on component mount
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
@@ -110,27 +120,21 @@ const CustomerList: React.FC = () => {
     try {
       await apiClient.delete(`/customers/${email}`);
       
-      // Update local state
       setCustomers((prev) => prev.filter((c) => c.email !== email));
       
-      // Clear cache to ensure fresh data on next load
       customerCache.data = null;
     } catch (error) {
       console.error("Error deleting customer:", error);
       setError("Failed to delete customer. Please try again.");
-      // Add a timeout to clear the error after 5 seconds
       setTimeout(() => setError(null), 5000);
     }
   };
 
-  // Safely render customer name with null checks
   const renderCustomerName = useCallback((customer: Customer) => {
-    // Safely handle null or undefined values
     const firstName = customer.firstName || '';
     const lastName = customer.lastName || '';
     const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
     
-    // Safe way to get initials
     const firstInitial = firstName && firstName.length > 0 ? firstName.charAt(0) : '?';
     const lastInitial = lastName && lastName.length > 0 ? lastName.charAt(0) : '';
     const initials = (firstInitial + lastInitial).toUpperCase();
@@ -155,7 +159,68 @@ const CustomerList: React.FC = () => {
     );
   }, [theme]);
 
-  // Memoize the customer list to prevent unnecessary re-renders
+  const handleEditOpen = async (customer: Customer) => {
+    setEditDialogOpen(true); 
+    setEditLoading(true);
+    setEditError(null);
+    try {
+      const response = await apiClient.get(`/user/getUser/${customer.customerId}`);
+      setEditCustomer({
+        ...customer,
+        firstName: response.data.firstName || '',
+        mobileNumber: response.data.mobileNumber || '',
+        address: response.data.address || '',
+        aadharNo: response.data.aadharNo || '',
+        gstin: response.data.gstin || ''
+      });
+    } catch (error: any) {
+      setEditError(error.response?.data?.message || 'Failed to fetch customer details.');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleEditClose = () => {
+    setEditDialogOpen(false);
+    setEditCustomer(null);
+    setEditError(null);
+  };
+
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editCustomer) return;
+    setEditCustomer({ ...editCustomer, [e.target.name]: e.target.value });
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editCustomer || !editCustomer.customerId) return;
+    setEditLoading(true);
+    setEditError(null);
+    try {
+      const payload = {
+        firstName: editCustomer.firstName, 
+        mobileNumber: editCustomer.mobileNumber,
+        address: editCustomer.address,
+        aadharNo: editCustomer.aadharNo,
+        gstin: editCustomer.gstin
+      };
+      await apiClient.patch(
+        `/api/v1/customer/update/${editCustomer.customerId}`,
+        payload
+      );
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.customerId === editCustomer.customerId ? { ...c, ...payload } : c
+        )
+      );
+      setEditDialogOpen(false);
+    } catch (error: any) {
+      setEditError(
+        error.response?.data?.message || 'Failed to update customer.'
+      );
+    } finally {
+      setEditLoading(false);
+    }
+  };
   const customerList = useMemo(() => {
     if (!customers.length) return null;
     
@@ -199,7 +264,7 @@ const CustomerList: React.FC = () => {
               <IconButton 
                 size="small" 
                 color="primary"
-                onClick={() => console.log("Edit", customer.email)}
+                onClick={() => handleEditOpen(customer)}
                 sx={{ 
                   bgcolor: alpha(theme.palette.primary.main, 0.1),
                   '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) }
@@ -208,24 +273,11 @@ const CustomerList: React.FC = () => {
                 <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Delete Customer">
-              <IconButton 
-                size="small" 
-                color="error"
-                onClick={() => handleDelete(customer.email)}
-                sx={{ 
-                  bgcolor: alpha(theme.palette.error.main, 0.1),
-                  '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.2) }
-                }}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
           </Stack>
         </TableCell>
       </TableRow>
     ));
-  }, [customers, renderCustomerName, theme, handleDelete]);
+  }, [customers, renderCustomerName, theme]);
 
   return (
     <Box
@@ -272,7 +324,6 @@ const CustomerList: React.FC = () => {
         </Box>
 
         <CardContent sx={{ p: 0 }}>
-          {/* Summary Cards */}
           <Box sx={{ p: 3 }}>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6} md={4} lg={3}>
@@ -294,7 +345,6 @@ const CustomerList: React.FC = () => {
             </Grid>
           </Box>
 
-          {/* Main Content */}
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
               <CircularProgress />
@@ -304,58 +354,110 @@ const CustomerList: React.FC = () => {
               <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>
             </Box>
           ) : (
-            <TableContainer 
-              component={Paper} 
-              elevation={0}
-              sx={{ 
-                mx: 3, 
-                mb: 3, 
-                borderRadius: 2,
-                border: `1px solid ${theme.palette.divider}`,
-                overflow: 'hidden'
-              }}
-            >
-              <Table sx={{ minWidth: 650 }}>
-                <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
-                  <TableRow>
-                    <TableCell width="5%" sx={{ fontWeight: 'bold' }}>Sr.No</TableCell>
-                    <TableCell width="20%" sx={{ fontWeight: 'bold' }}>Name</TableCell>
-                    <TableCell width="25%" sx={{ fontWeight: 'bold' }}>Address</TableCell>
-                    <TableCell width="15%" sx={{ fontWeight: 'bold' }}>Mobile</TableCell>
-                    <TableCell width="15%" sx={{ fontWeight: 'bold' }}>Aadhar No.</TableCell>
-                    <TableCell width="15%" sx={{ fontWeight: 'bold' }}>GSTIN</TableCell>
-                    <TableCell width="5%" align="center" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {customers.length > 0 ? (
-                    customerList
-                  ) : (
+            <Box sx={{ width: '100%', overflowX: 'auto' }}>
+              <TableContainer 
+                component={Paper} 
+                elevation={0}
+                sx={{ 
+                  mx: { xs: 0, sm: 3 },
+                  mb: 3, 
+                  borderRadius: 2,
+                  border: `1px solid ${theme.palette.divider}`,
+                  overflow: 'auto',
+                  minWidth: 600
+                }}
+              >
+                <Table sx={{ minWidth: 600 }}>
+                  <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
                     <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                          <PersonIcon sx={{ fontSize: 60, color: alpha(theme.palette.text.primary, 0.2) }} />
-                          <Typography variant="h6" color="text.secondary">
-                            No customers found
-                          </Typography>
-                          <Button 
-                            variant="outlined" 
-                            startIcon={<AddIcon />}
-                            onClick={() => navigate("/admin/AddCustomer")}
-                            sx={{ mt: 1, borderRadius: 2 }}
-                          >
-                            Add Your First Customer
-                          </Button>
-                        </Box>
-                      </TableCell>
+                      <TableCell width="5%" sx={{ fontWeight: 'bold' }}>Sr.No</TableCell>
+                      <TableCell width="20%" sx={{ fontWeight: 'bold' }}>Name</TableCell>
+                      <TableCell width="25%" sx={{ fontWeight: 'bold' }}>Address</TableCell>
+                      <TableCell width="15%" sx={{ fontWeight: 'bold' }}>Mobile</TableCell>
+                      <TableCell width="15%" sx={{ fontWeight: 'bold' }}>Aadhar No.</TableCell>
+                      <TableCell width="15%" sx={{ fontWeight: 'bold' }}>GSTIN</TableCell>
+                      <TableCell width="5%" align="center" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {customers.length > 0 ? (
+                      customerList
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                            <PersonIcon sx={{ fontSize: 60, color: alpha(theme.palette.text.primary, 0.2) }} />
+                            <Typography variant="h6" color="text.secondary">
+                              No customers found
+                            </Typography>
+                            <Button 
+                              variant="outlined" 
+                              startIcon={<AddIcon />}
+                              onClick={() => navigate("/admin/AddCustomer")}
+                              sx={{ mt: 1, borderRadius: 2 }}
+                            >
+                              Add Your First Customer
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
           )}
         </CardContent>
       </Card>
+      <Dialog open={editDialogOpen} onClose={handleEditClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Customer</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            <TextField
+              label="Name"
+              name="firstName"
+              value={editCustomer?.firstName || ''}
+              onChange={handleEditChange}
+              fullWidth
+            />
+            <TextField
+              label="Mobile Number"
+              name="mobileNumber"
+              value={editCustomer?.mobileNumber || ''}
+              onChange={handleEditChange}
+              fullWidth
+            />
+            <TextField
+              label="Address"
+              name="address"
+              value={editCustomer?.address || ''}
+              onChange={handleEditChange}
+              fullWidth
+            />
+            <TextField
+              label="Aadhar No."
+              name="aadharNo"
+              value={editCustomer?.aadharNo || ''}
+              onChange={handleEditChange}
+              fullWidth
+            />
+            <TextField
+              label="GSTIN"
+              name="gstin"
+              value={editCustomer?.gstin || ''}
+              onChange={handleEditChange}
+              fullWidth
+            />
+            {editError && <Alert severity="error">{editError}</Alert>}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleEditClose} color="secondary">Cancel</Button>
+          <Button onClick={handleEditSubmit} color="primary" variant="contained" disabled={editLoading}>
+            {editLoading ? <CircularProgress size={20} /> : 'Update'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

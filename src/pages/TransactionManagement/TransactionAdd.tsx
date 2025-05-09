@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent, useMemo } from "react";
 import apiClient from "Services/apiService";
 import storageUtils from '../../utils/storageUtils';
 
@@ -206,6 +206,8 @@ const TransactionAdd: React.FC = () => {
     userRole = userData.authorities?.[0] || "";
   }
 
+  const memoizedVendorSuggestions = useMemo(() => vendorSuggestions, [vendorSuggestions]);
+
   useEffect(() => {
     fetchVendors();
   }, []);
@@ -226,8 +228,14 @@ const TransactionAdd: React.FC = () => {
   const fetchPartsBySearch = async (query: string) => {
     try {
       const response = await apiClient.get(`/Filter/searchBarFilter?searchBarInput=${query}`);
-
-      const parts: SparePartDto[] = response.data.list || response.data.content || [];
+      let parts: SparePartDto[] = [];
+      if (Array.isArray(response.data)) {
+        parts = response.data;
+      } else if (Array.isArray(response.data.list)) {
+        parts = response.data.list;
+      } else if (Array.isArray(response.data.content)) {
+        parts = response.data.content;
+      }
       setPartSuggestions(parts);
     } catch (error) {
       console.error("Error fetching parts:", error);
@@ -511,7 +519,7 @@ const TransactionAdd: React.FC = () => {
               disablePortal
               openOnFocus
               noOptionsText="No vendors available"
-              options={vendorSuggestions}
+              options={memoizedVendorSuggestions}
               getOptionLabel={(option) => option.name}
               onChange={handleSelectVendor}
               value={selectedVendor}
