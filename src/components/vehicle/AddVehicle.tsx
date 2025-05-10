@@ -28,6 +28,7 @@ import { SelectChangeEvent } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { VehicleAdd, VehicleDataByID, VehicleUpdate } from 'Services/vehicleService';
 import apiClient from 'Services/apiService';
+import CircularProgress from '@mui/material/CircularProgress';
 
 export interface VehicleRegDto {
   vehicleRegId: string;
@@ -90,6 +91,7 @@ export interface VehicleFormData {
   insuranceFrom: string;
   insuranceTo: string;
   fuelType: string;
+  variant: string;
   manufactureYear: string;
   advancePayment: number | string;
 }
@@ -122,6 +124,7 @@ const initialFormData: VehicleFormData = {
   insuranceFrom: "",
   insuranceTo: "",
   fuelType: "",
+  variant: "",
   manufactureYear: "",
   advancePayment: 0,
 };
@@ -228,6 +231,7 @@ export default function AddVehicle() {
   const [searchInput, setSearchInput] = useState("");
   const [searchResults, setSearchResults] = useState<VehicleRegDto[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleRegDto | null>(null);
+  const [loadingVehicle, setLoadingVehicle] = useState(false);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setErrors((prev) => ({ ...prev, [event.target.name]: "" }));
@@ -279,20 +283,24 @@ export default function AddVehicle() {
     event.preventDefault();
     if (!validateFields()) return;
     try {
-      const { fuelType, insuranceFrom, insuranceTo, ...restData } = formData;
-      
-      // Create payload with proper field mapping to match backend DTO
-      const payload = { 
-        ...restData, 
-        vehicleVariant: fuelType, 
+      const { variant, fuelType, insuranceFrom, insuranceTo, ...restData } = formData;
+      // If adding a new vehicle (no id), clear all backend IDs
+      let payload = {
+        ...restData,
+        vehicleVariant: fuelType || variant || "",
         status: id ? formData.status : "Waiting",
-        // Map to correct field names in the backend
         insuredFrom: insuranceFrom || null,
         insuredTo: insuranceTo || null
       };
-      
-      console.log("Sending payload:", payload);
-      
+      if (!id) {
+        payload = {
+          ...payload,
+          vehicleRegId: '',
+          appointmentId: '',
+          customerId: '',
+          userId: '',
+        };
+      }
       let response: any = "";
       if (id) {
         response = await VehicleUpdate(payload);
@@ -343,16 +351,16 @@ export default function AddVehicle() {
             superwiser: response.superwiser || "",
             technician: response.technician || "",
             worker: response.worker || "",
-            vehicleInspection: response.vehicleInspection || "",
+            vehicleInspection: '',
             kmsDriven: response.kmsDriven || "",
             status: response.status || "Waiting",
             userId: response.userId || "",
             date: response.date || "",
             insuranceStatus: response.insuranceStatus || "Expired",
-            // Map from backend field names to frontend field names
             insuranceFrom: response.insuredFrom || "",
             insuranceTo: response.insuredTo || "",
-            fuelType: response.vehicleVariant || "",
+            fuelType: response.fuelType || "",
+            variant: response.vehicleVariant || "",
             manufactureYear: response.manufactureYear ? String(response.manufactureYear) : "",
             advancePayment: response.advancePayment || 0,
           });
@@ -380,27 +388,49 @@ export default function AddVehicle() {
     };
     fetchSearchResults();
   }, [searchInput]);
-  const handleVehicleSelect = (event: any, value: VehicleRegDto | null) => {
+  const handleVehicleSelect = async (event: any, value: VehicleRegDto | null) => {
     setSelectedVehicle(value);
-    if (value) {
+    if (value && value.vehicleRegId) {
+      setLoadingVehicle(true);
+      try {
+        const response = await VehicleDataByID(value.vehicleRegId);
       setFormData({
-        ...initialFormData,
-        vehicleNumber: value.vehicleNumber || "",
-        vehicleBrand: value.vehicleBrand || "",
-        vehicleModelName: value.vehicleModelName || "",
-        engineNumber: value.engineNumber || "",
-        chasisNumber: value.chasisNumber || "",
-        numberPlateColour: value.numberPlateColour || "",
-        customerName: value.customerName || "",
-        customerAddress: value.customerAddress || "",
-        customerMobileNumber: value.customerMobileNumber || "",
-        customerAadharNo: value.customerAadharNo || "",
-        customerGstin: value.customerGstin || "",
-        email: value.email || "",
-        fuelType: value.vehicleVariant || "",
-        manufactureYear: value.manufactureYear ? String(value.manufactureYear) : "",
-        date: new Date().toISOString().split('T')[0]
-      });
+          vehicleRegId: response.vehicleRegId || "",
+          appointmentId: response.appointmentId || "",
+          vehicleNumber: response.vehicleNumber || "",
+          vehicleBrand: response.vehicleBrand || "",
+          vehicleModelName: response.vehicleModelName || "",
+          engineNumber: response.engineNumber || "",
+          chasisNumber: response.chasisNumber || "",
+          numberPlateColour: response.numberPlateColour || "",
+          customerId: response.customerId || "",
+          customerName: response.customerName || "",
+          customerAddress: response.customerAddress || "",
+          customerMobileNumber: response.customerMobileNumber || "",
+          customerAadharNo: response.customerAadharNo || "",
+          customerGstin: response.customerGstin || "",
+          email: response.email || "",
+          superwiser: '',
+          technician: '',
+          worker: '',
+          vehicleInspection: '',
+          kmsDriven: response.kmsDriven || "",
+          status: response.status || "Waiting",
+          userId: response.userId || "",
+          date: response.date || "",
+          insuranceStatus: response.insuranceStatus || "Expired",
+          insuranceFrom: response.insuredFrom || "",
+          insuranceTo: response.insuredTo || "",
+          fuelType: response.vehicleVariant || "",
+          variant: response.vehicleVariant || "",
+          manufactureYear: response.manufactureYear ? String(response.manufactureYear) : "",
+          advancePayment: response.advancePayment || 0,
+        });
+      } catch (error) {
+        console.error("Error fetching vehicle details:", error);
+      } finally {
+        setLoadingVehicle(false);
+      }
     } else {
       setFormData(initialFormData);
     }
@@ -417,22 +447,6 @@ export default function AddVehicle() {
         </Button>
       </Stack>
       
-      <Autocomplete
-        options={searchResults}
-        getOptionLabel={(option) => option.vehicleNumber}
-        value={selectedVehicle}
-        onChange={handleVehicleSelect}
-        onInputChange={(event, newInputValue) => setSearchInput(newInputValue)}
-        renderOption={(props, option) => (
-          <li {...props} key={option.vehicleRegId}>
-            {option.vehicleNumber}
-          </li>
-        )}
-        renderInput={(params) => (
-          <TextField {...params} label="Appointment Vehicle No" variant="outlined" fullWidth margin="normal" />
-        )}
-      />
-      
       <form onSubmit={handleSubmit}>
         <FormContainer container>
           {/* VEHICLE DETAILS CARD */}
@@ -444,15 +458,67 @@ export default function AddVehicle() {
                   {/* Vehicle No */}
                   <FormGrid>
                     <FormLabel htmlFor="vehicleNumber">Vehicle No*</FormLabel>
-            <OutlinedInput
-              id="vehicleNumber"
-              name="vehicleNumber"
-              value={formData.vehicleNumber}
-              onChange={handleChange}
-                      placeholder="Enter/Select Vehicle No"
-                      required
-                      size="small"
-                      fullWidth
+      <Autocomplete
+                      freeSolo
+        options={searchResults}
+                      getOptionLabel={(option) => typeof option === 'string' ? option : option.vehicleNumber}
+                      value={selectedVehicle || formData.vehicleNumber || ''}
+                      onChange={(event, value) => {
+                        if (typeof value === 'string') {
+                          setFormData({ ...formData, vehicleNumber: value });
+                          setSelectedVehicle(null);
+                        } else if (value && value.vehicleRegId) {
+                          setSelectedVehicle(value);
+                          setFormData({
+                            vehicleRegId: value.vehicleRegId || "",
+                            appointmentId: value.appointmentId || "",
+                            vehicleNumber: value.vehicleNumber || "",
+                            vehicleBrand: value.vehicleBrand || "",
+                            vehicleModelName: value.vehicleModelName || "",
+                            engineNumber: value.engineNumber || "",
+                            chasisNumber: value.chasisNumber || "",
+                            numberPlateColour: value.numberPlateColour || "",
+                            customerId: value.customerId || "",
+                            customerName: value.customerName || "",
+                            customerAddress: value.customerAddress || "",
+                            customerMobileNumber: value.customerMobileNumber || "",
+                            customerAadharNo: value.customerAadharNo || "",
+                            customerGstin: value.customerGstin || "",
+                            email: value.email || "",
+                            superwiser: '',
+                            technician: '',
+                            worker: '',
+                            vehicleInspection: '',
+                            kmsDriven: value.kmsDriven || "",
+                            status: value.status || "Waiting",
+                            userId: value.userId || "",
+                            date: value.date || "",
+                            insuranceStatus: value.insuranceStatus || "Expired",
+                            insuranceFrom: value.insuranceFrom || "",
+                            insuranceTo: value.insuranceTo || "",
+                            fuelType: value.vehicleVariant || "",
+                            variant: value.vehicleVariant || "",
+                            manufactureYear: value.manufactureYear ? String(value.manufactureYear) : "",
+                            advancePayment: value.advancePayment || 0,
+                          });
+                        } else {
+                          setFormData({ ...formData, vehicleNumber: '' });
+                          setSelectedVehicle(null);
+                        }
+                      }}
+                      onInputChange={(event, newInputValue) => {
+                        setSearchInput(newInputValue);
+                        setFormData({ ...formData, vehicleNumber: newInputValue });
+                      }}
+                      filterOptions={(options) => options}
+        renderOption={(props, option) => (
+                        <li {...props} key={typeof option === 'string' ? option : option.vehicleRegId}>
+                          {typeof option === 'string' ? option : option.vehicleNumber}
+          </li>
+        )}
+        renderInput={(params) => (
+                        <TextField {...params} label="Vehicle No*" variant="outlined" required size="small" fullWidth />
+                      )}
                     />
                   </FormGrid>
                 </Grid>
@@ -549,12 +615,12 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6}>
                   {/* Variant */}
                   <FormGrid>
-                    <FormLabel htmlFor="fuelType">Variant*</FormLabel>
-                    <OutlinedInput
-                      id="fuelType"
-                      name="fuelType"
-                      value={formData.fuelType}
-                      onChange={handleChange}
+                    <FormLabel htmlFor="variant">Variant*</FormLabel>
+            <OutlinedInput
+                      id="variant"
+                      name="variant"
+                      value={formData.variant}
+              onChange={handleChange}
                       placeholder="Enter/Select Vehicle Variant"
               required
               size="small"
@@ -757,7 +823,6 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  
                   <FormGrid>
                     <FormLabel htmlFor="customerMobileNumber">Mobile No*</FormLabel>
             <OutlinedInput
@@ -951,6 +1016,12 @@ export default function AddVehicle() {
           <Button onClick={() => setDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+      
+      {loadingVehicle && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', my: 2 }}>
+          <CircularProgress size={32} />
+        </Box>
+      )}
     </ContainerBox>
   );
 }

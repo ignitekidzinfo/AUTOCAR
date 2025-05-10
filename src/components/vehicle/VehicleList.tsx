@@ -48,6 +48,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { filter } from 'types/SparePart';
 import apiClient from 'utils/apiClient';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 // Constants for improved performance
 const PAGE_SIZE = 25;
@@ -124,7 +125,7 @@ function getCachedData<T>(key: string): T | null {
 
 // Save data to both caches
 function saveToCache<T>(key: string, data: T): void {
-  try {
+        try {
     // Save to localStorage first (which could fail if data is too large)
     localStorage.setItem(key, JSON.stringify({
       ...data,
@@ -178,17 +179,17 @@ export async function batchCheckInvoiceStatus(vehicleIds: string[]): Promise<Rec
   if ((window as any).__batchCheckInProgress) return {};
   
   // Initialize cached results
-  const cachedResults: Record<string, boolean> = {};
+    const cachedResults: Record<string, boolean> = {};
   let uncheckedIds: string[] = [];
-  
-  // First check localStorage for cached results
-  vehicleIds.forEach(id => {
-    const cacheKey = `invoice_${id}`;
-    const cached = localStorage.getItem(cacheKey);
     
-    if (cached !== null) {
-      cachedResults[id] = cached === 'true';
-    } else {
+  // First check localStorage for cached results
+    vehicleIds.forEach(id => {
+      const cacheKey = `invoice_${id}`;
+      const cached = localStorage.getItem(cacheKey);
+      
+      if (cached !== null) {
+        cachedResults[id] = cached === 'true';
+      } else {
       uncheckedIds.push(id);
     }
   });
@@ -205,11 +206,11 @@ export async function batchCheckInvoiceStatus(vehicleIds: string[]): Promise<Rec
   try {
     // Check each ID individually to avoid batch API issues
     for (const id of uncheckedIds) {
-      try {
+              try {
         // Use proper endpoint for single invoice check
         const response = await apiClient.get(`/api/vehicle-invoices/search/vehicle-reg/${id}`, {
-          timeout: 2000
-        });
+                  timeout: 2000
+                });
         
         // Process the result
         const hasInvoice = Array.isArray(response.data) && response.data.length > 0;
@@ -217,7 +218,7 @@ export async function batchCheckInvoiceStatus(vehicleIds: string[]): Promise<Rec
         
         // Cache the result
         localStorage.setItem(`invoice_${id}`, String(hasInvoice));
-        
+    
         // Add a small delay between requests to prevent rate limiting
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
@@ -232,7 +233,7 @@ export async function batchCheckInvoiceStatus(vehicleIds: string[]): Promise<Rec
   } finally {
     // Reset flag after a delay to prevent immediate re-requests
     setTimeout(() => {
-      (window as any).__batchCheckInProgress = false;
+    (window as any).__batchCheckInProgress = false;
     }, 1000);
   }
   
@@ -267,6 +268,16 @@ export async function checkInvoiceStatus(vehicleRegId: string): Promise<boolean>
   }
 }
 
+// Add this utility function at the top-level (after constants)
+function clearVehicleCache() {
+  Object.keys(localStorage)
+    .filter(key => key.startsWith('vehicle_data_'))
+    .forEach(key => localStorage.removeItem(key));
+  if (typeof memoryCache !== 'undefined' && memoryCache.clear) {
+    memoryCache.clear();
+  }
+}
+
 export default function VehicleList() {
   const navigate = useNavigate();
   const [searchParams] = React.useState(() => new URLSearchParams(window.location.search));
@@ -297,7 +308,7 @@ export default function VehicleList() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastElementRef = useRef<HTMLDivElement | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Optimized function to process vehicle data for display
   const processVehicleData = useCallback((vehicles: Vehicle[], append = false) => {
     if (!vehicles.length) return [];
@@ -315,7 +326,7 @@ export default function VehicleList() {
       superwiser: vehicle.superwiser ?? '',
       technician: vehicle.technician ?? '',
       worker: vehicle.worker ?? '',
-      kilometer: vehicle.kmsDriven ?? 0,
+      kilometer: vehicle.kmsDriven ?? '',
       vehicleRegId: vehicle.vehicleRegId,
       hasInvoice: false // Set initially to false, update later async
     }));
@@ -347,42 +358,37 @@ export default function VehicleList() {
         // Update cache and state efficiently
         setInvoiceStatusCache(prev => ({...prev, ...statuses}));
         
-        setRows(currentRows => {
-          const hasChanges = currentRows.some(row => 
+              setRows(currentRows => {
+                const hasChanges = currentRows.some(row => 
             row.vehicleRegId && statuses[row.vehicleRegId] !== undefined && 
             row.hasInvoice !== statuses[row.vehicleRegId]
-          );
-          
-          if (!hasChanges) return currentRows;
-          
-          return currentRows.map(row => {
+                );
+                
+                if (!hasChanges) return currentRows;
+                
+                return currentRows.map(row => {
             if (row.vehicleRegId && statuses[row.vehicleRegId] !== undefined) {
               return {...row, hasInvoice: statuses[row.vehicleRegId]};
-            }
-            return row;
-          });
-        });
+                  }
+                  return row;
+                });
+              });
       } finally {
         (window as any).__updateInProgress = false;
       }
     }, DEBOUNCE_DELAY * 2);
   }, []);
-  
-  // Fast fetch function - prioritizes speed over completeness
-  const fetchVehicles = useCallback(async (pageNumber: number, append = false) => {
+
+  // Update fetchVehicles to accept skipCache
+  const fetchVehicles = useCallback(async (pageNumber: number, append = false, skipCache = false) => {
     if (loadingRef.current) return;
-    
     if (totalPages > 0 && pageNumber >= totalPages) {
       setHasMore(false);
       return;
     }
-    
-    // Set loading state
     setLoading(true);
     loadingRef.current = true;
-    
     try {
-      // Check cache first for fast loading
       const cacheKey = `vehicle_data_${listType || 'all'}_${pageNumber}`;
       const cachedData = getCachedData<{
         vehicles: Vehicle[],
@@ -391,54 +397,44 @@ export default function VehicleList() {
         hasMore: boolean,
         timestamp: number
       }>(cacheKey);
-      
-      // Disable cache for debugging - set to false in production
-      const disableCache = false;
-      
+      const disableCache = skipCache;
       if (!disableCache && cachedData && cachedData.vehicles) {
         // Use cached data immediately
         const processedRows = processVehicleData(cachedData.vehicles, append);
-        
-        setCurrentPage(pageNumber);
+            setCurrentPage(pageNumber);
         setTotalElements(cachedData.totalElements || 0);
         setTotalPages(cachedData.totalPages || 1);
         setHasMore(cachedData.hasMore);
-        
-        if (append) {
-          setRows(prev => [...prev, ...processedRows]);
-        } else {
-          setRows(processedRows);
-        }
-        
-        loadingRef.current = false;
-        setLoading(false);
-        setInitialLoad(false);
-        
-        // Don't automatically check invoice status after loading cached data
-        // This prevents unnecessary API calls
-        return;
-      }
-      
+            if (append) {
+              setRows(prev => [...prev, ...processedRows]);
+            } else {
+              setRows(processedRows);
+            }
+              loadingRef.current = false;
+              setLoading(false);
+              setInitialLoad(false);
+              return;
+            }
       // Fetch fresh data
       try {
         let data;
         
-        if (listType) {
-          const statusFilter = listType === 'serviceQueue' 
-            ? 'waiting,inprogress' 
-            : listType === 'serviceHistory' ? 'complete' : '';
-          
+          if (listType) {
+            const statusFilter = listType === 'serviceQueue' 
+              ? 'waiting,inprogress' 
+              : listType === 'serviceHistory' ? 'complete' : '';
+            
           console.log(`Fetching vehicles with status: ${statusFilter}`);
           
           // Use the imported service function instead of direct API call with timestamp
           const res = await GetVehicleByStatus({ status: statusFilter });
           data = res.data;
           console.log('Vehicle data received:', data ? (Array.isArray(data) ? data.length : 'object') : 'none');
-        } else {
+          } else {
           console.log(`Fetching all vehicles`);
           
           // Use the imported service function instead of direct API call with timestamp
-          const res = await VehicleListData();
+            const res = await VehicleListData();
           data = res.data;
           console.log('Vehicle data received:', data ? (Array.isArray(data) ? data.length : 'object') : 'none');
         }
@@ -447,24 +443,24 @@ export default function VehicleList() {
         let vehicles: Vehicle[] = [];
         let totalCount = 0;
         let pageCount = 0;
-        
-        if (Array.isArray(data)) {
+            
+            if (Array.isArray(data)) {
           totalCount = data.length;
           pageCount = Math.ceil(totalCount / PAGE_SIZE);
           
-          // Apply client-side pagination
-          const startIndex = pageNumber * PAGE_SIZE;
-          const endIndex = startIndex + PAGE_SIZE;
-          vehicles = data.slice(startIndex, endIndex);
-        } else if (data?.content && Array.isArray(data.content)) {
-          vehicles = data.content;
+              // Apply client-side pagination
+              const startIndex = pageNumber * PAGE_SIZE;
+              const endIndex = startIndex + PAGE_SIZE;
+              vehicles = data.slice(startIndex, endIndex);
+            } else if (data?.content && Array.isArray(data.content)) {
+              vehicles = data.content;
           totalCount = data.totalElements || vehicles.length;
           pageCount = data.totalPages || 1;
-        }
+      }
         
         // Calculate if there's more data
         const hasMoreData = pageNumber < pageCount - 1;
-        
+    
         // Cache the data using the optimized method
         saveToCache(cacheKey, {
           vehicles,
@@ -501,12 +497,10 @@ export default function VehicleList() {
       setInitialLoad(false);
     }
   }, [listType, processVehicleData, totalPages]);
-  
-  // Initial data load
+
+  // On initial load, always fetch fresh data
   useEffect(() => {
-    // Start loading immediately
-    fetchVehicles(0, false);
-    
+    fetchVehicles(0, false, true); // skip cache on load
     // Set up scrolling observer
     const observer = new IntersectionObserver(
       (entries) => {
@@ -529,19 +523,121 @@ export default function VehicleList() {
     }
     
     return () => {
-      observer.disconnect();
+        observer.disconnect();
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
   }, [fetchVehicles, hasMore, currentPage]);
   
-  // Optimized action buttons with memoization
+  // Move this function after handleDelete
+  const handleDelete = useCallback((id: string) => {
+    setSelectedId(id);
+    setOpen(true);
+  }, []);
+
+  // Update the renderActionButtons to match the example (simple horizontal row)
   const renderActionButtons = useCallback((params: GridCellParams) => {
-    if (!params.row.vehicleRegId) {
-      return <CircularProgress size={20} />;
-    }
+    const vehicleId = params.row.vehicleRegId;
     
+    const handleNavigation = (e: React.MouseEvent, path: string) => {
+      e.stopPropagation();
+      e.preventDefault();
+      navigate(path);
+    };
+    
+    const handleDeleteAction = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      setSelectedId(id);
+      setOpen(true);
+    };
+    
+    return (
+      <Box sx={{ 
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gridTemplateRows: 'repeat(2, 1fr)',
+        gap: 0.7,
+        width: '100%',
+        maxWidth: '80px'
+      }}>
+        <IconButton 
+          color="primary" 
+          size="small" 
+          onClick={(e) => handleNavigation(e, `/admin/vehicle/edit/${vehicleId}`)}
+          sx={{ 
+            p: 0.5,
+            minWidth: '28px',
+            minHeight: '28px',
+            maxWidth: '28px',
+            maxHeight: '28px',
+            background: '#e3f2fd',
+            border: '1px solid #bbdefb',
+            '&:hover': { background: '#bbdefb' }
+          }}
+        >
+          <EditIcon sx={{ fontSize: '16px' }} />
+        </IconButton>
+        
+        <IconButton 
+          color="primary" 
+          size="small" 
+          onClick={(e) => handleNavigation(e, `/admin/vehicle/add/servicepart/${vehicleId}`)}
+          sx={{ 
+            p: 0.5,
+            minWidth: '28px',
+            minHeight: '28px',
+            maxWidth: '28px',
+            maxHeight: '28px',
+            background: '#e3f2fd',
+            border: '1px solid #bbdefb',
+            '&:hover': { background: '#bbdefb' }
+          }}
+        >
+          <BuildIcon sx={{ fontSize: '16px' }} />
+        </IconButton>
+        
+        <IconButton 
+          size="small" 
+          color="primary"
+          onClick={(e) => handleNavigation(e, `/admin/vehicle/view/${vehicleId}`)}
+          sx={{ 
+            p: 0.5,
+            minWidth: '28px',
+            minHeight: '28px',
+            maxWidth: '28px',
+            maxHeight: '28px',
+            background: '#212121',
+            color: 'white',
+            '&:hover': { background: '#424242' }
+          }}
+        >
+          <Print sx={{ fontSize: '16px' }} />
+        </IconButton>
+        
+        <IconButton 
+          size="small" 
+          color="error"
+          onClick={(e) => handleDeleteAction(e, vehicleId)}
+          sx={{ 
+            p: 0.5,
+            minWidth: '28px',
+            minHeight: '28px',
+            maxWidth: '28px',
+            maxHeight: '28px',
+            background: '#212121',
+            color: 'white',
+            '&:hover': { background: '#424242' }
+          }}
+        >
+          <DeleteIcon sx={{ fontSize: '16px' }} />
+        </IconButton>
+      </Box>
+    );
+  }, [navigate, setSelectedId, setOpen]);
+
+  // Update the second row of actions (service/print)
+  const renderServiceButtons = useCallback((params: GridCellParams) => {
     const vehicleId = params.row.vehicleRegId;
     
     const handleNavigation = (e: React.MouseEvent, path: string) => {
@@ -551,125 +647,401 @@ export default function VehicleList() {
     };
     
     return (
-      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-        <IconButton
-          color="primary"
-          size="small"
-          onClick={(e) => handleNavigation(e, `/admin/vehicle/edit/${vehicleId}`)}
-        >
-          <EditIcon fontSize="small" />
-        </IconButton>
-        
-        <IconButton
-          color="error"
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDelete(vehicleId);
-          }}
-        >
-          <DeleteIcon fontSize="small" />
-        </IconButton>
-        
-        <IconButton
-          color="info"
-          size="small"
-          onClick={(e) => handleNavigation(e, `/admin/vehicle/add/servicepart/${vehicleId}`)}
-        >
-          <BuildIcon fontSize="small" />
-        </IconButton>
-        
-        <IconButton
-          color="success"
-          size="small"
-          onClick={(e) => handleNavigation(e, `/admin/vehicle/view/${vehicleId}`)}
-        >
-          <PreviewIcon fontSize="small" />
-        </IconButton>
-        
-        <IconButton
-          color="secondary"
-          size="small"
-          onClick={(e) => handleNavigation(e, `/admin/vehicle/view/${vehicleId}`)}
-        >
-          <Print fontSize="small" />
-        </IconButton>
+      <Box sx={{ 
+        display: 'flex',
+        gap: 1,
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        width: '100%',
+        height: '100%'
+      }}>
+        <Tooltip title="Add Service Parts">
+          <IconButton 
+            color="info" 
+            size="small" 
+            onClick={(e) => handleNavigation(e, `/admin/vehicle/add/servicepart/${vehicleId}`)}
+            sx={{ 
+              padding: '6px',
+              backgroundColor: (theme) => alpha(theme.palette.info.main, 0.1),
+              '&:hover': {
+                backgroundColor: (theme) => alpha(theme.palette.info.main, 0.2),
+              }
+            }}
+          >
+            <BuildIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="View/Print">
+          <IconButton 
+            color="secondary" 
+            size="small" 
+            onClick={(e) => handleNavigation(e, `/admin/vehicle/view/${vehicleId}`)}
+            sx={{ 
+              padding: '6px',
+              backgroundColor: (theme) => alpha(theme.palette.secondary.main, 0.1),
+              '&:hover': {
+                backgroundColor: (theme) => alpha(theme.palette.secondary.main, 0.2),
+              }
+            }}
+          >
+            <Print fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
     );
   }, [navigate]);
-  
-  // Optimized column rendering
-  const renderInvoiceStatus = useCallback((params: GridCellParams) => {
+
+  // Redesign status render
+  const renderStatus = useCallback((params: GridCellParams) => {
+    const status = params.value as string;
+    let bgcolor = '#e3f2fd';
+    let textColor = '#1976d2';
+    let StatusIcon = null;
+    
+    if (status?.toLowerCase().includes('complete')) {
+      bgcolor = '#e8f5e9';
+      textColor = '#2e7d32';
+      StatusIcon = CheckCircleIcon;
+    } else if (status?.toLowerCase().includes('progress')) {
+      bgcolor = '#fff8e1';
+      textColor = '#ed6c02';
+      StatusIcon = BuildIcon;
+      return (
+        <Box
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            px: 1,
+            py: 0.5,
+            borderRadius: '16px',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            backgroundColor: '#FFF8E1',
+            color: '#F57C00',
+          }}
+        >
+          <Box sx={{ 
+            width: 6, 
+            height: 6, 
+            borderRadius: '50%', 
+            bgcolor: '#F57C00',
+            mr: 0.5,
+            animation: 'pulse 1.5s infinite ease-in-out'
+          }} />
+          In Progress
+        </Box>
+      );
+    } else if (status?.toLowerCase().includes('waiting')) {
+      bgcolor = '#e3f2fd';
+      textColor = '#0288d1';
+      StatusIcon = AccessTimeIcon;
+      return (
+        <Box
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            px: 1,
+            py: 0.5,
+            borderRadius: '16px',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            backgroundColor: '#E3F2FD',
+            color: '#0288D1',
+          }}
+        >
+          <AccessTimeIcon sx={{ fontSize: '0.875rem', mr: 0.5 }} />
+          Waiting
+        </Box>
+      );
+    }
+    
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {params.row.hasInvoice ? (
-          <Chip
-            icon={<CheckCircleIcon fontSize="small" />}
-            color="success"
-            variant="outlined"
-            size="small"
-          />
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          px: 1,
+          py: 0.5,
+          borderRadius: '16px',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          bgcolor,
+          color: textColor,
+        }}
+      >
+        {StatusIcon && (
+          <Box component={StatusIcon} sx={{ fontSize: '0.875rem', mr: 0.5 }} />
+        )}
+        {status}
+      </Box>
+    );
+  }, []);
+
+  // Render invoice status with red/green dot
+  const renderInvoiceStatus = useCallback((params: GridCellParams) => {
+    const hasInvoice = params.row.hasInvoice;
+    
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        {hasInvoice ? (
+          <CheckCircleIcon color="success" sx={{ fontSize: '1.25rem' }} />
         ) : (
-          <Chip
-            icon={<CancelIcon fontSize="small" />}
-            color="error"
-            variant="outlined"
-            size="small"
-          />
+          <CancelIcon color="error" sx={{ fontSize: '1.25rem' }} />
         )}
       </Box>
     );
   }, []);
-  
-  const renderStatus = useCallback((params: GridCellParams) => {
-    const status = params.value as string;
-    let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';
-    
-    if (status.toLowerCase() === 'complete') color = 'success';
-    else if (status.toLowerCase() === 'inprogress') color = 'warning';
-    else if (status.toLowerCase() === 'waiting') color = 'info';
-    
-    return (
-      <Chip 
-        label={status} 
-        color={color} 
-        size="small" 
-        variant="outlined"
-      />
-    );
-  }, []);
-  
-  // Memoized columns definition to avoid recreating on each render
+
+  // Update columns to match example image with mobile-specific settings
   const columns = React.useMemo<GridColDef[]>(() => [
-    { field: 'date', headerName: 'Date', flex: 1, minWidth: 100 },
-    { field: 'vehicleNoName', headerName: 'Vehicle Number/Name', flex: 1, minWidth: 150 },
-    { field: 'customerMobile', headerName: 'Customer & Mobile', flex: 1, minWidth: 150 },
-    { field: 'status', headerName: 'Status', flex: 1, minWidth: 100, renderCell: renderStatus },
+    {
+      field: 'Action',
+      headerName: 'Actions',
+      width: 85,
+      minWidth: 85,
+      renderCell: renderActionButtons,
+      sortable: false,
+      filterable: false,
+      headerAlign: 'center',
+      cellClassName: 'wrap-cell-content',
+      disableColumnMenu: true,
+      flex: 0, // Don't allow this column to flex
+    },
+    { 
+      field: 'date', 
+      headerName: 'Date', 
+      width: 100,
+      minWidth: 90,
+      maxWidth: 120,
+      flex: 0.5,
+      cellClassName: 'wrap-cell-content',
+      renderCell: (params) => (
+        <Box sx={{ 
+          width: '100%',
+          textAlign: 'left',
+          '@media (max-width: 600px)': {
+            fontSize: '0.8125rem',
+          }
+        }}>
+          {params.value}
+        </Box>
+      )
+    },
+    {
+      field: 'vehicleNoName',
+      headerName: 'Vehicle Number',
+      width: 140,
+      minWidth: 120,
+      flex: 1,
+      cellClassName: 'wrap-cell-content',
+      renderCell: (params) => {
+        const parts = params.value?.toString().split('-');
+        
+        return (
+          <Box sx={{ 
+            width: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            '@media (max-width: 600px)': {
+              fontSize: '0.8125rem',
+            }
+          }}>
+            <Typography sx={{ 
+              fontWeight: 500,
+              '@media (max-width: 600px)': {
+                fontSize: '0.8125rem',
+              }
+            }}>
+              {parts?.[0] || params.value}
+            </Typography>
+            {parts?.[1] && (
+              <Typography 
+                variant="caption" 
+                color="text.secondary"
+                sx={{
+                  display: 'block',
+                  '@media (max-width: 600px)': {
+                    fontSize: '0.75rem',
+                  }
+                }}
+              >
+                {parts.slice(1).join('-')}
+              </Typography>
+            )}
+          </Box>
+        );
+      },
+    },
+    {
+      field: 'customerMobile',
+      headerName: 'Customer & Mobile',
+      width: 160,
+      minWidth: 130,
+      flex: 1.2,
+      cellClassName: 'wrap-cell-content',
+      renderCell: (params) => {
+        const [name, mobile] = (params.value?.toString().split('-').map((s: string) => s.trim()) || []);
+        return (
+          <Box sx={{ 
+            width: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            '@media (max-width: 600px)': {
+              fontSize: '0.8125rem',
+            }
+          }}>
+            <Typography sx={{ 
+              fontWeight: 500,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              '@media (max-width: 600px)': {
+                fontSize: '0.8125rem',
+              }
+            }}>
+              {name}
+            </Typography>
+            {mobile && (
+              <Typography 
+                variant="caption" 
+                color="text.secondary"
+                sx={{
+                  display: 'block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  '@media (max-width: 600px)': {
+                    fontSize: '0.75rem',
+                  }
+                }}
+              >
+                {mobile}
+              </Typography>
+            )}
+          </Box>
+        );
+      },
+    },
+    { 
+      field: 'status', 
+      headerName: 'Status', 
+      width: 110,
+      minWidth: 100,
+      flex: 0.7,
+      cellClassName: 'wrap-cell-content',
+      renderCell: renderStatus 
+    },
     { 
       field: 'advance', 
       headerName: 'Advance', 
-      flex: 1, 
-      minWidth: 100,
+      width: 100,
+      minWidth: 80,
+      flex: 0.6,
+      cellClassName: 'wrap-cell-content',
       renderCell: (params) => (
-        <Typography variant="body2">₹{params.row.advance}</Typography>
+        <Box sx={{ 
+          width: '100%',
+          '@media (max-width: 600px)': {
+            fontSize: '0.8125rem',
+          }
+        }}>
+          ₹{params.row.advance}
+        </Box>
       )
     },
-    { field: 'hasInvoice', headerName: 'Invoice', flex: 1, minWidth: 100, renderCell: renderInvoiceStatus },
-    { field: 'superwiser', headerName: 'Supervisor', flex: 1, minWidth: 100 },
-    { field: 'technician', headerName: 'Technician', flex: 1, minWidth: 100 },
-    { field: 'worker', headerName: 'Worker', flex: 1, minWidth: 100 },
     { 
       field: 'kilometer', 
-      headerName: 'Kilometers', 
-      flex: 1, 
-      minWidth: 100,
+      headerName: 'Kilometer', 
+      width: 110,
+      minWidth: 80,
+      flex: 0.6,
+      cellClassName: 'wrap-cell-content',
       renderCell: (params) => (
-        <Typography variant="body2">{params.row.kilometer} km</Typography>
+        <Box sx={{ 
+          width: '100%',
+          '@media (max-width: 600px)': {
+            fontSize: '0.8125rem',
+          }
+        }}>
+          {params.row.kilometer}
+        </Box>
       )
     },
-    { field: 'Action', headerName: 'Actions', flex: 1, minWidth: 250, renderCell: renderActionButtons },
+    { 
+      field: 'hasInvoice', 
+      headerName: 'Invoice', 
+      width: 80,
+      minWidth: 70,
+      flex: 0.4,
+      cellClassName: 'wrap-cell-content',
+      renderCell: renderInvoiceStatus,
+      headerAlign: 'center',
+      align: 'center'
+    },
+    { 
+      field: 'superwiser', 
+      headerName: 'Supervisor', 
+      width: 120,
+      minWidth: 100,
+      flex: 0.8,
+      cellClassName: 'wrap-cell-content',
+      renderCell: (params) => (
+        <Box sx={{ 
+          width: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          '@media (max-width: 600px)': {
+            fontSize: '0.8125rem',
+          }
+        }}>
+          {params.value}
+        </Box>
+      )
+    },
+    { 
+      field: 'technician', 
+      headerName: 'Technician', 
+      width: 120,
+      minWidth: 100,
+      flex: 0.8,
+      cellClassName: 'wrap-cell-content',
+      renderCell: (params) => (
+        <Box sx={{ 
+          width: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          '@media (max-width: 600px)': {
+            fontSize: '0.8125rem',
+          }
+        }}>
+          {params.value}
+        </Box>
+      )
+    },
+    { 
+      field: 'worker', 
+      headerName: 'Worker', 
+      width: 120,
+      minWidth: 100,
+      flex: 0.8,
+      cellClassName: 'wrap-cell-content',
+      renderCell: (params) => (
+        <Box sx={{ 
+          width: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          '@media (max-width: 600px)': {
+            fontSize: '0.8125rem',
+          }
+        }}>
+          {params.value}
+        </Box>
+      )
+    },
   ], [renderStatus, renderInvoiceStatus, renderActionButtons]);
-  
+    
   // Client-side filtering
   const filteredRows = React.useMemo(() => {
     const searchTerm = localSearchTerm.toLowerCase();
@@ -681,7 +1053,9 @@ export default function VehicleList() {
       (row.status && row.status.toLowerCase().includes(searchTerm)) ||
       (row.superwiser && row.superwiser.toLowerCase().includes(searchTerm)) ||
       (row.technician && row.technician.toLowerCase().includes(searchTerm)) ||
-      (row.worker && row.worker.toLowerCase().includes(searchTerm))
+      (row.worker && row.worker.toLowerCase().includes(searchTerm)) ||
+      (row.kilometer && row.kilometer.toString().includes(searchTerm)) ||
+      (row.advance && row.advance.toString().includes(searchTerm))
     ));
   }, [rows, localSearchTerm]);
   
@@ -696,11 +1070,6 @@ export default function VehicleList() {
     }, DEBOUNCE_DELAY);
   }, []);
   
-  const handleDelete = useCallback((id: string) => {
-    setSelectedId(id);
-    setOpen(true);
-  }, []);
-  
   const handleApiError = useCallback((err: any, customMessage?: string) => {
     console.error("API Error:", err);
     
@@ -708,12 +1077,12 @@ export default function VehicleList() {
     setError(errorMessage);
     
     setTimeout(() => {
-      setError(null);
+        setError(null);
     }, ERROR_DISPLAY_DURATION);
     
     return errorMessage;
   }, []);
-  
+
   // Optimized search function
   const handleSearch = useCallback(async () => {
     if (isSearching) return;
@@ -764,7 +1133,7 @@ export default function VehicleList() {
           superwiser: singleVehicle.superwiser ?? '',
           technician: singleVehicle.technician ?? '',
           worker: singleVehicle.worker ?? '',
-          kilometer: singleVehicle.kmsDriven ?? 0,
+          kilometer: singleVehicle.kmsDriven ?? '',
           vehicleRegId: singleVehicle.vehicleRegId,
           hasInvoice: false
         }]);
@@ -787,7 +1156,7 @@ export default function VehicleList() {
       setIsSearching(false);
     }
   }, [dateValue, handleApiError, isSearching, processVehicleData, selectedType, textInput, updateInvoiceStatus]);
-  
+    
   // Loading skeleton for better UX
   const SkeletonLoading = useCallback(() => (
     <Box sx={{ p: 2 }}>
@@ -817,6 +1186,15 @@ export default function VehicleList() {
       ))}
     </Box>
   ), [theme]);
+
+  // In handleDeleteSuccess, clear cache and reload fresh data
+  const handleDeleteSuccess = useCallback((deletedId: number) => {
+    setRows(prevRows => prevRows.filter(row => row.vehicleRegId !== String(deletedId)));
+    setOpen(false);
+    setSelectedId("");
+    clearVehicleCache();
+    fetchVehicles(0, false, true); // reload fresh data, skip cache
+  }, [fetchVehicles]);
 
   return (
     <Box sx={{ width: '100%', maxWidth: { xs: '100%', md: '1700px' }, p: 2 }}>
@@ -995,27 +1373,147 @@ export default function VehicleList() {
           )}
 
           {/* Data grid section */}
-          <Box sx={{ 
-            position: 'relative',
-            height: 'calc(100vh - 350px)',
-            minHeight: '400px',
-            width: '100%',
-            overflow: 'hidden',
-            borderRadius: 2,
-            border: `1px solid ${theme.palette.divider}`,
-          }}>
+          <Box 
+            sx={{ 
+              position: 'relative',
+              height: 'calc(100vh - 350px)',
+              minHeight: '400px',
+              width: '100%',
+              overflow: 'hidden',
+              borderRadius: 2,
+              border: `1px solid ${theme.palette.divider}`,
+              display: 'flex',
+              flexDirection: 'column',
+              '@media (max-width: 600px)': {
+                overflow: 'auto',
+                height: 'auto',
+                maxHeight: 'calc(100vh - 250px)',
+                '& .MuiDataGrid-root': {
+                  minWidth: '968px', // Sum of all minWidths plus some padding
+                },
+              },
+            }}
+          >
             {initialLoad ? (
               <SkeletonLoading />
             ) : (
-              <>
+              <Box sx={{ 
+                width: '100%', 
+                height: '100%',
+                overflow: 'hidden',
+                '@media (max-width: 600px)': {
+                  overflow: 'visible',
+                  width: '968px' // Match mobile minWidth
+                }
+              }}>
                 <CustomizedDataGrid 
                   columns={columns} 
                   rows={filteredRows}
                   autoHeight={false}
+                  density="standard"
                   checkboxSelection={false}
-                  disableVirtualization={false}
                   disableRowSelectionOnClick
-                  keepNonExistentRowsSelected={false}
+                  getRowHeight={() => 'auto'}
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 20 } },
+                  }}
+                  disableColumnMenu
+                  columnVisibilityModel={{
+                    // These columns will hide on smaller screens but remain visible on desktop
+                    superwiser: window.innerWidth > 1200,
+                    technician: window.innerWidth > 1100,
+                    worker: window.innerWidth > 1000,
+                  }}
+                  sx={{
+                    width: '100%',
+                    height: '100%',
+                    border: '1px solid #e0e0e0',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    '& .MuiDataGrid-cell': {
+                      borderBottom: '1px solid #f0f0f0',
+                      padding: '8px 16px',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'normal !important',
+                      wordWrap: 'break-word',
+                      lineHeight: '1.43',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      '@media (max-width: 600px)': {
+                        padding: '8px',
+                      },
+                      '&.wrap-cell-content': {
+                        whiteSpace: 'normal',
+                        lineHeight: '1.2em',
+                        paddingTop: '0.5rem',
+                        paddingBottom: '0.5rem',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                      },
+                    },
+                    '& .MuiDataGrid-row': {
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: '#f5f5f5',
+                      },
+                      minHeight: '36px !important',
+                      maxHeight: 'none !important',
+                      '@media (max-width: 600px)': {
+                        minHeight: '48px !important',
+                      },
+                    },
+                    '& .MuiDataGrid-columnHeader': {
+                      padding: '8px 16px',
+                      backgroundColor: '#fafafa',
+                      borderBottom: '1px solid #e0e0e0',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      '@media (max-width: 600px)': {
+                        padding: '8px',
+                        '& .MuiDataGrid-columnHeaderTitle': {
+                          fontSize: '0.8125rem',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        },
+                      },
+                    },
+                    '& .MuiDataGrid-columnHeaders': {
+                      borderBottom: 'none',
+                    },
+                    '& .MuiDataGrid-columnHeaderTitleContainer': {
+                      padding: '0',
+                      overflow: 'hidden',
+                    },
+                    '& .MuiDataGrid-root': {
+                      borderWidth: 0
+                    },
+                    '& .MuiTablePagination-root': {
+                      margin: 0,
+                      borderTop: '1px solid #e0e0e0',
+                    },
+                    '& .MuiDataGrid-iconSeparator': {
+                      display: 'none'
+                    },
+                    '& .MuiDataGrid-virtualScroller': {
+                      overflow: 'hidden', // Set to hidden for desktop view
+                      '@media (max-width: 600px)': {
+                        overflow: 'visible', // Keep visible for mobile
+                      },
+                    },
+                    '& .MuiDataGrid-main': {
+                      overflow: 'hidden', // Hide overflow for desktop
+                      maxWidth: '100%',
+                      '@media (max-width: 600px)': {
+                        overflow: 'visible', // Keep visible for mobile
+                      },
+                    },
+                    '& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell': {
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    },
+                  }}
                 />
                 
                 {loading && !initialLoad && !isSearching && (
@@ -1033,7 +1531,7 @@ export default function VehicleList() {
                   </Typography>
                 </Box>
                 )}
-              </>
+              </Box>
             )}
             
             {/* Intersection observer target element */}
@@ -1066,6 +1564,7 @@ export default function VehicleList() {
         open={open} 
         onClose={() => setOpen(false)} 
         deleteItemId={Number(selectedId)} 
+        onDeleteSuccess={handleDeleteSuccess}
       />
       
       <Copyright sx={{ my: 4 }} />

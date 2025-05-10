@@ -20,12 +20,14 @@ interface DeleteModalProps {
   open: boolean;
   onClose: () => void;
   deleteItemId?: number;
+  onDeleteSuccess?: (id: number) => void;
 }
 
 export default function VehicleDeleteModal({
   open,
   onClose,
   deleteItemId,
+  onDeleteSuccess,
 }: DeleteModalProps) {
   const handleDeleteRequest = async () => {
     if (deleteItemId === undefined) {
@@ -34,6 +36,7 @@ export default function VehicleDeleteModal({
     }
     try {
       await apiClient.delete(`/vehicle-reg/delete?vehicleRegId=${deleteItemId}`);
+      if (onDeleteSuccess) onDeleteSuccess(deleteItemId);
       onClose();
     } catch (error) {
       console.error("Error deleting vehicle:", error);
