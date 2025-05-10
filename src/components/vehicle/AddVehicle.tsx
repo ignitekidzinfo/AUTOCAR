@@ -59,6 +59,7 @@ export interface VehicleRegDto {
   insuranceFrom: string | null;
   insuranceTo: string | null;
   vehicleVariant: string; 
+  fuelType: string;
   manufactureYear: number | string;
   advancePayment?: number | string;
 }
@@ -232,6 +233,8 @@ export default function AddVehicle() {
   const [searchResults, setSearchResults] = useState<VehicleRegDto[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleRegDto | null>(null);
   const [loadingVehicle, setLoadingVehicle] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [processingDialogOpen, setProcessingDialogOpen] = useState(false);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setErrors((prev) => ({ ...prev, [event.target.name]: "" }));
@@ -282,12 +285,22 @@ export default function AddVehicle() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!validateFields()) return;
+    
+    // Start loading indicator
+    setIsSubmitting(true);
+    
+    if (!id) {
+      // Show processing dialog for new vehicles
+      setProcessingDialogOpen(true);
+    }
+    
     try {
       const { variant, fuelType, insuranceFrom, insuranceTo, ...restData } = formData;
       // If adding a new vehicle (no id), clear all backend IDs
       let payload = {
         ...restData,
-        vehicleVariant: fuelType || variant || "",
+        vehicleVariant: variant || "",
+        fuelType: fuelType || "",
         status: id ? formData.status : "Waiting",
         insuredFrom: insuranceFrom || null,
         insuredTo: insuranceTo || null
@@ -301,20 +314,63 @@ export default function AddVehicle() {
           userId: '',
         };
       }
-      let response: any = "";
+      
       if (id) {
-        response = await VehicleUpdate(payload);
+        // For updates, wait for the response
+        const response = await VehicleUpdate(payload);
+        console.log("Vehicle update successful:", response);
+        setDialogTitle("Success");
+        setDialogMessage("Vehicle updated successfully!");
+        setDialogOpen(true);
+        setIsSubmitting(false);
       } else {
-        response = await VehicleAdd(payload);
-      }
-      console.log("Vehicle operation successful:", response);
-      setDialogTitle("Success");
-      setDialogMessage(`Vehicle ${id ? "updated" : "added"} successfully!`);
-      setDialogOpen(true);
-      if (!id) {
-        const generatedId = response.data.vehicleRegId;
-        navigate(`/admin/vehicle/add/servicepart/${generatedId}`);
-        resetForm();
+        // For new vehicles, navigate quickly while the request processes in background
+        
+        // Generate temporary ID to use until real ID is received from the server
+        const tempId = "pending-" + Date.now();
+        
+        // Store vehicle data in sessionStorage for the next page to access if needed
+        // This allows the service parts page to work with the vehicle data before 
+        // the actual API response is received
+        sessionStorage.setItem('pendingVehicleData', JSON.stringify(payload));
+        sessionStorage.setItem('pendingVehicleId', tempId);
+        
+        // Navigate after a short delay (max 1.5 seconds)
+        // This gives a perception of processing while not making the user wait
+        // for the full API response which can take 6-7 seconds
+        setTimeout(() => {
+          setProcessingDialogOpen(false);
+          resetForm();
+          // Pass pending status and data via navigation state
+          navigate(`/admin/vehicle/add/servicepart/${tempId}`, { 
+            state: { 
+              isPending: true,
+              pendingVehicleData: payload 
+            } 
+          });
+        }, 1500);
+        
+        // Start the API call in the background after navigation
+        // This continues to process while the user is on the next page
+        VehicleAdd(payload).then(response => {
+          console.log("Vehicle addition successful:", response);
+          const generatedId = response.data.vehicleRegId;
+          
+          // Store the real ID in sessionStorage so the service part page can check for it
+          // The service part page should periodically check this value to update its state
+          sessionStorage.setItem('realVehicleId', generatedId);
+          sessionStorage.setItem('pendingVehicleId', ''); // Clear pending status
+          
+          // Note: The AddVehiclePartService component needs to be updated to:
+          // 1. Check if the ID in the URL is a pending ID (starts with "pending-")
+          // 2. If so, periodically check sessionStorage for 'realVehicleId'
+          // 3. Once 'realVehicleId' is available, use it for all API calls
+          // 4. Optionally update the URL to use the real ID (using history.replaceState)
+        }).catch(error => {
+          console.error("Error processing vehicle in background:", error);
+          sessionStorage.setItem('vehicleAddError', error?.message || 'Unknown error');
+          // Service part page should also check for this error
+        });
       }
     } catch (error: any) {
       console.error("Error processing vehicle:", error);
@@ -325,6 +381,8 @@ export default function AddVehicle() {
       setDialogTitle("Error");
       setDialogMessage(errorMsg);
       setDialogOpen(true);
+      setProcessingDialogOpen(false);
+      setIsSubmitting(false);
     }
   };
   React.useEffect(() => {
@@ -421,7 +479,7 @@ export default function AddVehicle() {
           insuranceStatus: response.insuranceStatus || "Expired",
           insuranceFrom: response.insuredFrom || "",
           insuranceTo: response.insuredTo || "",
-          fuelType: response.vehicleVariant || "",
+          fuelType: response.fuelType || "",
           variant: response.vehicleVariant || "",
           manufactureYear: response.manufactureYear ? String(response.manufactureYear) : "",
           advancePayment: response.advancePayment || 0,
@@ -496,7 +554,7 @@ export default function AddVehicle() {
                             insuranceStatus: value.insuranceStatus || "Expired",
                             insuranceFrom: value.insuranceFrom || "",
                             insuranceTo: value.insuranceTo || "",
-                            fuelType: value.vehicleVariant || "",
+                            fuelType: value.fuelType || "",
                             variant: value.vehicleVariant || "",
                             manufactureYear: value.manufactureYear ? String(value.manufactureYear) : "",
                             advancePayment: value.advancePayment || 0,
@@ -991,16 +1049,30 @@ export default function AddVehicle() {
         
         <Grid container sx={{ mt: 2 }}>
           <Grid item xs={12} display="flex" gap={2} flexDirection={{ xs: 'column', sm: 'row' }}>
-            <Button type="submit" variant="contained" color="primary" sx={{ flex: 1 }}>
-              Submit
+            <Button 
+              type="submit" 
+              variant="contained" 
+              color="primary" 
+              sx={{ flex: 1 }}
+              disabled={isSubmitting}
+              startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
+            >
+              {isSubmitting ? "Processing..." : "Submit"}
             </Button>
-            <Button type="button" variant="outlined" onClick={resetForm} sx={{ flex: 1 }}>
+            <Button 
+              type="button" 
+              variant="outlined" 
+              onClick={resetForm} 
+              sx={{ flex: 1 }}
+              disabled={isSubmitting}
+            >
               Reset
             </Button>
           </Grid>
         </Grid>
       </form>
       
+      {/* Submit Results Dialog */}
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
@@ -1015,6 +1087,39 @@ export default function AddVehicle() {
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Close</Button>
         </DialogActions>
+      </Dialog>
+      
+      {/* Processing Dialog */}
+      <Dialog
+        open={processingDialogOpen}
+        aria-labelledby="processing-dialog-title"
+        PaperProps={{ 
+          style: { 
+            padding: 30, 
+            textAlign: "center",
+            minWidth: '300px',
+            borderRadius: '12px'
+          } 
+        }}
+        disableEscapeKeyDown
+      >
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          gap: 3,
+          py: 2
+        }}>
+          <CircularProgress size={50} />
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Processing Vehicle Data
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              We're saving your data and preparing the next page...
+            </Typography>
+          </Box>
+        </Box>
       </Dialog>
       
       {loadingVehicle && (

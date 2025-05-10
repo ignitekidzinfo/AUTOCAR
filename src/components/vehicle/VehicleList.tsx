@@ -1375,13 +1375,13 @@ export default function VehicleList() {
           {/* Data grid section */}
           <Box 
             sx={{ 
-              position: 'relative',
-              height: 'calc(100vh - 350px)',
-              minHeight: '400px',
-              width: '100%',
-              overflow: 'hidden',
-              borderRadius: 2,
-              border: `1px solid ${theme.palette.divider}`,
+            position: 'relative',
+            height: 'calc(100vh - 350px)',
+            minHeight: '400px',
+            width: '100%',
+            overflow: 'hidden',
+            borderRadius: 2,
+            border: `1px solid ${theme.palette.divider}`,
               display: 'flex',
               flexDirection: 'column',
               '@media (max-width: 600px)': {

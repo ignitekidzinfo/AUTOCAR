@@ -25,7 +25,7 @@ import {
   DialogContent,
   DialogActions,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import CustomizedDataGrid from "components/CustomizedDataGrid";
 import { GridCellParams, GridRowsProp, GridColDef } from "@mui/x-data-grid";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -99,7 +99,7 @@ interface SpareFilterDto {
 }
 interface Feedback {
   message: string;
-  severity: "success" | "error";
+  severity: "success" | "error" | "warning" | "info";
 }
 const AddVehiclePartService: React.FC = () => {
   const [createData, setCreateData] = useState<CreateTransaction>(initialCreateData);
@@ -113,14 +113,68 @@ const AddVehiclePartService: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>("spare");
   const [errorDialogOpen, setErrorDialogOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
-
+  // New state to track real vehicle ID for pending vehicles
+  const [realVehicleId, setRealVehicleId] = useState<string | null>(null);
+  const [isPendingId, setIsPendingId] = useState<boolean>(false);
+  
   const navigate = useNavigate();
-  const { id } = useParams(); 
+  const location = useLocation();
+  const { id } = useParams();
+  
+  // Check if we're dealing with a pending vehicle ID
+  useEffect(() => {
+    if (id && id.toString().startsWith('pending-')) {
+      setIsPendingId(true);
+      
+      // Check if there's already a real ID in sessionStorage
+      const storedRealId = sessionStorage.getItem('realVehicleId');
+      if (storedRealId) {
+        setRealVehicleId(storedRealId);
+        // Update the URL without refreshing the page
+        window.history.replaceState(
+          null,
+          '',
+          location.pathname.replace(id, storedRealId)
+        );
+      } else {
+        // Set up polling to check for real ID
+        const checkRealIdInterval = setInterval(() => {
+          const updatedRealId = sessionStorage.getItem('realVehicleId');
+          if (updatedRealId) {
+            setRealVehicleId(updatedRealId);
+            clearInterval(checkRealIdInterval);
+            // Update the URL without refreshing the page
+            window.history.replaceState(
+              null,
+              '',
+              location.pathname.replace(id, updatedRealId)
+            );
+          }
+        }, 1000); // Check every second
+        
+        // Clear interval when component unmounts
+        return () => clearInterval(checkRealIdInterval);
+      }
+    }
+  }, [id, location.pathname]);
+  
+  // Helper function to get effective vehicle ID for API calls
+  const getEffectiveVehicleId = useCallback(() => {
+    return isPendingId && realVehicleId ? realVehicleId : id;
+  }, [isPendingId, realVehicleId, id]);
 
   const fetchSparePartList = useCallback(async () => {
+    const effectiveId = getEffectiveVehicleId();
+    
+    // Don't fetch if we're still waiting for a real ID
+    if (isPendingId && !realVehicleId) {
+      console.log("Waiting for real vehicle ID before fetching spare parts");
+      return;
+    }
+    
     try {
       const responsePart = await apiClient.get(
-        `/sparePartTransactions/vehicleRegId?vehicleRegId=${id}` );
+        `/sparePartTransactions/vehicleRegId?vehicleRegId=${effectiveId}` );
       if (!responsePart.data || responsePart.data.length === 0) {
         console.warn("No transactions found for this vehicleRegId");
         return; }
@@ -145,13 +199,15 @@ const AddVehiclePartService: React.FC = () => {
     } catch (err) {
       console.error("Error fetching transactions:", err);  
     } 
-  }, [id, rows.length]);
+  }, [getEffectiveVehicleId, rows.length]);
 
+  // Update the fetchSparePartList dependency to run when realVehicleId changes
   useEffect(() => {
-    if (id) {
+    const effectiveId = getEffectiveVehicleId();
+    if (effectiveId) {
       fetchSparePartList();
     }
-  }, [id, fetchSparePartList]);
+  }, [getEffectiveVehicleId, fetchSparePartList, realVehicleId]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -212,10 +268,21 @@ const AddVehiclePartService: React.FC = () => {
     setSearchKeyword(""); };
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const effectiveId = getEffectiveVehicleId();
+    
+    // Don't submit if we're still waiting for a real ID
+    if (isPendingId && !realVehicleId) {
+      setFeedback({
+        message: "Please wait until vehicle registration is complete before adding parts",
+        severity: "error"
+      });
+      return;
+    }
+    
     try {
       const updatedData = {
         ...createData,
-        vehicleRegId: Number(id),
+        vehicleRegId: Number(effectiveId),
         userId: null,
       };
       const response = await apiClient.post("/sparePartTransactions/add", updatedData);
@@ -318,7 +385,7 @@ const AddVehiclePartService: React.FC = () => {
         label: "Job Card",
         icon: <Task fontSize="large" color="primary" />,
         value: "jobCard",
-        onClick: () => navigate(`/admin/job-card/${id}`),
+        onClick: () => navigate(`/admin/job-card/${getEffectiveVehicleId()}`),
       },
       {
         label: "Spare",
@@ -330,7 +397,7 @@ const AddVehiclePartService: React.FC = () => {
         label: "Service",
         icon: <NoteAdd fontSize="large" color="primary" />,
         value: "service",
-        onClick: () => navigate(`/admin/serviceTab/${id}`),
+        onClick: () => navigate(`/admin/serviceTab/${getEffectiveVehicleId()}`),
       },
     ];
 
@@ -371,7 +438,12 @@ const AddVehiclePartService: React.FC = () => {
       }} >
       <Box sx={{ mb: 2 }}>
         <Typography variant="subtitle1" color="textSecondary">
-          Vehicle Registration ID: {id}
+          Vehicle Registration ID: {getEffectiveVehicleId()}
+          {isPendingId && !realVehicleId && (
+            <Typography component="span" color="warning.main" sx={{ ml: 1, fontStyle: 'italic' }}>
+              (Processing vehicle registration...)
+            </Typography>
+          )}
         </Typography>
       </Box>
       
