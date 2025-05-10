@@ -19,6 +19,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useNotification } from '../../components/common/Notification';
 import { apiClient } from '../../utils/apiClient';
+import { clearEmployeeCache } from './EmployeeList';
 
 interface EmployeeForm {
   name: string;
@@ -268,8 +269,21 @@ const EmployeeManagement: React.FC = () => {
           message: isEditMode ? 'Employee updated successfully' : 'Employee created successfully', 
           type: 'success' 
         });
+        
+        // Clear the employee cache to ensure fresh data is loaded
+        clearEmployeeCache();
+        
+        // Signal other tabs/windows that employee data has changed
+        try {
+          localStorage.setItem('employee_data_updated', Date.now().toString());
+        } catch (error) {
+          console.error('Error setting localStorage:', error);
+        }
+        
         handleReset();
-        navigate('/admin/employeelist');
+        
+        // Navigate with state to indicate refresh is needed
+        navigate('/admin/employeelist', { state: { refresh: true } });
       } else {
         showNotification({ 
           message: response.data.message || (isEditMode ? 'Failed to update employee' : 'Failed to create employee'),

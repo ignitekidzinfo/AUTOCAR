@@ -77,6 +77,20 @@ let employeesCache = {
   timestamp: 0
 };
 
+// Add a function to clear cache that can be exported
+export const clearEmployeeCache = () => {
+  console.log('Clearing employee cache');
+  employeesCache = {
+    data: null,
+    timestamp: 0
+  };
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+  }
+};
+
 const EmployeeList: FC = () => {
   const [employees, setEmployees] = useState<EmployeeDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,15 +237,23 @@ const EmployeeList: FC = () => {
     };
   }, [fetchEmployees]);
 
-  // Existing code for refetching when location changes
+  // Update the useEffect for location changes to force a fresh load
   useEffect(() => {
     if (location.pathname === '/admin/employeelist') {
       console.log('Back at employee list, refreshing data');
-      fetchEmployees(false); // Don't show loading state when coming back to the page
+      // Check for a state flag indicating we should perform a fresh reload
+      const needsFreshData = location.state && (location.state as any).refresh;
+      
+      if (needsFreshData) {
+        console.log('Fresh data requested, clearing cache');
+        clearEmployeeCache();
+      }
+      
+      fetchEmployees(!needsFreshData); // Show loading state when we need fresh data
     }
   }, [location, fetchEmployees]);
 
-  // Optimized visibility change handler
+  // Optimized visibility change handler - keep this to refresh when tab becomes active
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -245,6 +267,20 @@ const EmployeeList: FC = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
+  }, [fetchEmployees]);
+
+  // Use effect to listen for storage events (for multi-tab synchronization)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'employee_data_updated') {
+        console.log('Detected employee data change in another tab/window');
+        clearEmployeeCache();
+        fetchEmployees(false);
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [fetchEmployees]);
 
   const handleEdit = (employeeId: number | null) => {
@@ -328,8 +364,10 @@ const EmployeeList: FC = () => {
     navigate('/admin/employeeManagement');
   };
 
+  // Update handleRefresh to properly clear cache
   const handleRefresh = () => {
-    fetchEmployees(false);
+    clearEmployeeCache();
+    fetchEmployees(true);
   };
 
   const handleFilterChange = (event: React.SyntheticEvent, newValue: string) => {
