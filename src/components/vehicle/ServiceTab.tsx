@@ -20,7 +20,6 @@ import {
 import { Task, Description, NoteAdd } from '@mui/icons-material';
 import { useNotification } from '../common/Notification';
 
-// HeaderCard styled component for navigation
 const HeaderCard = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   textAlign: "center",
@@ -31,16 +30,14 @@ const HeaderCard = styled(Paper)(({ theme }) => ({
   flexDirection: "column",
   justifyContent: "center",
   alignItems: "center",
-  height: 120, // Fixed height for consistency
-  width: '100%', // Use full width of the grid item
+  height: 120, 
+  width: '100%', 
   boxShadow: theme.shadows[2],
   "&:hover": {
     transform: "scale(1.03)",
     boxShadow: theme.shadows[4],
   },
 }));
-
-// Search input and results styling
 const SearchInputWrapper = styled(Box)(({ theme }) => ({
   position: "relative",
   borderRadius: theme.shape.borderRadius,
@@ -81,7 +78,6 @@ const SearchResultItem = styled(Box)(({ theme }) => ({
   },
 }));
 
-// Table related styles
 const StyledTable = styled(Box)(({ theme }) => ({
   width: '100%',
   overflowX: 'auto',
@@ -152,7 +148,6 @@ const ServiceTab = () => {
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Function to render header cards
   const renderHeaderCards = () => {
     const headerCards = [
       {
@@ -171,7 +166,7 @@ const ServiceTab = () => {
         label: "Service",
         icon: <NoteAdd fontSize="large" color="primary" />,
         value: "service",
-        onClick: () => {}, // already on service tab
+        onClick: () => {}, 
       },
     ];
 
@@ -245,7 +240,7 @@ const ServiceTab = () => {
           const mapped: InvoiceService[] = res.data.map((item: any) => ({
             serviceId: item.serviceId,
             serviceName: item.serviceName,
-            serviceRate: item.rate, // might be null
+            serviceRate: item.rate, 
             totalGst: item.cGST + item.sGST,
             quantity: item.quantity,
             taxable: item.rate * item.quantity,
@@ -258,7 +253,6 @@ const ServiceTab = () => {
             ...prev.filter((s) => s.newService)
           ]);
         } catch (error) {
-          // If 404, just handle it silently (no services exist yet for this vehicle)
           const axiosError = error as { response?: { status: number } };
           if (axiosError.response?.status !== 404) {
             console.error("Error fetching services:", error);
@@ -274,7 +268,7 @@ const ServiceTab = () => {
     };
 
     fetchServices();
-  }, [vehicleId]); // Remove showNotification from dependencies to prevent infinite loops
+  }, [vehicleId]); 
 
   const addService = (service: Service) => {
     if (services.some((s) => s.serviceId === service.serviceId)) {
@@ -616,7 +610,6 @@ const ServiceTab = () => {
         )}
       </Paper>
 
-      {/* Already added service modal */}
       <Dialog open={showModal} onClose={() => setShowModal(false)}>
         <DialogTitle>Service Already Added</DialogTitle>
         <DialogContent>
@@ -631,7 +624,6 @@ const ServiceTab = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Success modal */}
       <Dialog open={showSuccessModal} onClose={() => setShowSuccessModal(false)}>
         <DialogTitle>Success</DialogTitle>
         <DialogContent>

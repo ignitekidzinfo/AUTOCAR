@@ -1,93 +1,125 @@
 import { filter } from "types/SparePart";
-import apiClient from "./apiService";
+import { apiClient } from "../utils/apiClient";
 import { VehicleFormData } from "types/Vahicle";
 
 export const VehicleListData = async () => {
-    try {
-      const response = await apiClient.get("/vehicle-reg/getAll");
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
-    }
-  };
+  try {
+    const response = await apiClient.get("/vehicle-reg/getAll");
+    
+    // Ensure we're returning the data in expected format
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching vehicles:", error);
+    throw error; // Propagate error for better handling
+  }
+};
 
-  export const VehicleAdd = async (vData : VehicleFormData) => {
-    try {
-      const response = await apiClient.post("/vehicle-reg/add" , vData);
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
-    }
-  };
+export const VehicleAdd = async (vData : VehicleFormData) => {
+  try {
+    const response = await apiClient.post("/vehicle-reg/add" , vData);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching spare parts:", error);
+    throw new Error("Failed to fetch spare parts");
+  }
+};
 
-  export const VehicleDataByID = async (VID : string | number) => {
-    try {
-      const response = await apiClient.get(`vehicle-reg/getById?vehicleRegId=${VID}` );
-      return response.data.data;
-    } catch (error) {
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
-    }
-  };
+export const VehicleDataByID = async (VID : string | number) => {
+  try {
+    const response = await apiClient.get(`vehicle-reg/getById?vehicleRegId=${VID}` );
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching spare parts:", error);
+    throw new Error("Failed to fetch spare parts");
+  }
+};
+
+export const VehicleUpdate = async ( vData : VehicleFormData) => {
+  try{
+    const response = await apiClient.patch(`vehicle-reg/update?vehicleRegId=${vData.vehicleRegId}` , vData);
+    return response.data;
+  }catch(error) { 
+    console.error("Error fetching spare parts:", error);
+    throw new Error("Failed to fetch spare parts");
+  }
+}
+
+export const VehicleDelete = async ( vehicleRegId : number | number) => {
+  try{
+    const response = await apiClient.put(`vehicle-reg/delete?vehicleRegId=${vehicleRegId}`);
+    return response.data;
+  }catch(error) { 
+    console.error("Error fetching spare parts:", error);
+    throw new Error("Failed to fetch spare parts");
+  }
+}
+
+export const VehicleSperPartDelete = async ( vehicleSparePartId : number | number) => {
+  try{
+    const response = await apiClient.delete(`sparePartTransactions/delete?transactionId=${vehicleSparePartId}`);
+    return response.data;
+  }catch(error) { 
+    console.error("Error fetching spare parts:", error);
+    throw new Error("Failed to fetch spare parts");
+  }
+}
+
+export const GetVehicleByAppointmentID = async ( filterData : filter) => {
+  try{
+    const response = await apiClient.get(`vehicle-reg/getByAppointmentId?appointmentId=${filterData.appointmentId}`);
+    return response.data;
+  }catch(error) { 
+    console.error("Error fetching spare parts:", error);
+    throw new Error("Failed to fetch spare parts");
+  }
+}
+
+export const GetVehicleByDateRange = async ( filterData : filter) => {
+  try{
+    const response = await apiClient.get(`vehicle-reg/date-range?startDate=${filterData.startDate}&endDate=${filterData.endDate}`);
+    return response.data;
+  }catch(error) { 
+    console.error("Error fetching spare parts:", error);
+    throw new Error("Failed to fetch spare parts");
+  }
+}
+
+export const GetVehicleByStatus = async (filterData: filter) => {
+  // Create a cache key based on the status
+  const cacheKey = `vehicle_status_${filterData.status}`;
   
-  export const VehicleUpdate = async ( vData : VehicleFormData) => {
-    try{
-      const response = await apiClient.patch(`vehicle-reg/update?vehicleRegId=${vData.vehicleRegId}` , vData);
-      return response.data;
-    }catch(error) { 
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
+  // Check if we have a recent cached result (less than 2 minutes old)
+  const cachedData = sessionStorage.getItem(cacheKey);
+  if (cachedData) {
+    try {
+      const parsedData = JSON.parse(cachedData);
+      // If cache is fresh (less than 2 minutes old), use it
+      if (parsedData.timestamp > Date.now() - (2 * 60 * 1000)) {
+        console.log('Using cached vehicle status data');
+        return { data: parsedData.data };
+      }
+    } catch (e) {
+      console.error('Error parsing cached vehicle status data:', e);
     }
   }
-
-  export const VehicleDelete = async ( vehicleRegId : number | number) => {
-    try{
-      const response = await apiClient.put(`vehicle-reg/delete?vehicleRegId=${vehicleRegId}`);
-      return response.data;
-    }catch(error) { 
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
+  
+  // If no valid cache exists, make the actual API call
+  try {
+    const response = await apiClient.get(`vehicle-reg/GetStatus?status=${filterData.status}`);
+    
+    // Cache the response
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        data: response.data,
+        timestamp: Date.now()
+      }));
+    } catch (cacheError) {
+      console.warn('Failed to cache vehicle status data:', cacheError);
     }
+    
+    return response.data;
+  } catch (error) { 
+    console.error("Error fetching vehicles by status:", error);
+    throw new Error("Failed to fetch vehicles by status");
   }
-
-  export const VehicleSperPartDelete = async ( vehicleSparePartId : number | number) => {
-    try{
-      const response = await apiClient.delete(`sparePartTransactions/delete?transactionId=${vehicleSparePartId}`);
-      return response.data;
-    }catch(error) { 
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
-    }
-  }
-
-  export const GetVehicleByAppointmentID = async ( filterData : filter) => {
-    try{
-      const response = await apiClient.get(`vehicle-reg/getByAppointmentId?appointmentId=${filterData.appointmentId}`);
-      return response.data;
-    }catch(error) { 
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
-    }
-  }
-
-  export const GetVehicleByDateRange = async ( filterData : filter) => {
-    try{
-      const response = await apiClient.get(`vehicle-reg/date-range?startDate=${filterData.startDate}&endDate=${filterData.endDate}`);
-      return response.data;
-    }catch(error) { 
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
-    }
-  }
-
-  export const GetVehicleByStatus = async ( filterData : filter) => {
-    try{
-      const response = await apiClient.get(`vehicle-reg/GetStatus?status=${filterData.status}`);
-      return response.data;
-    }catch(error) { 
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
-    }
-  }
+}

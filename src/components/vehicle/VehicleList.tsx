@@ -44,10 +44,11 @@ import ReactDatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import PreviewIcon from '@mui/icons-material/Preview';
 import { Print, FilterListOutlined, Add as AddIcon } from '@mui/icons-material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { filter } from 'types/SparePart';
-import apiClient from 'utils/apiClient';
+import { apiClient } from 'utils/apiClient';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 // Constants for improved performance
@@ -57,11 +58,115 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
 const SCROLL_THRESHOLD = 200;
 const ERROR_DISPLAY_DURATION = 5000;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minute cache
+const CACHE_TTL = 0; // Disable caching completely
 const MEMORY_CACHE_SIZE = 50; // Maximum number of items in memory cache
+const AUTO_REFRESH_INTERVAL = 3000; // Check for updates every 3 seconds (even more frequent)
 
-// In-memory cache for ultra-fast access
-const memoryCache: Map<string, {data: any, timestamp: number}> = new Map();
+// IMPORTANT: Force immediate cache invalidation when data changes
+let cacheVersion = Date.now();
+
+// Create a global force refresh counter to completely bypass React's rendering optimizations when needed
+window.__FORCE_REFRESH_COUNTER = window.__FORCE_REFRESH_COUNTER || 0;
+
+// Declare TypeScript type for the window object extension
+declare global {
+  interface Window {
+    __FORCE_REFRESH_COUNTER: number;
+    vehicleDataChanged: boolean;
+  }
+}
+
+// Flag to track if data has changed
+window.vehicleDataChanged = false;
+
+// Global event bus for cross-component communication
+document.addEventListener('vehicleDataChange', () => {
+  window.__FORCE_REFRESH_COUNTER++;
+  window.vehicleDataChanged = true;
+  console.log('Global vehicle data change detected, refresh counter:', window.__FORCE_REFRESH_COUNTER);
+});
+
+// Completely disable any caching for vehicle data
+function disableVehicleCache() {
+  // Clear existing cache completely
+  localStorage.removeItem('vehicleCache');
+  sessionStorage.removeItem('vehicleCache');
+  
+  // Replace fetch with non-caching version
+  const originalFetch = window.fetch;
+  window.fetch = function(input, init) {
+    // For vehicle endpoints, add cache busting
+    if (typeof input === 'string' && 
+        (input.includes('vehicle') || input.includes('Vehicle'))) {
+      const url = new URL(input, window.location.origin);
+      url.searchParams.append('_nocache', Date.now().toString());
+      return originalFetch(url.toString(), {
+        ...init,
+        headers: {
+          ...init?.headers,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+    }
+    return originalFetch(input, init);
+  };
+}
+
+// Execute on load
+disableVehicleCache();
+
+// Function to force refresh of vehicle data
+function forceVehicleDataRefresh() {
+  // Increment counter to ensure UI sees this as a change
+  window.__FORCE_REFRESH_COUNTER++;
+  window.vehicleDataChanged = true;
+  
+  // Force invalidate caches
+  cacheVersion = Date.now();
+  
+  // Clear cached data
+  Object.keys(localStorage).forEach(key => {
+    if (key.includes('vehicle')) {
+      localStorage.removeItem(key);
+    }
+  });
+  
+  // Dispatch global event
+  document.dispatchEvent(new CustomEvent('vehicleDataChange'));
+  
+  console.log('Forced vehicle data refresh at:', new Date().toISOString());
+  return true;
+}
+
+// Direct API call that completely bypasses cache
+async function fetchDirectFromApi(url: string): Promise<any> {
+  try {
+    const timestamp = Date.now();
+    const noCacheUrl = `${url}${url.includes('?') ? '&' : '?'}_nocache=${timestamp}`;
+    
+    const response = await fetch(noCacheUrl, {
+      method: 'GET',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
+      credentials: 'same-origin'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Direct API fetch error:', error);
+    throw error;
+  }
+}
 
 interface Vehicle {
   vehicleRegId: string;
@@ -88,26 +193,14 @@ interface PaginatedResponse {
 // Check if data is cached and fresh
 function getCachedData<T>(key: string): T | null {
   try {
-    // First check memory cache for the fastest performance
-    const memoryCached = memoryCache.get(key);
-    if (memoryCached && Date.now() - memoryCached.timestamp < CACHE_TTL) {
-      return memoryCached.data as T;
-    }
-    
-    // Then check localStorage
+    // Check localStorage only - memory cache has been removed
     const cached = localStorage.getItem(key);
     if (cached) {
       const data = JSON.parse(cached);
-      if (data.timestamp && Date.now() - data.timestamp < CACHE_TTL) {
-        // Update memory cache for next time
-        if (memoryCache.size >= MEMORY_CACHE_SIZE) {
-          // Remove oldest item if cache is full
-          const oldestKey = memoryCache.keys().next().value;
-          if (oldestKey !== undefined) {
-            memoryCache.delete(oldestKey);
-          }
-        }
-        memoryCache.set(key, {data, timestamp: Date.now()});
+      // Check timestamp AND version to ensure we're not using stale data
+      if (data.timestamp && 
+          Date.now() - data.timestamp < CACHE_TTL && 
+          data.version === cacheVersion) {
         return data as T;
       }
     }
@@ -123,24 +216,15 @@ function getCachedData<T>(key: string): T | null {
   return null;
 }
 
-// Save data to both caches
+// Save data to localStorage only
 function saveToCache<T>(key: string, data: T): void {
-        try {
-    // Save to localStorage first (which could fail if data is too large)
+  try {
+    // Save to localStorage only
     localStorage.setItem(key, JSON.stringify({
       ...data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      version: cacheVersion // Add version to cache entry
     }));
-    
-    // Then update memory cache
-    if (memoryCache.size >= MEMORY_CACHE_SIZE) {
-      // Remove oldest item if cache is full
-      const oldestKey = memoryCache.keys().next().value;
-      if (oldestKey !== undefined) {
-        memoryCache.delete(oldestKey);
-      }
-    }
-    memoryCache.set(key, {data, timestamp: Date.now()});
   } catch (e) {
     console.error('Error saving to cache:', e);
     // Try to save a smaller version if data is too large
@@ -161,7 +245,8 @@ function saveToCache<T>(key: string, data: T): void {
           };
           localStorage.setItem(key, JSON.stringify({
             ...trimmedData,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            version: cacheVersion // Add version to cache entry
           }));
         }
       } catch {
@@ -171,110 +256,84 @@ function saveToCache<T>(key: string, data: T): void {
   }
 }
 
-// Optimized batch check function - only checks what's absolutely necessary
-export async function batchCheckInvoiceStatus(vehicleIds: string[]): Promise<Record<string, boolean>> {
-  if (!vehicleIds.length) return {};
+// Function to invalidate cache when data changes
+function invalidateCache() {
+  // Update cache version to immediately invalidate all existing cache entries
+  cacheVersion = Date.now();
   
-  // If there's already a check in progress, return empty
-  if ((window as any).__batchCheckInProgress) return {};
+  // Clear localStorage cache for vehicle data
+  Object.keys(localStorage)
+    .filter(key => key.startsWith('vehicle_'))
+    .forEach(key => localStorage.removeItem(key));
   
-  // Initialize cached results
-    const cachedResults: Record<string, boolean> = {};
-  let uncheckedIds: string[] = [];
-    
-  // First check localStorage for cached results
-    vehicleIds.forEach(id => {
-      const cacheKey = `invoice_${id}`;
-      const cached = localStorage.getItem(cacheKey);
-      
-      if (cached !== null) {
-        cachedResults[id] = cached === 'true';
-      } else {
-      uncheckedIds.push(id);
-    }
-  });
+  // Dispatch global event to notify all components about data change
+  document.dispatchEvent(new CustomEvent('vehicleDataChange'));
   
-  // Return immediately if all results are cached
-  if (!uncheckedIds.length) return cachedResults;
-  
-  // Limit to first 3 IDs to make faster and avoid errors
-  uncheckedIds = uncheckedIds.slice(0, 3);
-  
-  // Set in-progress flag and record time
-  (window as any).__batchCheckInProgress = true;
-  
-  try {
-    // Check each ID individually to avoid batch API issues
-    for (const id of uncheckedIds) {
-              try {
-        // Use proper endpoint for single invoice check
-        const response = await apiClient.get(`/api/vehicle-invoices/search/vehicle-reg/${id}`, {
-                  timeout: 2000
-                });
-        
-        // Process the result
-        const hasInvoice = Array.isArray(response.data) && response.data.length > 0;
-        cachedResults[id] = hasInvoice;
-        
-        // Cache the result
-        localStorage.setItem(`invoice_${id}`, String(hasInvoice));
-    
-        // Add a small delay between requests to prevent rate limiting
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (error) {
-        console.warn(`Invoice check failed for ID ${id}:`, error);
-        // Set default to false on error
-        cachedResults[id] = false;
-        localStorage.setItem(`invoice_${id}`, 'false');
-      }
-    }
-  } catch (error) {
-    console.warn('Invoice checks failed:', error);
-  } finally {
-    // Reset flag after a delay to prevent immediate re-requests
-    setTimeout(() => {
-    (window as any).__batchCheckInProgress = false;
-    }, 1000);
-  }
-  
-  return cachedResults;
+  console.log('Cache invalidated at:', new Date().toISOString());
 }
 
-// Legacy function for backward compatibility - now with caching and timeout
-export async function checkInvoiceStatus(vehicleRegId: string): Promise<boolean> {
-  // In-memory cache to avoid repeated calls
-  const cacheKey = `invoice_${vehicleRegId}`;
+// Add direct API methods to bypass cache completely
+async function fetchVehicleDataDirect(listType: string | null): Promise<Vehicle[]> {
+  let data;
   
-  // Check sessionStorage cache first
-  const cached = sessionStorage.getItem(cacheKey);
-  if (cached !== null) {
-    return cached === 'true';
+  try {
+    if (listType) {
+      const statusFilter = listType === 'serviceQueue' 
+        ? 'waiting,inprogress' 
+        : listType === 'serviceHistory' ? 'complete' : '';
+      
+      // Use direct API call with no caching
+      const directApiResponse = await apiClient.get(`/vehicle-reg/GetStatus?status=${statusFilter}`);
+      data = directApiResponse.data;
+    } else {
+      // Use direct API call with no caching
+      const directApiResponse = await apiClient.get('/vehicle-reg/getAll');
+      data = directApiResponse.data;
+    }
+    
+    // Process array data
+    let vehicles: Vehicle[] = [];
+    
+    // Handle different API response formats
+    if (data) {
+      if (Array.isArray(data)) {
+        vehicles = data;
+      } else if (data.content && Array.isArray(data.content)) {
+        vehicles = data.content;
+      } else if (data.data && Array.isArray(data.data)) {
+        vehicles = data.data;
+      } else if (typeof data === 'object') {
+        // Try to extract vehicles from any other format
+        const possibleArrays = Object.values(data).filter(val => Array.isArray(val)) as any[][];
+        if (possibleArrays.length > 0) {
+          vehicles = possibleArrays.reduce<any[]>((a, b) => a.length > b.length ? a : b, []) as Vehicle[];
+        }
+      }
+    }
+    
+    // If still no vehicles, try to handle as a single vehicle object
+    if (vehicles.length === 0 && typeof data === 'object' && data.vehicleRegId) {
+      vehicles = [data];
+    }
+    
+    return vehicles;
+  } catch (error) {
+    console.error("Error fetching vehicle data directly:", error);
+    return [];
   }
-  
+}
+
+// Add a simple invoice status check function
+async function checkInvoiceStatus(vehicleRegId: string): Promise<boolean> {
   try {
     const response = await apiClient.get(`/api/vehicle-invoices/search/vehicle-reg/${vehicleRegId}`, {
       timeout: 2000 // Short timeout to prevent blocking UI
     });
 
-    const hasInvoice = Array.isArray(response.data) && response.data.length > 0;
-    
-    // Cache the result in sessionStorage
-    sessionStorage.setItem(cacheKey, hasInvoice.toString());
-    
-    return hasInvoice;
+    return Array.isArray(response.data) && response.data.length > 0;
   } catch (error) {
     console.error(`Error checking invoice status for vehicle ${vehicleRegId}:`, error);
     return false;
-  }
-}
-
-// Add this utility function at the top-level (after constants)
-function clearVehicleCache() {
-  Object.keys(localStorage)
-    .filter(key => key.startsWith('vehicle_data_'))
-    .forEach(key => localStorage.removeItem(key));
-  if (typeof memoryCache !== 'undefined' && memoryCache.clear) {
-    memoryCache.clear();
   }
 }
 
@@ -283,6 +342,10 @@ export default function VehicleList() {
   const [searchParams] = React.useState(() => new URLSearchParams(window.location.search));
   const listType = searchParams.get("listType");
   const theme = useTheme();
+
+  // Force rerender on cache invalidation
+  const [forceUpdateCounter, setForceUpdateCounter] = useState<number>(0);
+  const forceUpdate = useCallback(() => setForceUpdateCounter(c => c + 1), []);
 
   // Core state
   const [rows, setRows] = React.useState<GridRowsProp>([]);
@@ -302,20 +365,89 @@ export default function VehicleList() {
   const [totalPages, setTotalPages] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [invoiceStatusCache, setInvoiceStatusCache] = useState<Record<string, boolean>>({});
+  const [lastUpdateTime, setLastUpdateTime] = useState<number>(Date.now());
 
   // Refs
   const loadingRef = useRef<boolean>(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastElementRef = useRef<HTMLDivElement | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoRefreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const rawDataRef = useRef<Vehicle[]>([]);
+  const isComponentMountedRef = useRef<boolean>(true);
+  const refreshingDataRef = useRef<boolean>(false);
+  
+  // Add new state for delete operation
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  
+  // Direct API fetching function for this component
+  const fetchVehiclesFromApi = useCallback(async (): Promise<Vehicle[]> => {
+    try {
+      let endpoint = '/vehicle-reg/getAll';
+      
+      if (listType) {
+        const statusFilter = listType === 'serviceQueue' 
+          ? 'waiting,inprogress' 
+          : listType === 'serviceHistory' ? 'complete' : '';
+          
+        endpoint = `/vehicle-reg/GetStatus?status=${statusFilter}`;
+      }
+      
+      // Use our direct API method that bypasses all caching
+      const baseUrl = apiClient.defaults.baseURL || '';
+      const fullUrl = `${baseUrl}${endpoint}`;
+      const data = await fetchDirectFromApi(fullUrl);
+      
+      // Process the data
+      let vehicles: Vehicle[] = [];
+      
+      if (Array.isArray(data)) {
+        vehicles = data;
+      } else if (data?.content && Array.isArray(data.content)) {
+        vehicles = data.content;
+      } else if (data?.data && Array.isArray(data.data)) {
+        vehicles = data.data;
+      } else if (typeof data === 'object') {
+        // Try to extract vehicles from any other format
+        const possibleArrays = Object.values(data).filter(val => Array.isArray(val)) as any[][];
+        if (possibleArrays.length > 0) {
+          vehicles = possibleArrays.reduce<any[]>((a, b) => a.length > b.length ? a : b, []) as Vehicle[];
+        }
+      }
+      
+      // If still no vehicles, try to handle as a single vehicle
+      if (vehicles.length === 0 && typeof data === 'object' && data.vehicleRegId) {
+        vehicles = [data];
+      }
+      
+      console.log(`Fetched ${vehicles.length} vehicles directly from API`);
+      return vehicles;
+      
+    } catch (error) {
+      console.error('Error fetching vehicles from API:', error);
+      throw error;
+    }
+  }, [listType]);
 
-  // Optimized function to process vehicle data for display
-  const processVehicleData = useCallback((vehicles: Vehicle[], append = false) => {
-    if (!vehicles.length) return [];
+  // Process vehicle data without any external dependencies
+  const processVehicleData = useCallback((vehicles: Vehicle[] | any, append = false) => {
+    if (!vehicles || !vehicles.length) {
+      console.warn('No vehicles data to process');
+      return [];
+    }
     
-    // Skip invoice status checks on initial load for speed
-    return vehicles.map((vehicle: Vehicle, index: number) => ({
-      id: append ? rows.length + index + 1 : index + 1,
+    // Handle different data formats - simplify for speed
+    let processableVehicles = vehicles;
+    
+    // Check if we have a data property that contains the actual vehicles
+    if (!Array.isArray(vehicles) && vehicles.data && Array.isArray(vehicles.data)) {
+      processableVehicles = vehicles.data;
+    }
+    
+    // Process with optimized mapping, using stable row IDs
+    return processableVehicles.map((vehicle: Vehicle, index: number) => ({
+      id: vehicle.vehicleRegId || (append ? `new-${index}` : `row-${index}`),
       date: vehicle.date ?? '',
       vehicleNoName: vehicle.vehicleNumber ?? '',
       customerMobile: vehicle.customerName 
@@ -330,181 +462,187 @@ export default function VehicleList() {
       vehicleRegId: vehicle.vehicleRegId,
       hasInvoice: false // Set initially to false, update later async
     }));
-  }, [rows.length]);
-  
-  // Separate function to update invoice status asynchronously
-  const updateInvoiceStatus = useCallback(async (vehicleIds: string[]) => {
-    if (!vehicleIds.length) return;
-    
-    // Only update if not already updating
-    if ((window as any).__updateInProgress) return;
-    
-    // Debounce and limit to visible vehicles
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    
-    debounceTimerRef.current = setTimeout(async () => {
-      try {
-        (window as any).__updateInProgress = true;
-        
-        // Only check first 3 visible vehicles to avoid performance impact
-        const visibleIds = vehicleIds.slice(0, 3);
-        if (!visibleIds.length) return;
-        
-        const statuses = await batchCheckInvoiceStatus(visibleIds);
-        if (!Object.keys(statuses).length) return;
-        
-        // Update cache and state efficiently
-        setInvoiceStatusCache(prev => ({...prev, ...statuses}));
-        
-              setRows(currentRows => {
-                const hasChanges = currentRows.some(row => 
-            row.vehicleRegId && statuses[row.vehicleRegId] !== undefined && 
-            row.hasInvoice !== statuses[row.vehicleRegId]
-                );
-                
-                if (!hasChanges) return currentRows;
-                
-                return currentRows.map(row => {
-            if (row.vehicleRegId && statuses[row.vehicleRegId] !== undefined) {
-              return {...row, hasInvoice: statuses[row.vehicleRegId]};
-                  }
-                  return row;
-                });
-              });
-      } finally {
-        (window as any).__updateInProgress = false;
-      }
-    }, DEBOUNCE_DELAY * 2);
   }, []);
 
-  // Update fetchVehicles to accept skipCache
-  const fetchVehicles = useCallback(async (pageNumber: number, append = false, skipCache = false) => {
-    if (loadingRef.current) return;
-    if (totalPages > 0 && pageNumber >= totalPages) {
-      setHasMore(false);
-      return;
-    }
-    setLoading(true);
-    loadingRef.current = true;
-    try {
-      const cacheKey = `vehicle_data_${listType || 'all'}_${pageNumber}`;
-      const cachedData = getCachedData<{
-        vehicles: Vehicle[],
-        totalElements: number,
-        totalPages: number,
-        hasMore: boolean,
-        timestamp: number
-      }>(cacheKey);
-      const disableCache = skipCache;
-      if (!disableCache && cachedData && cachedData.vehicles) {
-        // Use cached data immediately
-        const processedRows = processVehicleData(cachedData.vehicles, append);
-            setCurrentPage(pageNumber);
-        setTotalElements(cachedData.totalElements || 0);
-        setTotalPages(cachedData.totalPages || 1);
-        setHasMore(cachedData.hasMore);
-            if (append) {
-              setRows(prev => [...prev, ...processedRows]);
-            } else {
-              setRows(processedRows);
-            }
-              loadingRef.current = false;
-              setLoading(false);
-              setInitialLoad(false);
-              return;
-            }
-      // Fetch fresh data
-      try {
-        let data;
-        
-          if (listType) {
-            const statusFilter = listType === 'serviceQueue' 
-              ? 'waiting,inprogress' 
-              : listType === 'serviceHistory' ? 'complete' : '';
-            
-          console.log(`Fetching vehicles with status: ${statusFilter}`);
-          
-          // Use the imported service function instead of direct API call with timestamp
-          const res = await GetVehicleByStatus({ status: statusFilter });
-          data = res.data;
-          console.log('Vehicle data received:', data ? (Array.isArray(data) ? data.length : 'object') : 'none');
-          } else {
-          console.log(`Fetching all vehicles`);
-          
-          // Use the imported service function instead of direct API call with timestamp
-            const res = await VehicleListData();
-          data = res.data;
-          console.log('Vehicle data received:', data ? (Array.isArray(data) ? data.length : 'object') : 'none');
-        }
-        
-        // Process array data
-        let vehicles: Vehicle[] = [];
-        let totalCount = 0;
-        let pageCount = 0;
-            
-            if (Array.isArray(data)) {
-          totalCount = data.length;
-          pageCount = Math.ceil(totalCount / PAGE_SIZE);
-          
-              // Apply client-side pagination
-              const startIndex = pageNumber * PAGE_SIZE;
-              const endIndex = startIndex + PAGE_SIZE;
-              vehicles = data.slice(startIndex, endIndex);
-            } else if (data?.content && Array.isArray(data.content)) {
-              vehicles = data.content;
-          totalCount = data.totalElements || vehicles.length;
-          pageCount = data.totalPages || 1;
-      }
-        
-        // Calculate if there's more data
-        const hasMoreData = pageNumber < pageCount - 1;
+  // The main data fetching function - completely revised
+  const fetchVehicles = useCallback(async (pageNumber: number, append = false) => {
+    if (loadingRef.current || !isComponentMountedRef.current) return;
     
-        // Cache the data using the optimized method
-        saveToCache(cacheKey, {
-          vehicles,
-          totalElements: totalCount,
-          totalPages: pageCount,
-          hasMore: hasMoreData
-        });
-        
-        // Process and display data
-        const processedRows = processVehicleData(vehicles, append);
-        
-        setCurrentPage(pageNumber);
-        setTotalElements(totalCount);
-        setTotalPages(pageCount);
-        setHasMore(hasMoreData);
-        
-        if (append) {
-          setRows(prev => [...prev, ...processedRows]);
-        } else {
-          setRows(processedRows);
-        }
-        
-        setError(null);
-        
-        // Completely disable automatic invoice status checks
-        // Let user actions trigger checks instead
-      } catch (error: any) {
-        console.error("Error fetching data:", error);
+    loadingRef.current = true;
+    setLoading(true);
+    
+    try {
+      // Always fetch fresh data directly from API
+      const vehicles = await fetchVehiclesFromApi();
+      
+      if (!isComponentMountedRef.current) return;
+      
+      // Store raw data for future comparisons
+      rawDataRef.current = [...vehicles];
+      
+      // Calculate pagination
+      const totalCount = vehicles.length;
+      const pageCount = Math.ceil(totalCount / PAGE_SIZE);
+      const hasMoreData = pageNumber < pageCount - 1;
+      
+      // Get current page data
+      const startIndex = pageNumber * PAGE_SIZE;
+      const endIndex = startIndex + PAGE_SIZE;
+      const pageVehicles = append ? vehicles : vehicles.slice(startIndex, endIndex);
+      
+      // Process data
+      const processedRows = processVehicleData(pageVehicles, append);
+      
+      // Update state
+      setCurrentPage(pageNumber);
+      setTotalElements(totalCount);
+      setTotalPages(pageCount);
+      setHasMore(hasMoreData);
+      setLastUpdateTime(Date.now());
+      
+      if (append) {
+        setRows(prev => [...prev, ...processedRows]);
+      } else {
+        setRows(processedRows);
+      }
+      
+      setError(null);
+      
+    } catch (error) {
+      console.error('Error fetching vehicles:', error);
+      if (isComponentMountedRef.current) {
         setError('Failed to load data. Please try again.');
       }
     } finally {
-      loadingRef.current = false;
-      setLoading(false);
-      setInitialLoad(false);
+      if (isComponentMountedRef.current) {
+        loadingRef.current = false;
+        setLoading(false);
+        setInitialLoad(false);
+      }
     }
-  }, [listType, processVehicleData, totalPages]);
+  }, [fetchVehiclesFromApi, processVehicleData]);
 
-  // On initial load, always fetch fresh data
+  // Check for data changes
+  const checkForDataChanges = useCallback(async () => {
+    if (loadingRef.current || refreshingDataRef.current || !isComponentMountedRef.current) return;
+    
+    refreshingDataRef.current = true;
+    
+    try {
+      // Fetch latest data silently in the background
+      const latestVehicles = await fetchVehiclesFromApi();
+      
+      if (!isComponentMountedRef.current) return;
+      
+      // Quick check - have we got different number of vehicles?
+      if (rawDataRef.current.length !== latestVehicles.length) {
+        console.log('Vehicle count changed, updating data');
+        window.vehicleDataChanged = true;
+        fetchVehicles(0, false);
+        return;
+      }
+      
+      // Detailed check - compare vehicle IDs
+      const currentIds = new Set(rawDataRef.current.map(v => v.vehicleRegId));
+      const newIds = new Set(latestVehicles.map(v => v.vehicleRegId));
+      
+      // Check for additions or removals
+      let hasChanges = false;
+      
+      for (const id of currentIds) {
+        if (!newIds.has(id)) {
+          hasChanges = true;
+          break;
+        }
+      }
+      
+      for (const id of newIds) {
+        if (!currentIds.has(id)) {
+          hasChanges = true;
+          break;
+        }
+      }
+      
+      // If we found changes, update the data
+      if (hasChanges) {
+        console.log('Vehicle data changed, refreshing...');
+        window.vehicleDataChanged = true;
+        fetchVehicles(0, false);
+      }
+      
+    } catch (error) {
+      console.error('Error checking for data changes:', error);
+    } finally {
+      refreshingDataRef.current = false;
+    }
+  }, [fetchVehicles, fetchVehiclesFromApi]);
+
+  // Watch for global data changes
   useEffect(() => {
-    fetchVehicles(0, false, true); // skip cache on load
-    // Set up scrolling observer
+    const handleGlobalDataChange = () => {
+      if (isComponentMountedRef.current && !refreshingDataRef.current) {
+        console.log('Global data change detected, refreshing vehicle list');
+        fetchVehicles(0, false);
+        forceUpdate();
+      }
+    };
+    
+    // Listen for the custom event
+    document.addEventListener('vehicleDataChange', handleGlobalDataChange);
+    
+    // Also set up a checker to see if window.__FORCE_REFRESH_COUNTER changed
+    const checkWindowRefreshCounter = () => {
+      if (window.vehicleDataChanged) {
+        window.vehicleDataChanged = false;
+        handleGlobalDataChange();
+      }
+    };
+    
+    const counterInterval = setInterval(checkWindowRefreshCounter, 1000);
+    
+    return () => {
+      document.removeEventListener('vehicleDataChange', handleGlobalDataChange);
+      clearInterval(counterInterval);
+    };
+  }, [fetchVehicles, forceUpdate]);
+
+  // Regular auto-refresh
+  useEffect(() => {
+    if (autoRefreshTimerRef.current) {
+      clearInterval(autoRefreshTimerRef.current);
+    }
+    
+    autoRefreshTimerRef.current = setInterval(() => {
+      checkForDataChanges();
+    }, AUTO_REFRESH_INTERVAL);
+    
+    return () => {
+      if (autoRefreshTimerRef.current) {
+        clearInterval(autoRefreshTimerRef.current);
+      }
+    };
+  }, [checkForDataChanges]);
+
+  // Component lifecycle
+  useEffect(() => {
+    isComponentMountedRef.current = true;
+    
+    // Force refresh when mounted to ensure fresh data
+    forceVehicleDataRefresh();
+    
+    return () => {
+      isComponentMountedRef.current = false;
+    };
+  }, []);
+
+  // Initial load and infinite scroll
+  useEffect(() => {
+    fetchVehicles(0, false);
+    
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loadingRef.current && hasMore) {
+        if (entries[0].isIntersecting && !loadingRef.current && 
+            !refreshingDataRef.current && hasMore && isComponentMountedRef.current) {
           fetchVehicles(currentPage + 1, true);
         }
       },
@@ -517,26 +655,64 @@ export default function VehicleList() {
     
     observerRef.current = observer;
     
-    // Observe the last element if it exists
     if (lastElementRef.current) {
       observer.observe(lastElementRef.current);
     }
     
     return () => {
-        observer.disconnect();
+      observer.disconnect();
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
   }, [fetchVehicles, hasMore, currentPage]);
-  
+
+  // Optimized delete handler that triggers global refresh
+  const handleDeleteSuccess = useCallback((deletedId: number) => {
+    // Update UI immediately
+    setRows(prevRows => {
+      const updatedRows = prevRows.filter(row => row.vehicleRegId !== String(deletedId));
+      setTotalElements(prev => Math.max(0, prev - 1));
+      return updatedRows;
+    });
+
+    // Reset modal state
+    setOpen(false);
+    setSelectedId("");
+    setDeleteError(null);
+    setIsDeleting(false);
+    
+    // Show success message
+    setError("Vehicle deleted successfully");
+    setTimeout(() => setError(null), 3000);
+    
+    // Force a global refresh to update all components
+    forceVehicleDataRefresh();
+    
+    // Schedule a refresh after a short delay
+    setTimeout(() => {
+      if (isComponentMountedRef.current) {
+        fetchVehicles(0, false);
+      }
+    }, 500);
+  }, [fetchVehicles]);
+
   // Move this function after handleDelete
   const handleDelete = useCallback((id: string) => {
     setSelectedId(id);
     setOpen(true);
   }, []);
 
-  // Update the renderActionButtons to match the example (simple horizontal row)
+  // Add handleDeleteAction before renderActionButtons
+  const handleDeleteAction = useCallback((e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedId(id);
+    setOpen(true);
+    setIsDeleting(false);
+    setDeleteError(null);
+  }, []);
+
+  // Update renderActionButtons dependencies
   const renderActionButtons = useCallback((params: GridCellParams) => {
     const vehicleId = params.row.vehicleRegId;
     
@@ -544,12 +720,6 @@ export default function VehicleList() {
       e.stopPropagation();
       e.preventDefault();
       navigate(path);
-    };
-    
-    const handleDeleteAction = (e: React.MouseEvent, id: string) => {
-      e.stopPropagation();
-      setSelectedId(id);
-      setOpen(true);
     };
     
     return (
@@ -619,6 +789,7 @@ export default function VehicleList() {
           size="small" 
           color="error"
           onClick={(e) => handleDeleteAction(e, vehicleId)}
+          disabled={isDeleting}
           sx={{ 
             p: 0.5,
             minWidth: '28px',
@@ -627,14 +798,22 @@ export default function VehicleList() {
             maxHeight: '28px',
             background: '#212121',
             color: 'white',
-            '&:hover': { background: '#424242' }
+            '&:hover': { background: '#424242' },
+            '&.Mui-disabled': {
+              background: '#e0e0e0',
+              color: '#9e9e9e'
+            }
           }}
         >
-          <DeleteIcon sx={{ fontSize: '16px' }} />
+          {isDeleting && selectedId === vehicleId ? (
+            <CircularProgress size={16} color="inherit" />
+          ) : (
+            <DeleteIcon sx={{ fontSize: '16px' }} />
+          )}
         </IconButton>
       </Box>
     );
-  }, [navigate, setSelectedId, setOpen]);
+  }, [navigate, handleDeleteAction, isDeleting, selectedId]);
 
   // Update the second row of actions (service/print)
   const renderServiceButtons = useCallback((params: GridCellParams) => {
@@ -777,7 +956,6 @@ export default function VehicleList() {
     );
   }, []);
 
-  // Render invoice status with red/green dot
   const renderInvoiceStatus = useCallback((params: GridCellParams) => {
     const hasInvoice = params.row.hasInvoice;
     
@@ -796,7 +974,6 @@ export default function VehicleList() {
     );
   }, []);
 
-  // Update columns to match example image with mobile-specific settings
   const columns = React.useMemo<GridColDef[]>(() => [
     {
       field: 'Action',
@@ -809,7 +986,7 @@ export default function VehicleList() {
       headerAlign: 'center',
       cellClassName: 'wrap-cell-content',
       disableColumnMenu: true,
-      flex: 0, // Don't allow this column to flex
+      flex: 0, 
     },
     { 
       field: 'date', 
@@ -1042,7 +1219,6 @@ export default function VehicleList() {
     },
   ], [renderStatus, renderInvoiceStatus, renderActionButtons]);
     
-  // Client-side filtering
   const filteredRows = React.useMemo(() => {
     const searchTerm = localSearchTerm.toLowerCase();
     if (!searchTerm) return rows;
@@ -1059,7 +1235,6 @@ export default function VehicleList() {
     ));
   }, [rows, localSearchTerm]);
   
-  // Handle search functions
   const handleLocalSearch = useCallback((term: string) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -1083,7 +1258,6 @@ export default function VehicleList() {
     return errorMessage;
   }, []);
 
-  // Optimized search function
   const handleSearch = useCallback(async () => {
     if (isSearching) return;
     
@@ -1118,7 +1292,6 @@ export default function VehicleList() {
         setTotalElements(processedRows.length);
         setTotalPages(1);
       } else if (response && typeof response === 'object') {
-        // Handle single vehicle result
         const singleVehicle = response as Vehicle;
         
         setRows([{
@@ -1140,9 +1313,21 @@ export default function VehicleList() {
         setTotalElements(1);
         setTotalPages(1);
         
-        // Check invoice status in background
+        // Check invoice status directly without using updateInvoiceStatus
         setTimeout(() => {
-          updateInvoiceStatus([singleVehicle.vehicleRegId]);
+          checkInvoiceStatus(singleVehicle.vehicleRegId)
+            .then((hasInvoice: boolean) => {
+              if (hasInvoice) {
+                setRows(currentRows => 
+                  currentRows.map(row => 
+                    row.vehicleRegId === singleVehicle.vehicleRegId 
+                      ? {...row, hasInvoice} 
+                      : row
+                  )
+                );
+              }
+            })
+            .catch(console.error);
         }, 500);
       } else {
         setRows([]);
@@ -1155,9 +1340,8 @@ export default function VehicleList() {
       setLoading(false);
       setIsSearching(false);
     }
-  }, [dateValue, handleApiError, isSearching, processVehicleData, selectedType, textInput, updateInvoiceStatus]);
+  }, [dateValue, handleApiError, isSearching, processVehicleData, selectedType, textInput]);
     
-  // Loading skeleton for better UX
   const SkeletonLoading = useCallback(() => (
     <Box sx={{ p: 2 }}>
       {[...Array(3)].map((_, index) => (
@@ -1187,15 +1371,6 @@ export default function VehicleList() {
     </Box>
   ), [theme]);
 
-  // In handleDeleteSuccess, clear cache and reload fresh data
-  const handleDeleteSuccess = useCallback((deletedId: number) => {
-    setRows(prevRows => prevRows.filter(row => row.vehicleRegId !== String(deletedId)));
-    setOpen(false);
-    setSelectedId("");
-    clearVehicleCache();
-    fetchVehicles(0, false, true); // reload fresh data, skip cache
-  }, [fetchVehicles]);
-
   return (
     <Box sx={{ width: '100%', maxWidth: { xs: '100%', md: '1700px' }, p: 2 }}>
       <Card elevation={3} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
@@ -1209,8 +1384,8 @@ export default function VehicleList() {
           >
             <Box>
               <Typography component="h1" variant="h5" fontWeight="bold" color="primary">
-          Vehicle List
-        </Typography>
+                Vehicle List {forceUpdateCounter > 0 && `(Updated: ${new Date(lastUpdateTime).toLocaleTimeString()})`}
+              </Typography>
               <Typography variant="body2" color="text.secondary" mt={0.5}>
                 {listType === 'serviceQueue' 
                   ? 'Vehicles currently in service queue' 
@@ -1219,40 +1394,54 @@ export default function VehicleList() {
                     : 'All registered vehicles'}
               </Typography>
             </Box>
-            <Button 
-              variant="contained" 
-              color="primary" 
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/admin/vehicle/add')}
-              sx={{ 
-                borderRadius: 2,
-                boxShadow: theme.shadows[3],
-                px: 3
-              }}
-            >
-          Add Vehicle
-        </Button>
-      </Stack>
+            <Stack direction="row" spacing={1} alignItems="center">
+              {error && (
+                <Alert 
+                  severity="error" 
+                  sx={{ 
+                    flexGrow: 1, 
+                    animation: 'fadeIn 0.3s',
+                    '@keyframes fadeIn': {
+                      '0%': { opacity: 0 },
+                      '100%': { opacity: 1 }
+                    }
+                  }}
+                >
+                  {error}
+                </Alert>
+              )}
+              <Button 
+                variant="contained" 
+                color="primary" 
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  navigate("/admin/vehicle-add");
+                  // Force refresh when returning to this page
+                  forceVehicleDataRefresh();
+                }}
+              >
+                Add Vehicle
+              </Button>
+            </Stack>
+          </Stack>
 
-          {/* Quick Search Box */}
           <FormControl fullWidth sx={{ mb: 2 }}>
-          <OutlinedInput
-            size="small"
+            <OutlinedInput
+              size="small"
               placeholder="Quick search in results..."
               onChange={(e) => handleLocalSearch(e.target.value)}
-            startAdornment={
+              startAdornment={
                 <InputAdornment position="start" sx={{ color: 'text.secondary' }}>
-                <SearchRoundedIcon fontSize="small" />
-              </InputAdornment>
-            }
+                  <SearchRoundedIcon fontSize="small" />
+                </InputAdornment>
+              }
               sx={{ 
                 borderRadius: 2,
                 backgroundColor: alpha(theme.palette.common.white, 0.05)
               }}
-          />
-        </FormControl>
+            />
+          </FormControl>
 
-          {/* Advanced search toggle */}
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             <Button 
               size="small" 
@@ -1262,7 +1451,7 @@ export default function VehicleList() {
             >
               {showAdvancedSearch ? "Hide Advanced Search" : "Show Advanced Search"}
             </Button>
-      </Box>
+          </Box>
 
           {showAdvancedSearch && (
             <Paper 
@@ -1278,40 +1467,40 @@ export default function VehicleList() {
                 <Grid item xs={12} md={3}>
                   <FormControl fullWidth>
                     <InputLabel>Search Type</InputLabel>
-            <Select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
+                    <Select
+                      value={selectedType}
+                      onChange={(e) => setSelectedType(e.target.value)}
                       size="small"
                       sx={{ borderRadius: 2 }}
-            >
-              <MenuItem value="Vehicle ID">Vehicle ID</MenuItem>
-              <MenuItem value="Date Range">Date Range</MenuItem>
-              <MenuItem value="Appointment Number">Appointment Number</MenuItem>
-            </Select>
-          </FormControl>
+                    >
+                      <MenuItem value="Vehicle ID">Vehicle ID</MenuItem>
+                      <MenuItem value="Date Range">Date Range</MenuItem>
+                      <MenuItem value="Appointment Number">Appointment Number</MenuItem>
+                    </Select>
+                  </FormControl>
                 </Grid>
 
-          {(selectedType === 'Vehicle ID' || selectedType === 'Appointment Number') && (
+                {(selectedType === 'Vehicle ID' || selectedType === 'Appointment Number') && (
                   <Grid item xs={12} md={6}>
                     <FormControl fullWidth variant="outlined">
-              <OutlinedInput
-                size="small"
-                id="search"
+                      <OutlinedInput
+                        size="small"
+                        id="search"
                         placeholder={selectedType === 'Vehicle ID' ? "Enter vehicle ID..." : "Enter appointment number..."}
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                startAdornment={
+                        value={textInput}
+                        onChange={(e) => setTextInput(e.target.value)}
+                        startAdornment={
                           <InputAdornment position="start" sx={{ color: 'text.secondary' }}>
-                    <SearchRoundedIcon fontSize="small" />
-                  </InputAdornment>
-                }
+                            <SearchRoundedIcon fontSize="small" />
+                          </InputAdornment>
+                        }
                         sx={{ borderRadius: 2 }}
-              />
-            </FormControl>
+                      />
+                    </FormControl>
                   </Grid>
-          )}
+                )}
 
-          {selectedType === 'Date Range' && (
+                {selectedType === 'Date Range' && (
                   <Grid item xs={12} md={6}>
                     <FormControl fullWidth>
                       <Box sx={{ 
@@ -1330,19 +1519,19 @@ export default function VehicleList() {
                           fontSize: '0.875rem'
                         }
                       }}>
-                <ReactDatePicker
-                  selected={dateValue[0]}
-                  onChange={(update: [Date | null, Date | null]) => setDateValue(update)}
-                  startDate={dateValue[0]}
-                  endDate={dateValue[1]}
-                  selectsRange
-                  dateFormat="yyyy-MM-dd"
-                  placeholderText="Select date range"
-                />
+                        <ReactDatePicker
+                          selected={dateValue[0]}
+                          onChange={(update: [Date | null, Date | null]) => setDateValue(update)}
+                          startDate={dateValue[0]}
+                          endDate={dateValue[1]}
+                          selectsRange
+                          dateFormat="yyyy-MM-dd"
+                          placeholderText="Select date range"
+                        />
                       </Box>
-              </FormControl>
-            </Grid>
-          )}
+                    </FormControl>
+                  </Grid>
+                )}
 
                 <Grid item xs={12} md={3}>
                   <Button 
@@ -1354,34 +1543,21 @@ export default function VehicleList() {
                     sx={{ borderRadius: 2 }}
                   >
                     {isSearching ? 'Searching...' : 'Search'}
-          </Button>
-        </Grid>
-      </Grid>
+                  </Button>
+                </Grid>
+              </Grid>
             </Paper>
           )}
 
-          {error && (
-            <Box sx={{ mb: 2 }}>
-              <Alert 
-                severity="error" 
-                sx={{ borderRadius: 2 }}
-                onClose={() => setError(null)}
-              >
-                {error}
-              </Alert>
-            </Box>
-          )}
-
-          {/* Data grid section */}
           <Box 
             sx={{ 
-            position: 'relative',
-            height: 'calc(100vh - 350px)',
-            minHeight: '400px',
-            width: '100%',
-            overflow: 'hidden',
-            borderRadius: 2,
-            border: `1px solid ${theme.palette.divider}`,
+              position: 'relative',
+              height: 'calc(100vh - 350px)',
+              minHeight: '400px',
+              width: '100%',
+              overflow: 'hidden',
+              borderRadius: 2,
+              border: `1px solid ${theme.palette.divider}`,
               display: 'flex',
               flexDirection: 'column',
               '@media (max-width: 600px)': {
@@ -1389,7 +1565,7 @@ export default function VehicleList() {
                 height: 'auto',
                 maxHeight: 'calc(100vh - 250px)',
                 '& .MuiDataGrid-root': {
-                  minWidth: '968px', // Sum of all minWidths plus some padding
+                  minWidth: '968px', 
                 },
               },
             }}
@@ -1403,7 +1579,7 @@ export default function VehicleList() {
                 overflow: 'hidden',
                 '@media (max-width: 600px)': {
                   overflow: 'visible',
-                  width: '968px' // Match mobile minWidth
+                  width: '968px' 
                 }
               }}>
                 <CustomizedDataGrid 
@@ -1419,7 +1595,6 @@ export default function VehicleList() {
                   }}
                   disableColumnMenu
                   columnVisibilityModel={{
-                    // These columns will hide on smaller screens but remain visible on desktop
                     superwiser: window.innerWidth > 1200,
                     technician: window.innerWidth > 1100,
                     worker: window.innerWidth > 1000,
@@ -1497,16 +1672,16 @@ export default function VehicleList() {
                       display: 'none'
                     },
                     '& .MuiDataGrid-virtualScroller': {
-                      overflow: 'hidden', // Set to hidden for desktop view
+                      overflow: 'hidden', 
                       '@media (max-width: 600px)': {
-                        overflow: 'visible', // Keep visible for mobile
+                        overflow: 'visible'
                       },
                     },
                     '& .MuiDataGrid-main': {
-                      overflow: 'hidden', // Hide overflow for desktop
+                      overflow: 'hidden',
                       maxWidth: '100%',
                       '@media (max-width: 600px)': {
-                        overflow: 'visible', // Keep visible for mobile
+                        overflow: 'visible', 
                       },
                     },
                     '& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell': {
@@ -1517,28 +1692,26 @@ export default function VehicleList() {
                 />
                 
                 {loading && !initialLoad && !isSearching && (
-                <Box sx={{ 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  alignItems: 'center', 
-                  p: 2, 
-                  backgroundColor: alpha(theme.palette.background.paper, 0.6),
-                  borderTop: `1px solid ${theme.palette.divider}`,
-                }}>
-                  <CircularProgress size={24} thickness={5} sx={{ mr: 2 }} />
-                  <Typography variant="body2" color="text.secondary">
-                    Loading more vehicles...
-                  </Typography>
-                </Box>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    p: 2, 
+                    backgroundColor: alpha(theme.palette.background.paper, 0.6),
+                    borderTop: `1px solid ${theme.palette.divider}`,
+                  }}>
+                    <CircularProgress size={24} thickness={5} sx={{ mr: 2 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Loading more vehicles...
+                    </Typography>
+                  </Box>
                 )}
               </Box>
             )}
             
-            {/* Intersection observer target element */}
             <div ref={lastElementRef} style={{ height: 10, width: '100%' }} />
           </Box>
           
-          {/* Status footer */}
           <Box sx={{ 
             display: 'flex', 
             justifyContent: 'center', 
@@ -1562,9 +1735,15 @@ export default function VehicleList() {
       
       <VehicleDeleteModal 
         open={open} 
-        onClose={() => setOpen(false)} 
+        onClose={() => {
+          setOpen(false);
+          setDeleteError(null);
+          setIsDeleting(false);
+        }} 
         deleteItemId={Number(selectedId)} 
         onDeleteSuccess={handleDeleteSuccess}
+        isDeleting={isDeleting}
+        error={deleteError}
       />
       
       <Copyright sx={{ my: 4 }} />

@@ -286,17 +286,15 @@ export default function AddVehicle() {
     event.preventDefault();
     if (!validateFields()) return;
     
-    // Start loading indicator
     setIsSubmitting(true);
     
     if (!id) {
-      // Show processing dialog for new vehicles
       setProcessingDialogOpen(true);
     }
     
     try {
       const { variant, fuelType, insuranceFrom, insuranceTo, ...restData } = formData;
-      // If adding a new vehicle (no id), clear all backend IDs
+  
       let payload = {
         ...restData,
         vehicleVariant: variant || "",
@@ -316,32 +314,21 @@ export default function AddVehicle() {
       }
       
       if (id) {
-        // For updates, wait for the response
         const response = await VehicleUpdate(payload);
         console.log("Vehicle update successful:", response);
-        setDialogTitle("Success");
+      setDialogTitle("Success");
         setDialogMessage("Vehicle updated successfully!");
-        setDialogOpen(true);
+      setDialogOpen(true);
         setIsSubmitting(false);
       } else {
-        // For new vehicles, navigate quickly while the request processes in background
-        
-        // Generate temporary ID to use until real ID is received from the server
         const tempId = "pending-" + Date.now();
-        
-        // Store vehicle data in sessionStorage for the next page to access if needed
-        // This allows the service parts page to work with the vehicle data before 
-        // the actual API response is received
+      
         sessionStorage.setItem('pendingVehicleData', JSON.stringify(payload));
         sessionStorage.setItem('pendingVehicleId', tempId);
         
-        // Navigate after a short delay (max 1.5 seconds)
-        // This gives a perception of processing while not making the user wait
-        // for the full API response which can take 6-7 seconds
         setTimeout(() => {
           setProcessingDialogOpen(false);
-          resetForm();
-          // Pass pending status and data via navigation state
+        resetForm();
           navigate(`/admin/vehicle/add/servicepart/${tempId}`, { 
             state: { 
               isPending: true,
@@ -350,26 +337,17 @@ export default function AddVehicle() {
           });
         }, 1500);
         
-        // Start the API call in the background after navigation
-        // This continues to process while the user is on the next page
         VehicleAdd(payload).then(response => {
           console.log("Vehicle addition successful:", response);
           const generatedId = response.data.vehicleRegId;
           
-          // Store the real ID in sessionStorage so the service part page can check for it
-          // The service part page should periodically check this value to update its state
           sessionStorage.setItem('realVehicleId', generatedId);
-          sessionStorage.setItem('pendingVehicleId', ''); // Clear pending status
-          
-          // Note: The AddVehiclePartService component needs to be updated to:
-          // 1. Check if the ID in the URL is a pending ID (starts with "pending-")
-          // 2. If so, periodically check sessionStorage for 'realVehicleId'
-          // 3. Once 'realVehicleId' is available, use it for all API calls
-          // 4. Optionally update the URL to use the real ID (using history.replaceState)
+          sessionStorage.setItem('pendingVehicleId', ''); 
+
         }).catch(error => {
           console.error("Error processing vehicle in background:", error);
           sessionStorage.setItem('vehicleAddError', error?.message || 'Unknown error');
-          // Service part page should also check for this error
+     
         });
       }
     } catch (error: any) {
@@ -507,13 +485,11 @@ export default function AddVehicle() {
       
       <form onSubmit={handleSubmit}>
         <FormContainer container>
-          {/* VEHICLE DETAILS CARD */}
           <SectionCard>
             <SectionCardHeader title="Vehicle Details" />
             <SectionCardContent>
               <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
                 <Grid item xs={12} sm={6}>
-                  {/* Vehicle No */}
                   <FormGrid>
                     <FormLabel htmlFor="vehicleNumber">Vehicle No*</FormLabel>
       <Autocomplete
@@ -582,7 +558,6 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Number Plate Colour */}
                   <FormGrid>
                     <FormLabel htmlFor="numberPlateColour">Number Plate Colour*</FormLabel>
                     <FormControl fullWidth size="small">
@@ -605,24 +580,22 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Vehicle Maker */}
                   <FormGrid>
                     <FormLabel htmlFor="vehicleBrand">Vehicle Maker*</FormLabel>
-                    <OutlinedInput
+            <OutlinedInput
                       id="vehicleBrand"
                       name="vehicleBrand"
                       value={formData.vehicleBrand}
-                      onChange={handleChange}
+              onChange={handleChange}
                       placeholder="Enter/Select Vehicle Maker"
-                      required
-                      size="small"
+              required
+              size="small"
                       fullWidth
-                    />
-                  </FormGrid>
+            />
+          </FormGrid>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Engine Number */}
                   <FormGrid>
                     <FormLabel htmlFor="engineNumber">Engine Number</FormLabel>
                     <OutlinedInput
@@ -638,7 +611,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Model Line */}
+                 
                   <FormGrid>
                     <FormLabel htmlFor="vehicleModelName">Model Line*</FormLabel>
                     <OutlinedInput
@@ -655,7 +628,6 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Sitting Capacity */}
                   <FormGrid>
                     <FormLabel htmlFor="vehicleInspection">Sitting Capacity</FormLabel>
                     <OutlinedInput
@@ -671,7 +643,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Variant */}
+                  
                   <FormGrid>
                     <FormLabel htmlFor="variant">Variant*</FormLabel>
             <OutlinedInput
@@ -688,7 +660,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* CC Engine */}
+                 
                   <FormGrid>
                     <FormLabel htmlFor="ccEngine">CC Engine</FormLabel>
                     <OutlinedInput
@@ -702,7 +674,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Fuel Type */}
+                
                   <FormGrid>
                     <FormLabel htmlFor="fuelType">Fuel Type*</FormLabel>
             <FormControl fullWidth size="small">
@@ -724,7 +696,6 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Manufactured Year */}
                   <FormGrid>
                     <FormLabel htmlFor="manufactureYear">Manufactured Year</FormLabel>
             <OutlinedInput
@@ -740,7 +711,6 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Kilometer Driven */}
                   <FormGrid>
             <FormLabel htmlFor="kmsDriven">Kilometer Driven</FormLabel>
             <OutlinedInput
@@ -758,7 +728,6 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Date of Admission */}
                   <FormGrid>
             <FormLabel htmlFor="date">Date Of Admission</FormLabel>
             <OutlinedInput
@@ -774,7 +743,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Chasis Number */}
+             
                   <FormGrid>
             <FormLabel htmlFor="chasisNumber">Chasis Number</FormLabel>
             <OutlinedInput
@@ -783,14 +752,13 @@ export default function AddVehicle() {
               value={formData.chasisNumber}
               onChange={handleChange}
               placeholder="Enter Chasis Number"
-                      size="small"
+              size="small"
                       fullWidth
-                    />
-                  </FormGrid>
+            />
+          </FormGrid>
                 </Grid>
               </ResponsiveGrid>
             
-              {/* Status section for updates */}
               {id && (
                 <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }} sx={{ mt: 2 }}>
                   <Grid item xs={12} sm={6} md={4}>
@@ -806,7 +774,6 @@ export default function AddVehicle() {
                 </ResponsiveGrid>
               )}
               
-              {/* Insurance section */}
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle1" component="h3" sx={{ mb: 2 }}>
                 Insurance Information
@@ -839,30 +806,29 @@ export default function AddVehicle() {
                 {formData.insuranceStatus === "Expired" && (
                   <Grid item xs={12} sm={6} md={4}>
                     <FormLabel htmlFor="insuranceTo">Expired At</FormLabel>
-                    <OutlinedInput 
+            <OutlinedInput
                       id="insuranceTo" 
                       name="insuranceTo" 
                       type="date" 
                       value={formData.insuranceTo} 
-                      onChange={handleChange} 
+              onChange={handleChange}
               required
               size="small"
                       fullWidth
-                    />
+            />
                   </Grid>
                 )}
               </ResponsiveGrid>
             </SectionCardContent>
           </SectionCard>
           
-          {/* CUSTOMER DETAILS CARD */}
           <SectionCard>
             <SectionCardHeader title="Customer Details" />
             <SectionCardContent>
               <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Customer Name */}
+                 
                   <FormGrid>
                     <FormLabel htmlFor="customerName">Customer Name*</FormLabel>
             <OutlinedInput
@@ -899,7 +865,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Email Id */}
+                
                   <FormGrid>
                     <FormLabel htmlFor="email">Email Id</FormLabel>
             <OutlinedInput
@@ -917,7 +883,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Customer Address */}
+                 
                   <FormGrid>
                     <FormLabel htmlFor="customerAddress">Customer Address*</FormLabel>
                     <OutlinedInput
@@ -934,7 +900,6 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Customer Aadhar No */}
                   <FormGrid>
                     <FormLabel htmlFor="customerAadharNo">Customer Aadhar No.*</FormLabel>
             <OutlinedInput
@@ -951,7 +916,6 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Customer GSTIN */}
                   <FormGrid>
             <FormLabel htmlFor="customerGstin">Customer GSTIN</FormLabel>
             <OutlinedInput
@@ -967,7 +931,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Advance Payment */}
+                  
                   <FormGrid>
                     <FormLabel htmlFor="advancePayment">Advance Payment*</FormLabel>
             <OutlinedInput
@@ -987,13 +951,12 @@ export default function AddVehicle() {
             </SectionCardContent>
           </SectionCard>
           
-          {/* STAFF DETAILS CARD */}
           <SectionCard>
             <SectionCardHeader title="Staff Details" />
             <SectionCardContent>
               <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Supervisor */}
+                 
                   <FormGrid>
                     <FormLabel htmlFor="superwiser">Superwiser*</FormLabel>
             <OutlinedInput
@@ -1010,7 +973,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Technician */}
+                 
                   <FormGrid>
                     <FormLabel htmlFor="technician">Technician*</FormLabel>
             <OutlinedInput
@@ -1027,7 +990,7 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Worker */}
+                
                   <FormGrid>
                     <FormLabel htmlFor="worker">Worker*</FormLabel>
             <OutlinedInput
@@ -1072,7 +1035,6 @@ export default function AddVehicle() {
         </Grid>
       </form>
       
-      {/* Submit Results Dialog */}
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
@@ -1089,7 +1051,6 @@ export default function AddVehicle() {
         </DialogActions>
       </Dialog>
       
-      {/* Processing Dialog */}
       <Dialog
         open={processingDialogOpen}
         aria-labelledby="processing-dialog-title"

@@ -38,7 +38,7 @@ export const isTokenValid = (): boolean => {
 export const forceCheckTokenValidity = (): void => {
   // No-op: do not force logout on expiry
 };
-
+      
 // Get the decoded token if present (do not check expiration)
 export const getDecodedToken = (): DecodedToken | null => {
   try {

@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Modal from '@mui/material/Modal';
 import apiClient from 'Services/apiService';
+import CircularProgress from '@mui/material/CircularProgress';
 
 const style = {
   position: 'absolute' as 'absolute',
@@ -21,6 +22,8 @@ interface DeleteModalProps {
   onClose: () => void;
   deleteItemId?: number;
   onDeleteSuccess?: (id: number) => void;
+  isDeleting?: boolean;
+  error?: string | null;
 }
 
 export default function VehicleDeleteModal({
@@ -28,6 +31,8 @@ export default function VehicleDeleteModal({
   onClose,
   deleteItemId,
   onDeleteSuccess,
+  isDeleting = false,
+  error = null,
 }: DeleteModalProps) {
   const handleDeleteRequest = async () => {
     if (deleteItemId === undefined) {
@@ -60,16 +65,28 @@ export default function VehicleDeleteModal({
               ? `Are you sure you want to delete this vehicle?`
               : "No vehicle selected for deletion."}
           </Typography>
+          {error && (
+            <Typography color="error" sx={{ mt: 2 }}>
+              {error}
+            </Typography>
+          )}
           <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between" }}>
             <Button
               variant="contained"
               color="error"
               onClick={handleDeleteRequest}
-              disabled={deleteItemId === undefined}
+              disabled={deleteItemId === undefined || isDeleting}
             >
-              Confirm Delete
+              {isDeleting ? (
+                <>
+                  <CircularProgress size={20} sx={{ mr: 1 }} />
+                  Deleting...
+                </>
+              ) : (
+                'Confirm Delete'
+              )}
             </Button>
-            <Button variant="outlined" onClick={onClose}>
+            <Button variant="outlined" onClick={onClose} disabled={isDeleting}>
               Cancel
             </Button>
           </Box>

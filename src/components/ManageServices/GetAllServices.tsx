@@ -207,51 +207,51 @@ const GetAllServices: React.FC = () => {
             <CircularProgress />
           </Box>
         ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>
+                  <strong>S.No</strong>
+                </TableCell>
+                <TableCell>
+                  <strong>Name</strong>
+                </TableCell>
+                <TableCell>
+                  <strong>Service Rate</strong>
+                </TableCell>
+                <TableCell>
+                  <strong>Actions</strong>
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredServices.map((service, index) => (
+                <TableRow key={service.serviceId}>
+                  <TableCell>{index + 1}</TableCell>
+                  <TableCell>{service.serviceName}</TableCell>
+                  <TableCell>{service.serviceRate}</TableCell>
                   <TableCell>
-                    <strong>S.No</strong>
-                  </TableCell>
-                  <TableCell>
-                    <strong>Name</strong>
-                  </TableCell>
-                  <TableCell>
-                    <strong>Service Rate</strong>
-                  </TableCell>
-                  <TableCell>
-                    <strong>Actions</strong>
+                    <Stack direction="row" spacing={1}>
+                      <IconButton
+                        onClick={() => handleEdit(service.serviceId)}
+                        color="primary"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => handleDelete(service.serviceId)}
+                        color="error"
+                      >
+                        <TrashIcon />
+                      </IconButton>
+                    </Stack>
                   </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredServices.map((service, index) => (
-                  <TableRow key={service.serviceId}>
-                    <TableCell>{index + 1}</TableCell>
-                    <TableCell>{service.serviceName}</TableCell>
-                    <TableCell>{service.serviceRate}</TableCell>
-                    <TableCell>
-                      <Stack direction="row" spacing={1}>
-                        <IconButton
-                          onClick={() => handleEdit(service.serviceId)}
-                          color="primary"
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleDelete(service.serviceId)}
-                          color="error"
-                        >
-                          <TrashIcon />
-                        </IconButton>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
         )}
       </StyledPaper>
       {confirmDelete && (

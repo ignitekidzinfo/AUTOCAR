@@ -325,7 +325,7 @@ const UserPartList: React.FC = () => {
         headerName: 'Actions',
         width: isMobile ? 70 : 90,
         minWidth: 70,
-        flex: 0, // Use fixed width instead of flex
+      flex: 0, // Use fixed width instead of flex
         sortable: false,
         filterable: false,
         renderCell: (params: GridCellParams) => (
@@ -355,14 +355,14 @@ const UserPartList: React.FC = () => {
         headerName: 'Sr.No',
         width: isMobile ? 50 : 80,
         minWidth: 50,
-        flex: 0, // Use fixed width instead of flex
+      flex: 0, // Use fixed width instead of flex
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
     },
     {
         field: 'partName',
         headerName: 'Spare Name',
-        width: isMobile ? baseColumnWidth : baseColumnWidth * 1.2,
+      width: isMobile ? baseColumnWidth : baseColumnWidth * 1.2,
         minWidth: 80,
         flex: isMobile ? 0.5 : 1,
         sortable: false,
@@ -419,7 +419,7 @@ const UserPartList: React.FC = () => {
         headerName: 'Purchase Rate',
         width: isMobile ? 80 : 120,
         minWidth: 80,
-        flex: 0, // Use fixed width
+      flex: 0, // Use fixed width
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -436,7 +436,7 @@ const UserPartList: React.FC = () => {
         headerName: 'Sale Rate',
         width: isMobile ? 70 : 110,
         minWidth: 70,
-        flex: 0, // Use fixed width
+      flex: 0, // Use fixed width
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -453,7 +453,7 @@ const UserPartList: React.FC = () => {
         headerName: 'GST%',
         width: isMobile ? 60 : 80,
         minWidth: 60,
-        flex: 0, // Use fixed width
+      flex: 0, // Use fixed width
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -470,17 +470,17 @@ const UserPartList: React.FC = () => {
         headerName: 'Stock Qty',
         width: isMobile ? 70 : 100,
         minWidth: 70,
-        flex: 0, // Use fixed width
+      flex: 0, // Use fixed width
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
           const quantity = Number(params.value);
-          const isLowStock = quantity < LOW_STOCK_THRESHOLD;
+        const isLowStock = quantity < LOW_STOCK_THRESHOLD;
           return (
             <Box sx={{ 
               display: 'flex', 
               alignItems: 'center',
-              justifyContent: 'center',
+            justifyContent: 'center',
               color: isLowStock ? theme.palette.error.main : 'inherit',
               fontWeight: isLowStock ? 'bold' : 'normal',
               fontSize: isMobile ? '0.7rem' : 'inherit',
@@ -498,14 +498,14 @@ const UserPartList: React.FC = () => {
         headerName: 'Spare Supplier',
         width: isMobile ? 120 : 170,
         minWidth: 110,
-        flex: 0, // Use fixed width
+      flex: 0, // Use fixed width
         sortable: false,
         filterable: false,
         renderCell: (params: GridCellParams) => (
           <Box sx={{ 
             width: '100%',
             display: 'flex',
-            justifyContent: 'center',
+          justifyContent: 'center',
           }}>
             <Button
               variant="contained"
@@ -537,7 +537,7 @@ const UserPartList: React.FC = () => {
                 minWidth: isMobile ? '95px' : '120px',
                 whiteSpace: 'nowrap',
                 overflow: 'visible',
-                maxWidth: '100%',
+              maxWidth: '100%',
               }}
             >
               {isMobile ? "Suppliers" : "View Suppliers"}

@@ -1,33 +1,25 @@
 import axios, { AxiosResponse } from 'axios';
 import logger from './logger';
-import { isDevelopment } from './environment';
 import storageUtils from './storageUtils';
 import secureStorage from './secureStorage';
-import { isTokenValid, forceCheckTokenValidity } from './tokenUtils';
 import { toast } from 'react-toastify';
 
-// Configuration for development mode
 const DEBUG_DISABLE_LOGOUT_ON_401 = false; 
 
-// Define custom response type with cached property
 interface CachedAxiosResponse<T = any> extends AxiosResponse<T> {
   cached?: boolean;
 }
 
-// Environment check for API base URL
-const API_BASE_URL = 'https://carauto01-production-8b0b.up.railway.app';
-// const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
+// const API_BASE_URL = 'https://carauto01-production-8b0b.up.railway.app';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
 
-// API request cache system
 const CACHE_DURATION = 5 * 60 * 1000; 
 const apiCache: Record<string, { data: any; timestamp: number }> = {};
 
-// CSRF Token management
 const getCsrfToken = (): string | null => {
   return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
 };
 
-// Sensitive keys that should be sanitized in responses
 const SENSITIVE_KEYS = [
   'password', 'token', 'accessToken', 'refreshToken', 'authorization', 'auth', 
   'secret', 'key', 'apiKey', 'pin', 'credential', 'ssn', 'social', 
@@ -35,28 +27,22 @@ const SENSITIVE_KEYS = [
   'jwt', 'id_token', 'access_token', 'x-api-key'
 ];
 
-// Function to sanitize sensitive data from API responses
 const sanitizeResponseData = (data: any): any => {
   if (!data) return data;
   
-  // Handle simple types
   if (typeof data !== 'object') return data;
   
-  // Handle arrays
   if (Array.isArray(data)) {
     return data.map(item => sanitizeResponseData(item));
   }
   
-  // Handle objects
   const sanitized = { ...data };
   for (const key in sanitized) {
-    // Check if this is a sensitive key
     const isSensitive = SENSITIVE_KEYS.some(pattern => 
       key.toLowerCase().includes(pattern.toLowerCase())
     );
     
     if (isSensitive) {
-      // Mask sensitive data
       if (typeof sanitized[key] === 'string') {
         sanitized[key] = '********';
       } else if (typeof sanitized[key] === 'number') {
@@ -65,7 +51,6 @@ const sanitizeResponseData = (data: any): any => {
         sanitized[key] = '[REDACTED]';
       }
     } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
-      // Recursively sanitize nested objects
       sanitized[key] = sanitizeResponseData(sanitized[key]);
     }
   }
@@ -73,7 +58,6 @@ const sanitizeResponseData = (data: any): any => {
   return sanitized;
 };
 
-// Create a response sanitizer that modifies the response before browser sees it
 const installResponseSanitizer = () => {
   if (typeof window !== 'undefined') {
    
