@@ -494,18 +494,18 @@ export default function VehicleList() {
       const processedRows = processVehicleData(pageVehicles, append);
       
       // Update state
-      setCurrentPage(pageNumber);
+            setCurrentPage(pageNumber);
       setTotalElements(totalCount);
       setTotalPages(pageCount);
       setHasMore(hasMoreData);
       setLastUpdateTime(Date.now());
-      
-      if (append) {
-        setRows(prev => [...prev, ...processedRows]);
-      } else {
-        setRows(processedRows);
-      }
-      
+            
+            if (append) {
+              setRows(prev => [...prev, ...processedRows]);
+            } else {
+              setRows(processedRows);
+            }
+            
       setError(null);
       
     } catch (error) {
@@ -515,9 +515,9 @@ export default function VehicleList() {
       }
     } finally {
       if (isComponentMountedRef.current) {
-        loadingRef.current = false;
-        setLoading(false);
-        setInitialLoad(false);
+              loadingRef.current = false;
+              setLoading(false);
+              setInitialLoad(false);
       }
     }
   }, [fetchVehiclesFromApi, processVehicleData]);
@@ -660,7 +660,7 @@ export default function VehicleList() {
     }
     
     return () => {
-      observer.disconnect();
+        observer.disconnect();
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
@@ -692,7 +692,7 @@ export default function VehicleList() {
     // Schedule a refresh after a short delay
     setTimeout(() => {
       if (isComponentMountedRef.current) {
-        fetchVehicles(0, false);
+      fetchVehicles(0, false);
       }
     }, 500);
   }, [fetchVehicles]);
@@ -1385,7 +1385,7 @@ export default function VehicleList() {
             <Box>
               <Typography component="h1" variant="h5" fontWeight="bold" color="primary">
                 Vehicle List {forceUpdateCounter > 0 && `(Updated: ${new Date(lastUpdateTime).toLocaleTimeString()})`}
-              </Typography>
+        </Typography>
               <Typography variant="body2" color="text.secondary" mt={0.5}>
                 {listType === 'serviceQueue' 
                   ? 'Vehicles currently in service queue' 
@@ -1410,37 +1410,37 @@ export default function VehicleList() {
                   {error}
                 </Alert>
               )}
-              <Button 
-                variant="contained" 
-                color="primary" 
-                startIcon={<AddIcon />}
+            <Button 
+              variant="contained" 
+              color="primary" 
+              startIcon={<AddIcon />}
                 onClick={() => {
                   navigate("/admin/vehicle-add");
                   // Force refresh when returning to this page
                   forceVehicleDataRefresh();
-                }}
-              >
-                Add Vehicle
-              </Button>
+              }}
+            >
+          Add Vehicle
+        </Button>
             </Stack>
-          </Stack>
+      </Stack>
 
           <FormControl fullWidth sx={{ mb: 2 }}>
-            <OutlinedInput
-              size="small"
+          <OutlinedInput
+            size="small"
               placeholder="Quick search in results..."
               onChange={(e) => handleLocalSearch(e.target.value)}
-              startAdornment={
+            startAdornment={
                 <InputAdornment position="start" sx={{ color: 'text.secondary' }}>
-                  <SearchRoundedIcon fontSize="small" />
-                </InputAdornment>
-              }
+                <SearchRoundedIcon fontSize="small" />
+              </InputAdornment>
+            }
               sx={{ 
                 borderRadius: 2,
                 backgroundColor: alpha(theme.palette.common.white, 0.05)
               }}
-            />
-          </FormControl>
+          />
+        </FormControl>
 
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             <Button 
@@ -1451,7 +1451,7 @@ export default function VehicleList() {
             >
               {showAdvancedSearch ? "Hide Advanced Search" : "Show Advanced Search"}
             </Button>
-          </Box>
+      </Box>
 
           {showAdvancedSearch && (
             <Paper 
@@ -1467,40 +1467,40 @@ export default function VehicleList() {
                 <Grid item xs={12} md={3}>
                   <FormControl fullWidth>
                     <InputLabel>Search Type</InputLabel>
-                    <Select
-                      value={selectedType}
-                      onChange={(e) => setSelectedType(e.target.value)}
+            <Select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
                       size="small"
                       sx={{ borderRadius: 2 }}
-                    >
-                      <MenuItem value="Vehicle ID">Vehicle ID</MenuItem>
-                      <MenuItem value="Date Range">Date Range</MenuItem>
-                      <MenuItem value="Appointment Number">Appointment Number</MenuItem>
-                    </Select>
-                  </FormControl>
+            >
+              <MenuItem value="Vehicle ID">Vehicle ID</MenuItem>
+              <MenuItem value="Date Range">Date Range</MenuItem>
+              <MenuItem value="Appointment Number">Appointment Number</MenuItem>
+            </Select>
+          </FormControl>
                 </Grid>
 
-                {(selectedType === 'Vehicle ID' || selectedType === 'Appointment Number') && (
+          {(selectedType === 'Vehicle ID' || selectedType === 'Appointment Number') && (
                   <Grid item xs={12} md={6}>
                     <FormControl fullWidth variant="outlined">
-                      <OutlinedInput
-                        size="small"
-                        id="search"
+              <OutlinedInput
+                size="small"
+                id="search"
                         placeholder={selectedType === 'Vehicle ID' ? "Enter vehicle ID..." : "Enter appointment number..."}
-                        value={textInput}
-                        onChange={(e) => setTextInput(e.target.value)}
-                        startAdornment={
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                startAdornment={
                           <InputAdornment position="start" sx={{ color: 'text.secondary' }}>
-                            <SearchRoundedIcon fontSize="small" />
-                          </InputAdornment>
-                        }
+                    <SearchRoundedIcon fontSize="small" />
+                  </InputAdornment>
+                }
                         sx={{ borderRadius: 2 }}
-                      />
-                    </FormControl>
+              />
+            </FormControl>
                   </Grid>
-                )}
+          )}
 
-                {selectedType === 'Date Range' && (
+          {selectedType === 'Date Range' && (
                   <Grid item xs={12} md={6}>
                     <FormControl fullWidth>
                       <Box sx={{ 
@@ -1519,19 +1519,19 @@ export default function VehicleList() {
                           fontSize: '0.875rem'
                         }
                       }}>
-                        <ReactDatePicker
-                          selected={dateValue[0]}
-                          onChange={(update: [Date | null, Date | null]) => setDateValue(update)}
-                          startDate={dateValue[0]}
-                          endDate={dateValue[1]}
-                          selectsRange
-                          dateFormat="yyyy-MM-dd"
-                          placeholderText="Select date range"
-                        />
+                <ReactDatePicker
+                  selected={dateValue[0]}
+                  onChange={(update: [Date | null, Date | null]) => setDateValue(update)}
+                  startDate={dateValue[0]}
+                  endDate={dateValue[1]}
+                  selectsRange
+                  dateFormat="yyyy-MM-dd"
+                  placeholderText="Select date range"
+                />
                       </Box>
-                    </FormControl>
-                  </Grid>
-                )}
+              </FormControl>
+            </Grid>
+          )}
 
                 <Grid item xs={12} md={3}>
                   <Button 
@@ -1543,30 +1543,26 @@ export default function VehicleList() {
                     sx={{ borderRadius: 2 }}
                   >
                     {isSearching ? 'Searching...' : 'Search'}
-                  </Button>
-                </Grid>
-              </Grid>
+          </Button>
+        </Grid>
+      </Grid>
             </Paper>
           )}
 
           <Box 
-            sx={{ 
-              position: 'relative',
-              height: 'calc(100vh - 350px)',
-              minHeight: '400px',
-              width: '100%',
-              overflow: 'hidden',
-              borderRadius: 2,
-              border: `1px solid ${theme.palette.divider}`,
+                sx={{ 
+            position: 'relative',
+              height: 'auto',
+            width: '100%',
+              overflow: 'visible',
+            borderRadius: 2,
+            border: `1px solid ${theme.palette.divider}`,
               display: 'flex',
               flexDirection: 'column',
               '@media (max-width: 600px)': {
-                overflow: 'auto',
+                overflow: 'visible',
                 height: 'auto',
-                maxHeight: 'calc(100vh - 250px)',
-                '& .MuiDataGrid-root': {
-                  minWidth: '968px', 
-                },
+                maxHeight: 'none',
               },
             }}
           >
@@ -1575,17 +1571,17 @@ export default function VehicleList() {
             ) : (
               <Box sx={{ 
                 width: '100%', 
-                height: '100%',
-                overflow: 'hidden',
+                height: 'auto',
+                overflow: 'visible',
                 '@media (max-width: 600px)': {
                   overflow: 'visible',
-                  width: '968px' 
+                  width: '100%'
                 }
               }}>
                 <CustomizedDataGrid 
                   columns={columns} 
                   rows={filteredRows}
-                  autoHeight={false}
+                  autoHeight={true}
                   density="standard"
                   checkboxSelection={false}
                   disableRowSelectionOnClick
@@ -1593,6 +1589,7 @@ export default function VehicleList() {
                   initialState={{
                     pagination: { paginationModel: { pageSize: 20 } },
                   }}
+                  pageSizeOptions={[10, 20, 50, 100]}
                   disableColumnMenu
                   columnVisibilityModel={{
                     superwiser: window.innerWidth > 1200,
@@ -1601,10 +1598,10 @@ export default function VehicleList() {
                   }}
                   sx={{
                     width: '100%',
-                    height: '100%',
-                    border: '1px solid #e0e0e0',
+                    height: 'auto',
+                    border: 'none',
                     borderRadius: 1,
-                    overflow: 'hidden',
+                    overflow: 'visible',
                     '& .MuiDataGrid-cell': {
                       borderBottom: '1px solid #f0f0f0',
                       padding: '8px 16px',
@@ -1656,6 +1653,10 @@ export default function VehicleList() {
                     },
                     '& .MuiDataGrid-columnHeaders': {
                       borderBottom: 'none',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 2,
+                      backgroundColor: '#fafafa',
                     },
                     '& .MuiDataGrid-columnHeaderTitleContainer': {
                       padding: '0',
@@ -1672,13 +1673,13 @@ export default function VehicleList() {
                       display: 'none'
                     },
                     '& .MuiDataGrid-virtualScroller': {
-                      overflow: 'hidden', 
+                      overflow: 'visible',
                       '@media (max-width: 600px)': {
                         overflow: 'visible'
                       },
                     },
                     '& .MuiDataGrid-main': {
-                      overflow: 'hidden',
+                      overflow: 'visible',
                       maxWidth: '100%',
                       '@media (max-width: 600px)': {
                         overflow: 'visible', 
@@ -1688,23 +1689,27 @@ export default function VehicleList() {
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                     },
+                    '& .MuiDataGrid-footerContainer': {
+                      borderTop: '1px solid #e0e0e0',
+                      backgroundColor: '#fafafa',
+                    },
                   }}
                 />
                 
                 {loading && !initialLoad && !isSearching && (
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                    p: 2, 
-                    backgroundColor: alpha(theme.palette.background.paper, 0.6),
-                    borderTop: `1px solid ${theme.palette.divider}`,
-                  }}>
-                    <CircularProgress size={24} thickness={5} sx={{ mr: 2 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Loading more vehicles...
-                    </Typography>
-                  </Box>
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'center', 
+                  p: 2, 
+                  backgroundColor: alpha(theme.palette.background.paper, 0.6),
+                  borderTop: `1px solid ${theme.palette.divider}`,
+                }}>
+                  <CircularProgress size={24} thickness={5} sx={{ mr: 2 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading more vehicles...
+                  </Typography>
+                </Box>
                 )}
               </Box>
             )}

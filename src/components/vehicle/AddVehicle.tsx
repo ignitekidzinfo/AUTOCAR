@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, RefObject } from 'react';
 import {
   Box,
   Grid,
@@ -185,7 +185,7 @@ const SectionCardHeader = styled(CardHeader)(({ theme }) => ({
   padding: theme.spacing(0.75, 2),
   '& .MuiCardHeader-title': {
     fontSize: '1rem',
-    fontWeight: 500
+    fontWeight: 700
   },
   [theme.breakpoints.down('sm')]: {
     padding: theme.spacing(0.5, 1),
@@ -219,9 +219,22 @@ const ResponsiveGrid = styled(Grid)(({ theme }) => ({
   }
 }));
 
+// Add styled FormLabel component
+const BoldFormLabel = styled(FormLabel)(({ theme }) => ({
+  fontWeight: 'bold',
+  marginBottom: theme.spacing(0.5)
+}));
+
 export default function AddVehicle() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  // Add refs for fields with potential errors
+  const kmsDrivenRef = useRef<HTMLDivElement>(null);
+  const customerNameRef = useRef<HTMLDivElement>(null);
+  const customerMobileRef = useRef<HTMLDivElement>(null);
+  const emailRef = useRef<HTMLDivElement>(null);
+  const insuranceToRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState<VehicleFormData>(initialFormData);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -259,26 +272,59 @@ export default function AddVehicle() {
 
   const validateFields = (): boolean => {
     const newErrors: { email?: string; customerName?: string; customerMobileNumber?: string; kmsDriven?: string; insuranceTo?: string } = {};
-    if (!formData.customerName.trim()) newErrors.customerName = "Customer name is required";
+    type DivRef = typeof kmsDrivenRef;
+    let firstErrorRef: DivRef | null = null;
+
+    if (!formData.customerName.trim()) {
+      newErrors.customerName = "Customer name is required";
+      firstErrorRef = customerNameRef;
+    }
+    
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
+      if (!firstErrorRef) firstErrorRef = emailRef;
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) newErrors.email = "Invalid email format";
+      if (!emailRegex.test(formData.email)) {
+        newErrors.email = "Invalid email format";
+        if (!firstErrorRef) firstErrorRef = emailRef;
     }
+    }
+    
     if (!formData.customerMobileNumber.trim()) {
       newErrors.customerMobileNumber = "Mobile number is required";
+      if (!firstErrorRef) firstErrorRef = customerMobileRef;
     } else {
       const mobileRegex = /^\d{10}$/;
-      if (!mobileRegex.test(formData.customerMobileNumber)) newErrors.customerMobileNumber = "Mobile number must be exactly 10 digits";
+      if (!mobileRegex.test(formData.customerMobileNumber)) {
+        newErrors.customerMobileNumber = "Mobile number must be exactly 10 digits";
+        if (!firstErrorRef) firstErrorRef = customerMobileRef;
     }
+    }
+    
     if (!formData.kmsDriven || formData.kmsDriven.toString().trim() === "" || Number(formData.kmsDriven) === 0) {
       newErrors.kmsDriven = "Kilometer Driven is required";
+      if (!firstErrorRef) firstErrorRef = kmsDrivenRef;
     }
+    
     if (formData.insuranceStatus === "Expired" && !formData.insuranceTo) {
       newErrors.insuranceTo = "Expired At date is required";
+      if (!firstErrorRef) firstErrorRef = insuranceToRef;
     }
+    
     setErrors(newErrors);
+    
+    // Scroll to the first error field if any
+    if (firstErrorRef && firstErrorRef.current) {
+      const ref = firstErrorRef; // Create a non-null reference to use inside the timeout
+      setTimeout(() => {
+        ref.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }, 100);
+    }
+    
     return Object.keys(newErrors).length === 0;
   };
 
@@ -450,7 +496,7 @@ export default function AddVehicle() {
           technician: '',
           worker: '',
           vehicleInspection: '',
-          kmsDriven: response.kmsDriven || "",
+          kmsDriven: "",
           status: response.status || "Waiting",
           userId: response.userId || "",
           date: response.date || "",
@@ -475,7 +521,7 @@ export default function AddVehicle() {
   return (
     <ContainerBox>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography component="h2" variant="h6">
+        <Typography component="h2" variant="h6" fontWeight="bold">
           {id ? "Update " : "Add New "}Vehicle
         </Typography>
         <Button variant="contained" color="primary" onClick={() => navigate(-1)}>
@@ -491,7 +537,7 @@ export default function AddVehicle() {
               <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
                 <Grid item xs={12} sm={6}>
                   <FormGrid>
-                    <FormLabel htmlFor="vehicleNumber">Vehicle No*</FormLabel>
+                    <BoldFormLabel htmlFor="vehicleNumber">Vehicle No*</BoldFormLabel>
       <Autocomplete
                       freeSolo
         options={searchResults}
@@ -523,7 +569,7 @@ export default function AddVehicle() {
                             technician: '',
                             worker: '',
                             vehicleInspection: '',
-                            kmsDriven: value.kmsDriven || "",
+                            kmsDriven: "",
                             status: value.status || "Waiting",
                             userId: value.userId || "",
                             date: value.date || "",
@@ -559,7 +605,7 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6}>
                   <FormGrid>
-                    <FormLabel htmlFor="numberPlateColour">Number Plate Colour*</FormLabel>
+                    <BoldFormLabel htmlFor="numberPlateColour">Number Plate Colour*</BoldFormLabel>
                     <FormControl fullWidth size="small">
                       <Select
                         id="numberPlateColour"
@@ -581,7 +627,7 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6}>
                   <FormGrid>
-                    <FormLabel htmlFor="vehicleBrand">Vehicle Maker*</FormLabel>
+                    <BoldFormLabel htmlFor="vehicleBrand">Vehicle Maker*</BoldFormLabel>
             <OutlinedInput
                       id="vehicleBrand"
                       name="vehicleBrand"
@@ -597,7 +643,7 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6}>
                   <FormGrid>
-                    <FormLabel htmlFor="engineNumber">Engine Number</FormLabel>
+                    <BoldFormLabel htmlFor="engineNumber">Engine Number</BoldFormLabel>
                     <OutlinedInput
                       id="engineNumber"
                       name="engineNumber"
@@ -613,7 +659,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6}>
                  
                   <FormGrid>
-                    <FormLabel htmlFor="vehicleModelName">Model Line*</FormLabel>
+                    <BoldFormLabel htmlFor="vehicleModelName">Model Line*</BoldFormLabel>
                     <OutlinedInput
                       id="vehicleModelName"
                       name="vehicleModelName"
@@ -629,7 +675,7 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6}>
                   <FormGrid>
-                    <FormLabel htmlFor="vehicleInspection">Sitting Capacity</FormLabel>
+                    <BoldFormLabel htmlFor="vehicleInspection">Sitting Capacity</BoldFormLabel>
                     <OutlinedInput
                       id="vehicleInspection"
                       name="vehicleInspection"
@@ -645,7 +691,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6}>
                   
                   <FormGrid>
-                    <FormLabel htmlFor="variant">Variant*</FormLabel>
+                    <BoldFormLabel htmlFor="variant">Variant*</BoldFormLabel>
             <OutlinedInput
                       id="variant"
                       name="variant"
@@ -662,7 +708,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6}>
                  
                   <FormGrid>
-                    <FormLabel htmlFor="ccEngine">CC Engine</FormLabel>
+                    <BoldFormLabel htmlFor="ccEngine">CC Engine</BoldFormLabel>
                     <OutlinedInput
                       id="ccEngine"
                       name="ccEngine"
@@ -676,7 +722,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6}>
                 
                   <FormGrid>
-                    <FormLabel htmlFor="fuelType">Fuel Type*</FormLabel>
+                    <BoldFormLabel htmlFor="fuelType">Fuel Type*</BoldFormLabel>
             <FormControl fullWidth size="small">
               <Select
                 id="fuelType"
@@ -697,7 +743,7 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6}>
                   <FormGrid>
-                    <FormLabel htmlFor="manufactureYear">Manufactured Year</FormLabel>
+                    <BoldFormLabel htmlFor="manufactureYear">Manufactured Year</BoldFormLabel>
             <OutlinedInput
               id="manufactureYear"
               name="manufactureYear"
@@ -711,8 +757,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  <FormGrid>
-            <FormLabel htmlFor="kmsDriven">Kilometer Driven</FormLabel>
+                  <FormGrid ref={kmsDrivenRef}>
+            <BoldFormLabel htmlFor="kmsDriven">Kilometer Driven</BoldFormLabel>
             <OutlinedInput
               id="kmsDriven"
               name="kmsDriven"
@@ -729,7 +775,7 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6}>
                   <FormGrid>
-            <FormLabel htmlFor="date">Date Of Admission</FormLabel>
+            <BoldFormLabel htmlFor="date">Date Of Admission</BoldFormLabel>
             <OutlinedInput
               id="date"
               name="date"
@@ -745,7 +791,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6}>
              
                   <FormGrid>
-            <FormLabel htmlFor="chasisNumber">Chasis Number</FormLabel>
+            <BoldFormLabel htmlFor="chasisNumber">Chasis Number</BoldFormLabel>
             <OutlinedInput
               id="chasisNumber"
               name="chasisNumber"
@@ -775,7 +821,7 @@ export default function AddVehicle() {
               )}
               
               <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle1" component="h3" sx={{ mb: 2 }}>
+              <Typography variant="subtitle1" component="h3" sx={{ mb: 2 }} fontWeight="bold">
                 Insurance Information
               </Typography>
               
@@ -804,7 +850,7 @@ export default function AddVehicle() {
                 )}
                 
                 {formData.insuranceStatus === "Expired" && (
-                  <Grid item xs={12} sm={6} md={4}>
+                  <Grid item xs={12} sm={6} md={4} ref={insuranceToRef}>
                     <FormLabel htmlFor="insuranceTo">Expired At</FormLabel>
             <OutlinedInput
                       id="insuranceTo" 
@@ -829,8 +875,8 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6} md={4}>
                  
-                  <FormGrid>
-                    <FormLabel htmlFor="customerName">Customer Name*</FormLabel>
+                  <FormGrid ref={customerNameRef}>
+                    <BoldFormLabel htmlFor="customerName">Customer Name*</BoldFormLabel>
             <OutlinedInput
                       id="customerName"
                       name="customerName"
@@ -847,8 +893,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  <FormGrid>
-                    <FormLabel htmlFor="customerMobileNumber">Mobile No*</FormLabel>
+                  <FormGrid ref={customerMobileRef}>
+                    <BoldFormLabel htmlFor="customerMobileNumber">Mobile No*</BoldFormLabel>
             <OutlinedInput
               id="customerMobileNumber"
               name="customerMobileNumber"
@@ -866,8 +912,8 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6} md={4}>
                 
-                  <FormGrid>
-                    <FormLabel htmlFor="email">Email Id</FormLabel>
+                  <FormGrid ref={emailRef}>
+                    <BoldFormLabel htmlFor="email">Email Id</BoldFormLabel>
             <OutlinedInput
               id="email"
               name="email"
@@ -885,7 +931,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6} md={4}>
                  
                   <FormGrid>
-                    <FormLabel htmlFor="customerAddress">Customer Address*</FormLabel>
+                    <BoldFormLabel htmlFor="customerAddress">Customer Address*</BoldFormLabel>
                     <OutlinedInput
                       id="customerAddress"
                       name="customerAddress"
@@ -901,7 +947,7 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6} md={4}>
                   <FormGrid>
-                    <FormLabel htmlFor="customerAadharNo">Customer Aadhar No.*</FormLabel>
+                    <BoldFormLabel htmlFor="customerAadharNo">Customer Aadhar No.*</BoldFormLabel>
             <OutlinedInput
               id="customerAadharNo"
               name="customerAadharNo"
@@ -917,7 +963,7 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6} md={4}>
                   <FormGrid>
-            <FormLabel htmlFor="customerGstin">Customer GSTIN</FormLabel>
+            <BoldFormLabel htmlFor="customerGstin">Customer GSTIN</BoldFormLabel>
             <OutlinedInput
               id="customerGstin"
               name="customerGstin"
@@ -933,7 +979,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6} md={4}>
                   
                   <FormGrid>
-                    <FormLabel htmlFor="advancePayment">Advance Payment*</FormLabel>
+                    <BoldFormLabel htmlFor="advancePayment">Advance Payment*</BoldFormLabel>
             <OutlinedInput
                       id="advancePayment" 
                       name="advancePayment" 
@@ -958,7 +1004,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6} md={4}>
                  
                   <FormGrid>
-                    <FormLabel htmlFor="superwiser">Superwiser*</FormLabel>
+                    <BoldFormLabel htmlFor="superwiser">Superwiser*</BoldFormLabel>
             <OutlinedInput
               id="superwiser"
               name="superwiser"
@@ -975,7 +1021,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6} md={4}>
                  
                   <FormGrid>
-                    <FormLabel htmlFor="technician">Technician*</FormLabel>
+                    <BoldFormLabel htmlFor="technician">Technician*</BoldFormLabel>
             <OutlinedInput
               id="technician"
               name="technician"
@@ -992,7 +1038,7 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6} md={4}>
                 
                   <FormGrid>
-                    <FormLabel htmlFor="worker">Worker*</FormLabel>
+                    <BoldFormLabel htmlFor="worker">Worker*</BoldFormLabel>
             <OutlinedInput
               id="worker"
               name="worker"
