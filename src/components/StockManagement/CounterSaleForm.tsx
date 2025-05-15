@@ -240,9 +240,44 @@ const CounterSaleForm: FC = () => {
       setSuggestions([]);
       return;
     }
+    
+    console.log('Searching for:', searchQuery);
+    
     try {
-      const response = await apiClient.get(`/Filter/searchBarFilter?searchBarInput=${searchQuery}`);
-      setSuggestions(response.data.list || []);
+      // Add a timestamp parameter to prevent caching
+      const timestamp = new Date().getTime();
+      const response = await apiClient.get(
+        `/Filter/searchBarFilter?searchBarInput=${encodeURIComponent(searchQuery)}&_t=${timestamp}`
+      );
+      
+      console.log('Search API response:', response);
+      
+      // Handle different possible response formats
+      let results = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          results = response.data;
+        } else if (response.data.list && Array.isArray(response.data.list)) {
+          results = response.data.list;
+        } else if (response.data.content && Array.isArray(response.data.content)) {
+          results = response.data.content;
+        } else if (typeof response.data === 'object') {
+          // Try to extract any arrays from the response
+          const possibleArrays = Object.values(response.data)
+            .filter(val => Array.isArray(val)) as any[][];
+          
+          if (possibleArrays.length > 0) {
+            // Use the largest array found
+            results = possibleArrays.reduce((a, b) => a.length > b.length ? a : b, []);
+          } else {
+            // If no arrays, maybe it's a single object, so wrap it
+            results = [response.data];
+          }
+        }
+      }
+      
+      console.log('Processed search results:', results);
+      setSuggestions(results);
     } catch (error) {
       console.error('Error fetching part details:', error);
     }
@@ -266,21 +301,33 @@ const CounterSaleForm: FC = () => {
   }, []);
 
   const handleSuggestionSelect = (item: any) => {
+    // Handle different possible property names in the API response
+    const partName = item.partName || item.spareName || '';
+    const partNumber = item.partNumber || item.spareNo || '';
+    const manufacturerName = item.manufacturer || '';
+    const priceValue = item.price ? item.price.toString() : '0';
+    const cgstValue = item.cgst || 0;
+    const sgstValue = item.sgst || 0;
+    
+    console.log('Selected item:', item);
+    
     const updatedSpareRow: SpareRow = computeSpareRowTotals({
-      spareName: item.partName,
-      spareNo: item.partNumber,
-      manufacturer: item.manufacturer,
-      rate: item.price.toString(),
+      spareName: partName,
+      spareNo: partNumber,
+      manufacturer: manufacturerName,
+      rate: priceValue,
       qty: '1',
       discountPercent: spareRow.discountPercent,
       discountAmt: 0,
       taxableValue: 0,
       total: 0,
-      cgstPercent: item.cgst,
-      sgstPercent: item.sgst,
+      cgstPercent: cgstValue,
+      sgstPercent: sgstValue,
     });
+    
     setSpareRow(updatedSpareRow);
     setSuggestions([]);
+    
     const newBillRow: BillRow = computeBillRow({
       id: Date.now(),
       sNo: billRows.length + 1,
@@ -300,6 +347,7 @@ const CounterSaleForm: FC = () => {
       amount: 0,
       checked: false,
     });
+    
     setBillRows((prev) => [...prev, newBillRow]);
     setSpareRow({
       spareName: '',
@@ -563,22 +611,81 @@ const CounterSaleForm: FC = () => {
                 {suggestions.length > 0 && (
                   <div
                     style={{
-                      background: isDark ? '#424242' : '#fff',
-                      border: isDark ? '1px solid #555' : '1px solid #ccc',
+                      background: isDark ? '#424242' : '#f8f9fa',
+                      border: isDark ? '1px solid #555' : '1px solid #dee2e6',
                       position: 'absolute',
                       width: '100%',
                       zIndex: 1,
+                      maxHeight: '250px',
+                      overflowY: 'auto',
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.15)',
+                      borderRadius: '4px'
                     }}
                   >
-                    {suggestions.map((item, idx) => (
-                      <div
-                        key={idx}
-                        style={{ padding: '0.5rem', cursor: 'pointer' }}
-                        onClick={() => handleSuggestionSelect(item)}
-                      >
-                        {`${item.manufacturer} - ${item.partNumber} - ${item.description}`}
-                      </div>
-                    ))}
+                    {suggestions.map((item, idx) => {
+                      // Format display text based on available data
+                      let displayText = '';
+                      
+                      // Manufacturer or brand
+                      if (item.manufacturer) {
+                        displayText += item.manufacturer;
+                      }
+                      
+                      // Part name/type
+                      if (item.partName || item.spareName) {
+                        if (displayText) displayText += ' - ';
+                        displayText += item.partName || item.spareName;
+                      }
+                      
+                      // Vehicle model or variant from description or part number
+                      if (item.description) {
+                        // Check if description contains model information
+                        const models = ['Tata', 'Harrier', 'Vista', 'Indica', 'Mahindra', 'Scorpio', 'Maxximo'];
+                        const hasModel = models.some(model => 
+                          (item.description || '').includes(model) || 
+                          (item.partNumber || '').includes(model)
+                        );
+                        
+                        // If model info found or no other details available
+                        if (hasModel || (!item.partName && !item.spareName)) {
+                          if (displayText) displayText += ' - ';
+                          displayText += item.description;
+                        }
+                      }
+                      
+                      // Part number as last resort if nothing else available
+                      if (!displayText && item.partNumber) {
+                        displayText = item.partNumber;
+                      }
+                      
+                      // If still empty, use "Unknown Part"
+                      if (!displayText) {
+                        displayText = "Unknown Part";
+                      }
+                      
+                      return (
+                        <div
+                          key={idx}
+                          style={{ 
+                            padding: '0.6rem 1rem',
+                            cursor: 'pointer',
+                            borderBottom: isDark ? '1px solid #555' : '1px solid #eee',
+                            backgroundColor: isDark ? '#424242' : '#fff',
+                            color: isDark ? '#fff' : '#000',
+                            fontSize: '14px'
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.backgroundColor = isDark ? '#555' : '#f0f0f0';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.backgroundColor = isDark ? '#424242' : '#fff';
+                          }}
+                          onClick={() => handleSuggestionSelect(item)}
+                        >
+                          {displayText}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

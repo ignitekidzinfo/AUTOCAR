@@ -22,6 +22,11 @@ import {
   useMediaQuery,
   CircularProgress,
   Pagination,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from '@mui/material';
 import {
   DataGrid,
@@ -34,6 +39,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import WarningIcon from '@mui/icons-material/Warning';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SortIcon from '@mui/icons-material/Sort';
 import { useNavigate } from 'react-router-dom';
 import apiClient from 'utils/apiClient';
 
@@ -95,6 +102,15 @@ const UserPartList: React.FC = () => {
   const retryCountRef = useRef<number>(0);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Delete confirmation dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+
+  // Add state for sorting
+  const [isSorted, setIsSorted] = useState<boolean>(false);
+
   // Handle resize events for responsive layout
   useEffect(() => {
     const handleResize = () => {
@@ -126,14 +142,14 @@ const UserPartList: React.FC = () => {
     };
   }, []);
 
-  // Helper function to format part data consistently
+  // Format part data with quantity properly converted to a number
   const formatPartData = (part: UserPart) => ({
     id: part.userPartId,
     partNumber: part.partNumber || "",
     partName: part.partName || "",
     description: part.description || "",
     manufacturer: part.manufacturer || "",
-    quantity: part.quantity || 0,
+    quantity: Number(part.quantity || 0),
     price: part.price || 0,
     buyingPrice: part.buyingPrice || 0,
     gst: part.gst || 18,
@@ -314,22 +330,170 @@ const UserPartList: React.FC = () => {
     fetchUserPartsPage(0);
   };
 
+  // Handle delete part
+  const handleDeleteClick = (id: number) => {
+    setDeleteItemId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteItemId) return;
+    
+    setDeleteLoading(true);
+    
+    try {
+      await apiClient.delete(`/sparePartManagement/delete/${deleteItemId}`);
+      
+      // Remove the item from the list
+      setRows(rows.filter(row => row.id !== deleteItemId));
+      
+      // Show success message
+      setDeleteSuccess("Part deleted successfully");
+      
+      // Reset total elements count
+      setTotalElements(prev => prev - 1);
+      
+      // Recalculate low stock count
+      const updatedLowStock = rows
+        .filter(item => item.id !== deleteItemId && Number(item.quantity) < LOW_STOCK_THRESHOLD)
+        .length;
+      
+      setLowStockCount(updatedLowStock);
+      
+    } catch (err: any) {
+      console.error("Error deleting part:", err);
+      
+      let errorMessage = 'Failed to delete part. Please try again.';
+      
+      if (err.response) {
+        switch (err.response.status) {
+          case 401:
+            errorMessage = 'Authorization error. Please login again.';
+            break;
+          case 404:
+            errorMessage = 'Part not found. It may have been already deleted.';
+            break;
+          case 500:
+            errorMessage = 'Server error. Please try again later.';
+            break;
+        }
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setDeleteLoading(false);
+      setDeleteDialogOpen(false);
+      setDeleteItemId(null);
+      
+      // Auto-hide success message after 3 seconds
+      if (deleteSuccess) {
+        setTimeout(() => {
+          setDeleteSuccess(null);
+        }, 3000);
+      }
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setDeleteItemId(null);
+  };
+
+  // Add function to sort rows by quantity (ascending)
+  const handleSortByQuantity = () => {
+    if (rows.length === 0) return;
+
+    setIsSorted(!isSorted);
+    
+    if (!isSorted) {
+      // Sort by quantity in ascending order (low to high)
+      const sortedRows = [...rows].sort((a, b) => {
+        return Number(a.quantity) - Number(b.quantity);
+      });
+      setRows(sortedRows);
+    } else {
+      // Restore original order by fetching from the server again
+      fetchUserPartsPage(page);
+    }
+  };
+
+  // Improve the header renderer to prevent cut-offs
+  const renderHeaderWithTooltip = (params: GridColumnHeaderParams) => {
+    if (!params || !params.colDef) {
+      return <span>Unknown</span>;
+    }
+
+    const headerName = params.colDef.headerName || '';
+    
+    // For mobile, split long headers into multiple lines
+    if (isMobile && headerName.includes(' ')) {
+      const words = headerName.split(' ');
+      
+      return (
+        <Tooltip title={headerName}>
+          <Box sx={{ 
+            lineHeight: 1.2, 
+            textAlign: 'center',
+            fontWeight: 600,
+            fontSize: '0.7rem',
+            padding: 0.5,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            overflow: 'visible',
+            whiteSpace: 'normal',
+            wordBreak: 'break-word'
+          }}>
+            {words.map((word, index) => (
+              <div key={index} style={{ width: '100%', overflow: 'visible' }}>{word}</div>
+            ))}
+          </Box>
+        </Tooltip>
+      );
+    }
+    
+    // For desktop or single-word headers
+    return (
+      <Tooltip title={headerName}>
+        <Box sx={{ 
+          fontWeight: 600, 
+          fontSize: '0.8rem',
+          padding: 1,
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          textAlign: 'center',
+          overflow: 'visible',
+          whiteSpace: 'normal',
+          wordBreak: 'break-word'
+        }}>
+          {headerName}
+        </Box>
+      </Tooltip>
+    );
+  };
+
   // Define columns for the DataGrid
   const getColumns = (): GridColDef[] => {
     // Adjust base column width for better mobile display
-    const baseColumnWidth = isMobile ? 80 : 130;
+    const baseColumnWidth = isMobile ? 100 : 130;
     
     const columns: GridColDef[] = [
     {
         field: 'actions',
         headerName: 'Actions',
-        width: isMobile ? 70 : 90,
-        minWidth: 70,
-      flex: 0, // Use fixed width instead of flex
+        width: isMobile ? 110 : 130,
+        minWidth: 110,
+        flex: 0, // Use fixed width instead of flex
         sortable: false,
         filterable: false,
         renderCell: (params: GridCellParams) => (
-          <Stack direction="row" alignItems="center" justifyContent="center">
+          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
             <Tooltip title="View Details">
               <IconButton
                 color="primary"
@@ -346,6 +510,22 @@ const UserPartList: React.FC = () => {
                 <VisibilityIcon fontSize={isMobile ? "small" : "small"} sx={{ fontSize: isMobile ? '0.9rem' : '1.2rem' }} />
               </IconButton>
             </Tooltip>
+            <Tooltip title="Delete Part">
+              <IconButton
+                color="error"
+                onClick={() => handleDeleteClick(params.row.id)}
+                size="small"
+                sx={{ 
+                  backgroundColor: alpha(theme.palette.error.main, 0.1),
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.error.main, 0.2),
+                  },
+                  padding: isMobile ? '2px' : '8px',
+                }}
+              >
+                <DeleteIcon fontSize={isMobile ? "small" : "small"} sx={{ fontSize: isMobile ? '0.9rem' : '1.2rem' }} />
+              </IconButton>
+            </Tooltip>
           </Stack>
         ),
         renderHeader: renderHeaderWithTooltip,
@@ -353,17 +533,17 @@ const UserPartList: React.FC = () => {
     {
         field: 'id',
         headerName: 'Sr.No',
-        width: isMobile ? 50 : 80,
-        minWidth: 50,
-      flex: 0, // Use fixed width instead of flex
+        width: isMobile ? 70 : 80,
+        minWidth: 70,
+        flex: 0, // Use fixed width instead of flex
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
     },
     {
         field: 'partName',
         headerName: 'Spare Name',
-      width: isMobile ? baseColumnWidth : baseColumnWidth * 1.2,
-        minWidth: 80,
+        width: isMobile ? baseColumnWidth : baseColumnWidth * 1.2,
+        minWidth: 100,
         flex: isMobile ? 0.5 : 1,
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
@@ -382,7 +562,7 @@ const UserPartList: React.FC = () => {
         field: 'description',
         headerName: 'Description',
         width: isMobile ? baseColumnWidth : baseColumnWidth * 1.6,
-        minWidth: 80,
+        minWidth: 100,
         flex: isMobile ? 0.5 : 1.2,
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
@@ -417,9 +597,9 @@ const UserPartList: React.FC = () => {
     {
         field: 'buyingPrice',
         headerName: 'Purchase Rate',
-        width: isMobile ? 80 : 120,
-        minWidth: 80,
-      flex: 0, // Use fixed width
+        width: isMobile ? 100 : 120,
+        minWidth: 100,
+        flex: 0, // Use fixed width
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -434,9 +614,9 @@ const UserPartList: React.FC = () => {
     {
         field: 'price',
         headerName: 'Sale Rate',
-        width: isMobile ? 70 : 110,
-        minWidth: 70,
-      flex: 0, // Use fixed width
+        width: isMobile ? 90 : 110,
+        minWidth: 90,
+        flex: 0, // Use fixed width
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -451,9 +631,9 @@ const UserPartList: React.FC = () => {
     {
         field: 'gst',
         headerName: 'GST%',
-        width: isMobile ? 60 : 80,
-        minWidth: 60,
-      flex: 0, // Use fixed width
+        width: isMobile ? 70 : 80,
+        minWidth: 70,
+        flex: 0, // Use fixed width
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -468,19 +648,19 @@ const UserPartList: React.FC = () => {
     {
       field: 'quantity',
         headerName: 'Stock Qty',
-        width: isMobile ? 70 : 100,
-        minWidth: 70,
-      flex: 0, // Use fixed width
+        width: isMobile ? 85 : 100,
+        minWidth: 85,
+        flex: 0, // Use fixed width
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
           const quantity = Number(params.value);
-        const isLowStock = quantity < LOW_STOCK_THRESHOLD;
+          const isLowStock = quantity < LOW_STOCK_THRESHOLD;
           return (
             <Box sx={{ 
               display: 'flex', 
               alignItems: 'center',
-            justifyContent: 'center',
+              justifyContent: 'center',
               color: isLowStock ? theme.palette.error.main : 'inherit',
               fontWeight: isLowStock ? 'bold' : 'normal',
               fontSize: isMobile ? '0.7rem' : 'inherit',
@@ -496,16 +676,16 @@ const UserPartList: React.FC = () => {
     {
         field: 'viewSupplier',
         headerName: 'Spare Supplier',
-        width: isMobile ? 120 : 170,
-        minWidth: 110,
-      flex: 0, // Use fixed width
+        width: isMobile ? 130 : 170,
+        minWidth: 130,
+        flex: 0, // Use fixed width
         sortable: false,
         filterable: false,
         renderCell: (params: GridCellParams) => (
           <Box sx={{ 
             width: '100%',
             display: 'flex',
-          justifyContent: 'center',
+            justifyContent: 'center',
           }}>
             <Button
               variant="contained"
@@ -537,7 +717,7 @@ const UserPartList: React.FC = () => {
                 minWidth: isMobile ? '95px' : '120px',
                 whiteSpace: 'nowrap',
                 overflow: 'visible',
-              maxWidth: '100%',
+                maxWidth: '100%',
               }}
             >
               {isMobile ? "Suppliers" : "View Suppliers"}
@@ -549,61 +729,6 @@ const UserPartList: React.FC = () => {
     );
 
     return columns;
-  };
-
-  // Improve the header renderer to prevent cut-offs
-  const renderHeaderWithTooltip = (params: GridColumnHeaderParams) => {
-    if (!params || !params.colDef) {
-      return <span>Unknown</span>;
-    }
-
-    const headerName = params.colDef.headerName || '';
-    
-    // For mobile, split long headers into multiple lines
-    if (isMobile && headerName.includes(' ')) {
-      const words = headerName.split(' ');
-      
-      return (
-        <Tooltip title={headerName}>
-          <Box sx={{ 
-            lineHeight: 1.3, 
-            textAlign: 'center',
-            fontWeight: 600,
-            fontSize: '0.75rem',
-            padding: 1,
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-            {words.map((word, index) => (
-              <div key={index} style={{ width: '100%' }}>{word}</div>
-            ))}
-          </Box>
-        </Tooltip>
-      );
-    }
-    
-    // For desktop or single-word headers
-    return (
-      <Tooltip title={headerName}>
-        <Box sx={{ 
-          fontWeight: 600, 
-          fontSize: '0.8rem',
-          padding: 1,
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          textAlign: 'center',
-        }}>
-          {headerName}
-        </Box>
-      </Tooltip>
-    );
   };
 
   // Helper to handle error display
@@ -756,11 +881,14 @@ const UserPartList: React.FC = () => {
                       <Button 
                         variant="outlined" 
                         size={isMobile ? "small" : "medium"}
-                        startIcon={<InventoryIcon />}
-                        onClick={() => navigate('/admin/transaction/add')}
-                        sx={{ borderRadius: 1.5 }}
+                        startIcon={<SortIcon />}
+                        onClick={handleSortByQuantity}
+                        sx={{ 
+                          borderRadius: 1.5,
+                          backgroundColor: isSorted ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                        }}
                       >
-                        Add Part
+                        {isSorted ? "Reset Sort" : "Sort By Low Stock"}
                       </Button>
                       <Button 
                         variant="outlined" 
@@ -860,7 +988,7 @@ const UserPartList: React.FC = () => {
                 width: '100%',
                 flexGrow: 1,
                 display: 'flex',
-                minWidth: isMobile ? '600px' : 'auto', // Increased to ensure all columns fit
+                minWidth: isMobile ? '750px' : 'auto', // Increased to ensure all columns fit
               }}>
                 <DataGrid
                   rows={rows || []}
@@ -886,9 +1014,9 @@ const UserPartList: React.FC = () => {
                     '& .MuiDataGrid-columnHeaders': {
                       backgroundColor: alpha(theme.palette.primary.main, 0.1),
                       borderBottom: `1px solid ${theme.palette.divider}`,
-                      height: isMobile ? '60px !important' : '60px !important',
-                      maxHeight: isMobile ? '60px !important' : '60px !important',
-                      lineHeight: 1.3,
+                      height: isMobile ? '80px !important' : '60px !important',
+                      maxHeight: isMobile ? '80px !important' : '60px !important',
+                      lineHeight: 1.2,
                       display: 'flex',
                       alignItems: 'center',
                     },
@@ -901,10 +1029,13 @@ const UserPartList: React.FC = () => {
                       width: '100%',
                       textAlign: 'center',
                       padding: isMobile ? 0.5 : 1,
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word'
                     },
                     '& .MuiDataGrid-columnHeader': {
                       padding: isMobile ? '4px' : '8px',
                       outline: 'none !important',
+                      overflow: 'visible',
                     },
                     '& .MuiDataGrid-columnHeaderTitleContainer': {
                       padding: 0,
@@ -912,6 +1043,7 @@ const UserPartList: React.FC = () => {
                       display: 'flex',
                       justifyContent: 'center',
                       alignItems: 'center',
+                      overflow: 'visible',
                     },
                     '& .MuiDataGrid-cell': {
                       borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
@@ -1040,6 +1172,35 @@ const UserPartList: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">Confirm Delete</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            Are you sure you want to delete this part? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} color="primary" disabled={deleteLoading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={deleteLoading}
+            startIcon={deleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
+          >
+            {deleteLoading ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={!!error}
         autoHideDuration={6000}
@@ -1053,6 +1214,22 @@ const UserPartList: React.FC = () => {
           >
           {error}
           </Alert>
+      </Snackbar>
+
+      {/* Success Snackbar */}
+      <Snackbar
+        open={!!deleteSuccess}
+        autoHideDuration={3000}
+        onClose={() => setDeleteSuccess(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setDeleteSuccess(null)} 
+          severity="success" 
+          sx={{ width: '100%', borderRadius: 2 }}
+        >
+          {deleteSuccess}
+        </Alert>
       </Snackbar>
     </Box>
   );

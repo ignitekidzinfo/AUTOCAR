@@ -2,10 +2,23 @@
  * Performance utilities for optimizing React application performance
  */
 
-// Memory cache implementation for faster data access
+// Optimization constants
+export const PERFORMANCE_CONSTANTS = {
+  DEBOUNCE_DELAY: 300, // ms
+  THROTTLE_DELAY: 500, // ms
+  CACHE_TTL: 5 * 60 * 1000, // 5 minutes
+  LONG_CACHE_TTL: 60 * 60 * 1000, // 1 hour
+  PAGE_SIZE: 50, // items per page
+  MAX_MEMORY_CACHE_SIZE: 200,
+  SCROLL_THROTTLE_DELAY: 150, // ms
+};
+
+// Memory cache implementation with LRU (Least Recently Used) eviction policy
 export class MemoryCache {
   private cache = new Map<string, { data: any; timestamp: number }>();
   private readonly maxSize: number;
+  // Track usage order for LRU eviction
+  private usageOrder: string[] = [];
 
   constructor(maxSize = 100) {
     this.maxSize = maxSize;
@@ -14,6 +27,10 @@ export class MemoryCache {
   get<T>(key: string): T | null {
     const entry = this.cache.get(key);
     if (!entry) return null;
+    
+    // Update usage order for LRU (move to end = most recently used)
+    this.updateUsage(key);
+    
     return entry.data as T;
   }
 
@@ -26,33 +43,62 @@ export class MemoryCache {
       return null;
     }
     
+    // Update usage order for LRU (move to end = most recently used)
+    this.updateUsage(key);
+    
     return entry.data as T;
   }
 
   set<T>(key: string, data: T): void {
-    if (this.cache.size >= this.maxSize) {
-      const oldestKey = this.cache.keys().next().value;
-      if (oldestKey) this.cache.delete(oldestKey);
+    // If key already exists, just update it and its usage
+    if (this.cache.has(key)) {
+      this.cache.set(key, { data, timestamp: Date.now() });
+      this.updateUsage(key);
+      return;
     }
     
+    // If we're at capacity, evict least recently used item
+    if (this.cache.size >= this.maxSize && this.usageOrder.length > 0) {
+      const lruKey = this.usageOrder[0]; // First item is least recently used
+      this.cache.delete(lruKey);
+      this.usageOrder.shift(); // Remove the first element
+    }
+    
+    // Add new item
     this.cache.set(key, { data, timestamp: Date.now() });
+    this.usageOrder.push(key); // Add to end (most recently used)
   }
 
   delete(key: string): void {
     this.cache.delete(key);
+    // Remove from usage tracking
+    const index = this.usageOrder.indexOf(key);
+    if (index !== -1) {
+      this.usageOrder.splice(index, 1);
+    }
   }
 
   clear(): void {
     this.cache.clear();
+    this.usageOrder = [];
   }
 
   size(): number {
     return this.cache.size;
   }
+  
+  // Helper to update usage order (move key to end = most recently used)
+  private updateUsage(key: string): void {
+    const index = this.usageOrder.indexOf(key);
+    if (index !== -1) {
+      this.usageOrder.splice(index, 1);
+    }
+    this.usageOrder.push(key);
+  }
 }
 
 // Global memory cache instance
-export const globalCache = new MemoryCache(200);
+export const globalCache = new MemoryCache(PERFORMANCE_CONSTANTS.MAX_MEMORY_CACHE_SIZE);
 
 /**
  * Two-tier caching strategy (memory + localStorage)
@@ -207,17 +253,6 @@ export function memoize<T extends (...args: any[]) => any>(
     return result;
   };
 }
-
-// Optimization constants
-export const PERFORMANCE_CONSTANTS = {
-  DEBOUNCE_DELAY: 300, // ms
-  THROTTLE_DELAY: 500, // ms
-  CACHE_TTL: 5 * 60 * 1000, // 5 minutes
-  LONG_CACHE_TTL: 60 * 60 * 1000, // 1 hour
-  PAGE_SIZE: 50, // items per page
-  MAX_MEMORY_CACHE_SIZE: 200,
-  SCROLL_THROTTLE_DELAY: 150, // ms
-};
 
 /**
  * Create a loading/resource manager

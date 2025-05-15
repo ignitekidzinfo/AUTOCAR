@@ -22,6 +22,7 @@ interface DeleteModalProps {
   onClose: () => void;
   deleteItemId?: number;
   onDeleteSuccess?: (id: number) => void;
+  onConfirm?: () => Promise<void>;
   isDeleting?: boolean;
   error?: string | null;
 }
@@ -31,10 +32,16 @@ export default function VehicleDeleteModal({
   onClose,
   deleteItemId,
   onDeleteSuccess,
+  onConfirm,
   isDeleting = false,
   error = null,
 }: DeleteModalProps) {
   const handleDeleteRequest = async () => {
+    if (onConfirm) {
+      await onConfirm();
+      return;
+    }
+    
     if (deleteItemId === undefined) {
       console.error("Delete ID is undefined");
       return;
@@ -61,7 +68,7 @@ export default function VehicleDeleteModal({
             Delete Vehicle
           </Typography>
           <Typography id="modal-modal-description" sx={{ mt: 2 }}>
-            {deleteItemId !== undefined
+            {deleteItemId !== undefined || onConfirm
               ? `Are you sure you want to delete this vehicle?`
               : "No vehicle selected for deletion."}
           </Typography>
@@ -75,7 +82,7 @@ export default function VehicleDeleteModal({
               variant="contained"
               color="error"
               onClick={handleDeleteRequest}
-              disabled={deleteItemId === undefined || isDeleting}
+              disabled={(deleteItemId === undefined && !onConfirm) || isDeleting}
             >
               {isDeleting ? (
                 <>

@@ -147,18 +147,24 @@ export default function UserPartDetail() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]:
-        name === 'price' ||
-        name === 'quantity' ||
-        name === 'cGST' ||
-        name === 'sGST' ||
-        name === 'totalGST' ||
-        name === 'buyingPrice'
-          ? Number(value)
-          : value,
-    }));
+    
+    // For numeric fields, handle empty string and 0 values appropriately
+    if (name === 'price' || name === 'quantity' || name === 'cGST' || name === 'sGST' || 
+        name === 'totalGST' || name === 'buyingPrice') {
+      // If the field is cleared (empty string), allow it so user can type a new value
+      // Otherwise convert to number
+      const numericValue = value === '' ? '' : Number(value);
+      setFormData(prev => ({
+        ...prev,
+        [name]: numericValue
+      }));
+    } else {
+      // For string fields, just use the value as is
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleSave = async () => {
@@ -526,6 +532,11 @@ export default function UserPartDetail() {
                             type="number"
                             value={formData.quantity}
                             onChange={handleInputChange}
+                            onFocus={(e) => {
+                              if (Number(e.target.value) === 0) {
+                                e.target.select();
+                              }
+                            }}
                             variant="outlined"
                             size="small"
                             sx={{ mb: 2 }}
@@ -539,6 +550,11 @@ export default function UserPartDetail() {
                             type="number"
                             value={formData.price}
                             onChange={handleInputChange}
+                            onFocus={(e) => {
+                              if (Number(e.target.value) === 0) {
+                                e.target.select();
+                              }
+                            }}
                             variant="outlined"
                             size="small"
                             sx={{ mb: 2 }}
@@ -555,6 +571,11 @@ export default function UserPartDetail() {
                             type="number"
                             value={formData.buyingPrice}
                             onChange={handleInputChange}
+                            onFocus={(e) => {
+                              if (Number(e.target.value) === 0) {
+                                e.target.select();
+                              }
+                            }}
                             variant="outlined"
                             size="small"
                             sx={{ mb: 2 }}
@@ -613,6 +634,11 @@ export default function UserPartDetail() {
                             type="number"
                             value={formData.cGST}
                             onChange={handleInputChange}
+                            onFocus={(e) => {
+                              if (Number(e.target.value) === 0) {
+                                e.target.select();
+                              }
+                            }}
                             variant="outlined"
                             size="small"
                           />
@@ -625,6 +651,11 @@ export default function UserPartDetail() {
                             type="number"
                             value={formData.sGST}
                             onChange={handleInputChange}
+                            onFocus={(e) => {
+                              if (Number(e.target.value) === 0) {
+                                e.target.select();
+                              }
+                            }}
                             variant="outlined"
                             size="small"
                           />
@@ -637,6 +668,11 @@ export default function UserPartDetail() {
                             type="number"
                             value={formData.totalGST}
                             onChange={handleInputChange}
+                            onFocus={(e) => {
+                              if (Number(e.target.value) === 0) {
+                                e.target.select();
+                              }
+                            }}
                             variant="outlined"
                             size="small"
                           />

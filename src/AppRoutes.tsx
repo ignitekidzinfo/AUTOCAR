@@ -40,6 +40,7 @@ const Vehiclestatus = lazy(() => import('pages/vechiclestatus'));
 const VehicleByAppointmentId = lazy(() => import('pages/VehicleByAppointmentId'));
 const ManageRepairPage = lazy(() => import("components/RepairsComponent/ManageRepairPage"));
 const VehicleList = lazy(() => import("components/vehicle/VehicleList"));
+const OptimizedVehicleList = lazy(() => import("components/vehicle/OptimizedVehicleList"));
 const QuatationList = lazy(() => import("components/Quatation/QuatationList"));
 const PurchaseAccountReport = lazy(() => import("components/Reports/PurchaseAccountRepost"));
 const AddVehicle = lazy(() => import("components/vehicle/AddVehicle"));
@@ -201,6 +202,7 @@ const AppRoutes = () => {
 
                 <Route path="vehicle/edit/:id" element={<AddVehicle/>} />
                 <Route path="vehicle/view/:id" element={<VehicleDetailsView/>} />
+                <Route path="vehicle/list" element={<OptimizedVehicleList />} />
                 <Route path="vehicle/add/sparepart/:id" element={<QuatationGrid/>} />
                 <Route path="manage-salary" element={<EmployeeSalaryList/>} />
                 <Route path="add-employee-salary" element={<AddEmployeeSalary/>} />

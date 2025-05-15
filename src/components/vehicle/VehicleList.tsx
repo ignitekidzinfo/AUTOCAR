@@ -50,6 +50,8 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import { filter } from 'types/SparePart';
 import { apiClient } from 'utils/apiClient';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import VirtualizedVehicleList from './VirtualizedVehicleList';
+import { MemoryCache, cacheManager, PERFORMANCE_CONSTANTS } from 'utils/performance';
 
 // Constants for improved performance
 const PAGE_SIZE = 25;
@@ -58,15 +60,14 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
 const SCROLL_THRESHOLD = 200;
 const ERROR_DISPLAY_DURATION = 5000;
-const CACHE_TTL = 0; // Disable caching completely
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache (instead of disabling entirely)
 const MEMORY_CACHE_SIZE = 50; // Maximum number of items in memory cache
-const AUTO_REFRESH_INTERVAL = 3000; // Check for updates every 3 seconds (even more frequent)
 
-// IMPORTANT: Force immediate cache invalidation when data changes
+// Create a version-based cache key to help with invalidation
 let cacheVersion = Date.now();
 
-// Create a global force refresh counter to completely bypass React's rendering optimizations when needed
-window.__FORCE_REFRESH_COUNTER = window.__FORCE_REFRESH_COUNTER || 0;
+// Create vehicle-specific cache for better performance
+const vehicleCache = new MemoryCache(MEMORY_CACHE_SIZE);
 
 // Declare TypeScript type for the window object extension
 declare global {
@@ -76,6 +77,9 @@ declare global {
   }
 }
 
+// Initialize global counter if not exists
+window.__FORCE_REFRESH_COUNTER = window.__FORCE_REFRESH_COUNTER || 0;
+
 // Flag to track if data has changed
 window.vehicleDataChanged = false;
 
@@ -84,38 +88,101 @@ document.addEventListener('vehicleDataChange', () => {
   window.__FORCE_REFRESH_COUNTER++;
   window.vehicleDataChanged = true;
   console.log('Global vehicle data change detected, refresh counter:', window.__FORCE_REFRESH_COUNTER);
+  // Invalidate cache when data changes
+  invalidateCache();
 });
 
-// Completely disable any caching for vehicle data
-function disableVehicleCache() {
-  // Clear existing cache completely
-  localStorage.removeItem('vehicleCache');
-  sessionStorage.removeItem('vehicleCache');
-  
-  // Replace fetch with non-caching version
-  const originalFetch = window.fetch;
-  window.fetch = function(input, init) {
-    // For vehicle endpoints, add cache busting
-    if (typeof input === 'string' && 
-        (input.includes('vehicle') || input.includes('Vehicle'))) {
-      const url = new URL(input, window.location.origin);
-      url.searchParams.append('_nocache', Date.now().toString());
-      return originalFetch(url.toString(), {
-        ...init,
-        headers: {
-          ...init?.headers,
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
+// Function to manage vehicle caching
+const vehicleCacheManager = {
+  get: function<T>(key: string): T | null {
+    try {
+      // First try memory cache
+      const memCached = vehicleCache.getWithExpiry<T>(key, CACHE_TTL);
+      if (memCached) {
+        console.log(`Cache HIT (memory): ${key}`);
+        return memCached;
+      }
+      
+      // Then try localStorage
+      const cached = localStorage.getItem(key);
+      if (cached) {
+        const data = JSON.parse(cached);
+        // Check timestamp AND version to ensure we're not using stale data
+        if (data.timestamp && 
+            Date.now() - data.timestamp < CACHE_TTL && 
+            data.version === cacheVersion) {
+          console.log(`Cache HIT (localStorage): ${key}`);
+          // Store in memory for faster future access
+          vehicleCache.set(key, data.data);
+          return data.data as T;
         }
-      });
+      }
+    } catch (e) {
+      console.error('Error reading cache:', e);
+      // Cleanup corrupted data
+      try {
+        localStorage.removeItem(key);
+        vehicleCache.delete(key);
+      } catch {}
     }
-    return originalFetch(input, init);
-  };
-}
+    console.log(`Cache MISS: ${key}`);
+    return null;
+  },
+  
+  set: function<T>(key: string, data: T): void {
+    try {
+      // Save to memory cache (fast access)
+      vehicleCache.set(key, data);
+      
+      // Save to localStorage (persistence)
+      localStorage.setItem(key, JSON.stringify({
+        data,
+        timestamp: Date.now(),
+        version: cacheVersion
+      }));
+      console.log(`Cached: ${key}`);
+    } catch (e) {
+      console.error('Error saving to cache:', e);
+    }
+  },
+  
+  delete: function(key: string): void {
+    try {
+      localStorage.removeItem(key);
+      vehicleCache.delete(key);
+    } catch (e) {
+      console.error('Error deleting from cache:', e);
+    }
+  },
+  
+  clear: function(): void {
+    try {
+      // Clear memory cache
+      vehicleCache.clear();
+      
+      // Clear localStorage cache for vehicle data
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('vehicle_'))
+        .forEach(key => localStorage.removeItem(key));
+    } catch (e) {
+      console.error('Error clearing cache:', e);
+    }
+  }
+};
 
-// Execute on load
-disableVehicleCache();
+// Function to invalidate cache when data changes
+function invalidateCache() {
+  // Update cache version to immediately invalidate all existing cache entries
+  cacheVersion = Date.now();
+  
+  // Clear cache
+  vehicleCacheManager.clear();
+  
+  // Dispatch global event to notify all components about data change
+  document.dispatchEvent(new CustomEvent('vehicleDataChange'));
+  
+  console.log('Cache invalidated at:', new Date().toISOString());
+}
 
 // Function to force refresh of vehicle data
 function forceVehicleDataRefresh() {
@@ -124,46 +191,47 @@ function forceVehicleDataRefresh() {
   window.vehicleDataChanged = true;
   
   // Force invalidate caches
-  cacheVersion = Date.now();
-  
-  // Clear cached data
-  Object.keys(localStorage).forEach(key => {
-    if (key.includes('vehicle')) {
-      localStorage.removeItem(key);
-    }
-  });
-  
-  // Dispatch global event
-  document.dispatchEvent(new CustomEvent('vehicleDataChange'));
+  invalidateCache();
   
   console.log('Forced vehicle data refresh at:', new Date().toISOString());
   return true;
 }
 
-// Direct API call that completely bypasses cache
-async function fetchDirectFromApi(url: string): Promise<any> {
+// Direct API call with optional cache
+async function fetchFromApi(url: string, skipCache = false): Promise<any> {
+  const cacheKey = `vehicle_${url.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  
+  // Return from cache if available and not skipping cache
+  if (!skipCache) {
+    const cachedData = vehicleCacheManager.get(cacheKey);
+    if (cachedData) {
+      return cachedData;
+    }
+  }
+  
   try {
-    const timestamp = Date.now();
-    const noCacheUrl = `${url}${url.includes('?') ? '&' : '?'}_nocache=${timestamp}`;
+    // Add cache busting parameter if skipping cache
+    const requestUrl = skipCache 
+      ? `${url}${url.includes('?') ? '&' : '?'}_nocache=${Date.now()}` 
+      : url;
     
-    const response = await fetch(noCacheUrl, {
-      method: 'GET',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      },
-      credentials: 'same-origin'
-    });
+    console.log(`Fetching from API: ${requestUrl}`);
+    const startTime = performance.now();
     
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+    // Make the actual API call
+    const response = await apiClient.get(requestUrl);
+    
+    const endTime = performance.now();
+    console.log(`API response time: ${endTime - startTime}ms`);
+    
+    // Cache the result if not skipping cache
+    if (!skipCache) {
+      vehicleCacheManager.set(cacheKey, response.data);
     }
     
-    const data = await response.json();
-    return data;
+    return response.data;
   } catch (error) {
-    console.error('Direct API fetch error:', error);
+    console.error('Error fetching from API:', error);
     throw error;
   }
 }
@@ -190,147 +258,27 @@ interface PaginatedResponse {
   currentPage: number;
 }
 
-// Check if data is cached and fresh
-function getCachedData<T>(key: string): T | null {
-  try {
-    // Check localStorage only - memory cache has been removed
-    const cached = localStorage.getItem(key);
-    if (cached) {
-      const data = JSON.parse(cached);
-      // Check timestamp AND version to ensure we're not using stale data
-      if (data.timestamp && 
-          Date.now() - data.timestamp < CACHE_TTL && 
-          data.version === cacheVersion) {
-        return data as T;
-      }
-    }
-  } catch (e) {
-    console.error('Error reading cache:', e);
-    // Cleanup corrupted data
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      // Ignore any errors during cleanup
-    }
-  }
-  return null;
-}
-
-// Save data to localStorage only
-function saveToCache<T>(key: string, data: T): void {
-  try {
-    // Save to localStorage only
-    localStorage.setItem(key, JSON.stringify({
-      ...data,
-      timestamp: Date.now(),
-      version: cacheVersion // Add version to cache entry
-    }));
-  } catch (e) {
-    console.error('Error saving to cache:', e);
-    // Try to save a smaller version if data is too large
-    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-      try {
-        // For vehicle data, we can trim unnecessary fields
-        if (typeof data === 'object' && data !== null && 'vehicles' in data) {
-          const trimmedData = {
-            ...data,
-            vehicles: (data as any).vehicles.map((v: Vehicle) => ({
-              vehicleRegId: v.vehicleRegId,
-              vehicleNumber: v.vehicleNumber,
-              customerName: v.customerName,
-              customerMobileNumber: v.customerMobileNumber,
-              status: v.status,
-              date: v.date
-            }))
-          };
-          localStorage.setItem(key, JSON.stringify({
-            ...trimmedData,
-            timestamp: Date.now(),
-            version: cacheVersion // Add version to cache entry
-          }));
-        }
-      } catch {
-        // Ignore any errors during retry
-      }
-    }
-  }
-}
-
-// Function to invalidate cache when data changes
-function invalidateCache() {
-  // Update cache version to immediately invalidate all existing cache entries
-  cacheVersion = Date.now();
-  
-  // Clear localStorage cache for vehicle data
-  Object.keys(localStorage)
-    .filter(key => key.startsWith('vehicle_'))
-    .forEach(key => localStorage.removeItem(key));
-  
-  // Dispatch global event to notify all components about data change
-  document.dispatchEvent(new CustomEvent('vehicleDataChange'));
-  
-  console.log('Cache invalidated at:', new Date().toISOString());
-}
-
-// Add direct API methods to bypass cache completely
-async function fetchVehicleDataDirect(listType: string | null): Promise<Vehicle[]> {
-  let data;
-  
-  try {
-    if (listType) {
-      const statusFilter = listType === 'serviceQueue' 
-        ? 'waiting,inprogress' 
-        : listType === 'serviceHistory' ? 'complete' : '';
-      
-      // Use direct API call with no caching
-      const directApiResponse = await apiClient.get(`/vehicle-reg/GetStatus?status=${statusFilter}`);
-      data = directApiResponse.data;
-    } else {
-      // Use direct API call with no caching
-      const directApiResponse = await apiClient.get('/vehicle-reg/getAll');
-      data = directApiResponse.data;
-    }
-    
-    // Process array data
-    let vehicles: Vehicle[] = [];
-    
-    // Handle different API response formats
-    if (data) {
-      if (Array.isArray(data)) {
-        vehicles = data;
-      } else if (data.content && Array.isArray(data.content)) {
-        vehicles = data.content;
-      } else if (data.data && Array.isArray(data.data)) {
-        vehicles = data.data;
-      } else if (typeof data === 'object') {
-        // Try to extract vehicles from any other format
-        const possibleArrays = Object.values(data).filter(val => Array.isArray(val)) as any[][];
-        if (possibleArrays.length > 0) {
-          vehicles = possibleArrays.reduce<any[]>((a, b) => a.length > b.length ? a : b, []) as Vehicle[];
-        }
-      }
-    }
-    
-    // If still no vehicles, try to handle as a single vehicle object
-    if (vehicles.length === 0 && typeof data === 'object' && data.vehicleRegId) {
-      vehicles = [data];
-    }
-    
-    return vehicles;
-  } catch (error) {
-    console.error("Error fetching vehicle data directly:", error);
-    return [];
-  }
-}
-
 // Add a simple invoice status check function
 async function checkInvoiceStatus(vehicleRegId: string): Promise<boolean> {
+  const cacheKey = `vehicle_invoice_${vehicleRegId}`;
+  
+  // Check cache first
+  const cachedStatus = vehicleCacheManager.get<boolean>(cacheKey);
+  if (cachedStatus !== null) {
+    return cachedStatus;
+  }
+  
   try {
     const response = await apiClient.get(`/api/vehicle-invoices/search/vehicle-reg/${vehicleRegId}`, {
       timeout: 2000 // Short timeout to prevent blocking UI
     });
-
-    return Array.isArray(response.data) && response.data.length > 0;
+    
+    const hasInvoice = Array.isArray(response.data) && response.data.length > 0;
+    
+    // Cache the result
+    vehicleCacheManager.set(cacheKey, hasInvoice);
+    
+    return hasInvoice;
   } catch (error) {
     console.error(`Error checking invoice status for vehicle ${vehicleRegId}:`, error);
     return false;
@@ -381,8 +329,56 @@ export default function VehicleList() {
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   
-  // Direct API fetching function for this component
-  const fetchVehiclesFromApi = useCallback(async (): Promise<Vehicle[]> => {
+  // Process vehicle data without any external dependencies
+  const processVehicleData = useCallback((vehicles: Vehicle[] | any, append = false) => {
+    if (!vehicles || !vehicles.length) {
+      console.warn('No vehicles data to process');
+      return [];
+    }
+    
+    // Get recently modified vehicles
+    let recentlyModified: string[] = [];
+    try {
+      recentlyModified = JSON.parse(localStorage.getItem('recentVehicleChanges') || '[]');
+    } catch (e) {
+      // Ignore errors
+    }
+    
+    // Handle different data formats - simplify for speed
+    let processableVehicles = vehicles;
+    
+    // Check if we have a data property that contains the actual vehicles
+    if (!Array.isArray(vehicles) && vehicles.data && Array.isArray(vehicles.data)) {
+      processableVehicles = vehicles.data;
+    }
+    
+    // Process with optimized mapping, using stable row IDs
+    return processableVehicles.map((vehicle: Vehicle, index: number) => {
+      const vehicleId = vehicle.vehicleRegId || (append ? `new-${index}` : `row-${index}`);
+      const isModified = recentlyModified.includes(vehicleId);
+      
+      return {
+        id: vehicleId,
+        date: vehicle.date ?? '',
+        vehicleNoName: vehicle.vehicleNumber ?? '',
+        customerMobile: vehicle.customerName 
+          ? `${vehicle.customerName} - ${vehicle.customerMobileNumber ?? ''}`
+          : '',
+        status: vehicle.status ?? '',
+        advance: vehicle.advancePayment ?? 0,
+        superwiser: vehicle.superwiser ?? '',
+        technician: vehicle.technician ?? '',
+        worker: vehicle.worker ?? '',
+        kilometer: vehicle.kmsDriven ?? '',
+        vehicleRegId: vehicle.vehicleRegId,
+        hasInvoice: false, // Set initially to false, update later async
+        isNew: isModified // Flag for highlighting
+      };
+    });
+  }, []);
+  
+  // Optimized fetchVehiclesFromApi using the cache
+  const fetchVehiclesFromApi = useCallback(async (skipCache = false): Promise<Vehicle[]> => {
     try {
       let endpoint = '/vehicle-reg/getAll';
       
@@ -394,10 +390,31 @@ export default function VehicleList() {
         endpoint = `/vehicle-reg/GetStatus?status=${statusFilter}`;
       }
       
-      // Use our direct API method that bypasses all caching
+      // Generate cache key based on endpoint
+      const cacheKey = `vehicle_list_${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      
+      // Try to get from cache if not skipping
+      if (!skipCache) {
+        const cachedVehicles = vehicleCacheManager.get<Vehicle[]>(cacheKey);
+        if (cachedVehicles) {
+          console.log(`Using cached vehicle data (${cachedVehicles.length} vehicles)`);
+          return cachedVehicles;
+        }
+      }
+      
+      // Not in cache or skipping cache, fetch from API
+      console.log('Fetching vehicles from API...');
+      const startTime = performance.now();
+      
       const baseUrl = apiClient.defaults.baseURL || '';
       const fullUrl = `${baseUrl}${endpoint}`;
-      const data = await fetchDirectFromApi(fullUrl);
+      
+      // Make actual API call
+      const response = await apiClient.get(endpoint);
+      const data = response.data;
+      
+      const endTime = performance.now();
+      console.log(`API fetch completed in ${endTime - startTime}ms`);
       
       // Process the data
       let vehicles: Vehicle[] = [];
@@ -421,7 +438,12 @@ export default function VehicleList() {
         vehicles = [data];
       }
       
-      console.log(`Fetched ${vehicles.length} vehicles directly from API`);
+      // Save to cache if not skipping cache
+      if (!skipCache && vehicles.length > 0) {
+        vehicleCacheManager.set(cacheKey, vehicles);
+      }
+      
+      console.log(`Fetched ${vehicles.length} vehicles from API`);
       return vehicles;
       
     } catch (error) {
@@ -430,54 +452,27 @@ export default function VehicleList() {
     }
   }, [listType]);
 
-  // Process vehicle data without any external dependencies
-  const processVehicleData = useCallback((vehicles: Vehicle[] | any, append = false) => {
-    if (!vehicles || !vehicles.length) {
-      console.warn('No vehicles data to process');
-      return [];
-    }
-    
-    // Handle different data formats - simplify for speed
-    let processableVehicles = vehicles;
-    
-    // Check if we have a data property that contains the actual vehicles
-    if (!Array.isArray(vehicles) && vehicles.data && Array.isArray(vehicles.data)) {
-      processableVehicles = vehicles.data;
-    }
-    
-    // Process with optimized mapping, using stable row IDs
-    return processableVehicles.map((vehicle: Vehicle, index: number) => ({
-      id: vehicle.vehicleRegId || (append ? `new-${index}` : `row-${index}`),
-      date: vehicle.date ?? '',
-      vehicleNoName: vehicle.vehicleNumber ?? '',
-      customerMobile: vehicle.customerName 
-        ? `${vehicle.customerName} - ${vehicle.customerMobileNumber ?? ''}`
-        : '',
-      status: vehicle.status ?? '',
-      advance: vehicle.advancePayment ?? 0,
-      superwiser: vehicle.superwiser ?? '',
-      technician: vehicle.technician ?? '',
-      worker: vehicle.worker ?? '',
-      kilometer: vehicle.kmsDriven ?? '',
-      vehicleRegId: vehicle.vehicleRegId,
-      hasInvoice: false // Set initially to false, update later async
-    }));
-  }, []);
-
-  // The main data fetching function - completely revised
-  const fetchVehicles = useCallback(async (pageNumber: number, append = false) => {
+  // Update fetchVehicles to use the optimized cached data fetching
+  const fetchVehicles = useCallback(async (pageNumber: number, append = false, skipCache = false) => {
     if (loadingRef.current || !isComponentMountedRef.current) return;
     
+    // Set loading state
     loadingRef.current = true;
     setLoading(true);
     
     try {
-      // Always fetch fresh data directly from API
-      const vehicles = await fetchVehiclesFromApi();
+      console.log(`Fetching vehicles, page ${pageNumber}, skipCache: ${skipCache}`);
+      const startTime = performance.now();
+      
+      // Fetch data with optional cache skipping
+      const vehicles = await fetchVehiclesFromApi(skipCache);
+      
+      const endTime = performance.now();
+      console.log(`Total fetch time: ${endTime - startTime}ms`);
       
       if (!isComponentMountedRef.current) return;
       
-      // Store raw data for future comparisons
+      // Store raw data for comparison
       rawDataRef.current = [...vehicles];
       
       // Calculate pagination
@@ -485,27 +480,28 @@ export default function VehicleList() {
       const pageCount = Math.ceil(totalCount / PAGE_SIZE);
       const hasMoreData = pageNumber < pageCount - 1;
       
-      // Get current page data
+      // Get page data
       const startIndex = pageNumber * PAGE_SIZE;
       const endIndex = startIndex + PAGE_SIZE;
       const pageVehicles = append ? vehicles : vehicles.slice(startIndex, endIndex);
       
-      // Process data
+      // Process data for display
       const processedRows = processVehicleData(pageVehicles, append);
       
-      // Update state
-            setCurrentPage(pageNumber);
+      // Update all state
+      setCurrentPage(pageNumber);
       setTotalElements(totalCount);
       setTotalPages(pageCount);
       setHasMore(hasMoreData);
       setLastUpdateTime(Date.now());
-            
-            if (append) {
-              setRows(prev => [...prev, ...processedRows]);
-            } else {
-              setRows(processedRows);
-            }
-            
+      
+      // Update rows with fresh data
+      if (append) {
+        setRows(prev => [...prev, ...processedRows]);
+      } else {
+        setRows(processedRows);
+      }
+      
       setError(null);
       
     } catch (error) {
@@ -515,59 +511,79 @@ export default function VehicleList() {
       }
     } finally {
       if (isComponentMountedRef.current) {
-              loadingRef.current = false;
-              setLoading(false);
-              setInitialLoad(false);
+        loadingRef.current = false;
+        setLoading(false);
+        setInitialLoad(false);
       }
     }
   }, [fetchVehiclesFromApi, processVehicleData]);
 
-  // Check for data changes
+  // Check for data changes - reduced frequency to minimize API calls
   const checkForDataChanges = useCallback(async () => {
     if (loadingRef.current || refreshingDataRef.current || !isComponentMountedRef.current) return;
     
     refreshingDataRef.current = true;
     
     try {
-      // Fetch latest data silently in the background
-      const latestVehicles = await fetchVehiclesFromApi();
+      // Try from cache first
+      const cacheCheckResult = window.vehicleDataChanged;
       
-      if (!isComponentMountedRef.current) return;
-      
-      // Quick check - have we got different number of vehicles?
-      if (rawDataRef.current.length !== latestVehicles.length) {
-        console.log('Vehicle count changed, updating data');
-        window.vehicleDataChanged = true;
-        fetchVehicles(0, false);
+      if (cacheCheckResult) {
+        // Cache indicates data has changed
+        console.log('Cache indicates vehicle data has changed, refreshing...');
+        window.vehicleDataChanged = false; // Reset the flag
+        fetchVehicles(0, false, true); // Skip cache to ensure fresh data
         return;
       }
       
-      // Detailed check - compare vehicle IDs
-      const currentIds = new Set(rawDataRef.current.map(v => v.vehicleRegId));
-      const newIds = new Set(latestVehicles.map(v => v.vehicleRegId));
+      // Only make a lightweight API check if necessary (once per minute)
+      const lastCheckTime = parseInt(sessionStorage.getItem('lastVehicleDataCheck') || '0', 10);
+      const now = Date.now();
+      const checkInterval = 60 * 1000; // 1 minute
       
-      // Check for additions or removals
-      let hasChanges = false;
-      
-      for (const id of currentIds) {
-        if (!newIds.has(id)) {
-          hasChanges = true;
-          break;
-        }
+      if (now - lastCheckTime < checkInterval) {
+        refreshingDataRef.current = false;
+        return;
       }
       
-      for (const id of newIds) {
-        if (!currentIds.has(id)) {
+      // Time to check the API
+      sessionStorage.setItem('lastVehicleDataCheck', now.toString());
+      
+      // Fast API check that just gets count or timestamps
+      const checkUrl = '/vehicle-reg/count'; // Assuming there's a lightweight endpoint
+      let hasChanges = false;
+      
+      try {
+        const countResponse = await apiClient.get(checkUrl);
+        const currentCount = rawDataRef.current.length;
+        const apiCount = countResponse.data;
+        
+        if (apiCount !== currentCount) {
+          console.log('Vehicle count changed from API check, updating data');
           hasChanges = true;
-          break;
+        }
+      } catch (e) {
+        // If count endpoint doesn't exist, fall back to comparing first few items
+        const sampleVehicles = await fetchVehiclesFromApi(true); // Skip cache
+        
+        if (sampleVehicles.length !== rawDataRef.current.length) {
+          hasChanges = true;
+        } else if (sampleVehicles.length > 0 && rawDataRef.current.length > 0) {
+          // Check first vehicle's data
+          const firstNew = sampleVehicles[0];
+          const firstCurrent = rawDataRef.current[0];
+          
+          if (firstNew.vehicleRegId !== firstCurrent.vehicleRegId) {
+            hasChanges = true;
+          }
         }
       }
       
       // If we found changes, update the data
       if (hasChanges) {
-        console.log('Vehicle data changed, refreshing...');
+        console.log('Vehicle data changed from API check, refreshing...');
         window.vehicleDataChanged = true;
-        fetchVehicles(0, false);
+        fetchVehicles(0, false, true); // Skip cache for fresh data
       }
       
     } catch (error) {
@@ -576,13 +592,13 @@ export default function VehicleList() {
       refreshingDataRef.current = false;
     }
   }, [fetchVehicles, fetchVehiclesFromApi]);
-
+  
   // Watch for global data changes
   useEffect(() => {
     const handleGlobalDataChange = () => {
       if (isComponentMountedRef.current && !refreshingDataRef.current) {
         console.log('Global data change detected, refreshing vehicle list');
-        fetchVehicles(0, false);
+        fetchVehicles(0, false, true); // Skip cache to ensure fresh data
         forceUpdate();
       }
     };
@@ -591,6 +607,7 @@ export default function VehicleList() {
     document.addEventListener('vehicleDataChange', handleGlobalDataChange);
     
     // Also set up a checker to see if window.__FORCE_REFRESH_COUNTER changed
+    // This check runs less frequently to reduce network traffic
     const checkWindowRefreshCounter = () => {
       if (window.vehicleDataChanged) {
         window.vehicleDataChanged = false;
@@ -598,7 +615,8 @@ export default function VehicleList() {
       }
     };
     
-    const counterInterval = setInterval(checkWindowRefreshCounter, 1000);
+    // Reduced frequency to minimize traffic
+    const counterInterval = setInterval(checkWindowRefreshCounter, 10000);
     
     return () => {
       document.removeEventListener('vehicleDataChange', handleGlobalDataChange);
@@ -606,34 +624,109 @@ export default function VehicleList() {
     };
   }, [fetchVehicles, forceUpdate]);
 
-  // Regular auto-refresh
+  // Regular auto-refresh - REMOVED to reduce network traffic
   useEffect(() => {
+    // Auto-refresh has been removed
+    // This prevents continuous polling and conserves network resources
+    // Data will refresh only when:
+    // 1. The component mounts
+    // 2. A manual refresh is triggered
+    // 3. Navigation back to this page occurs
+    
+    // Clean up any existing timer just in case
     if (autoRefreshTimerRef.current) {
       clearInterval(autoRefreshTimerRef.current);
+      autoRefreshTimerRef.current = null;
     }
-    
-    autoRefreshTimerRef.current = setInterval(() => {
-      checkForDataChanges();
-    }, AUTO_REFRESH_INTERVAL);
     
     return () => {
       if (autoRefreshTimerRef.current) {
         clearInterval(autoRefreshTimerRef.current);
+        autoRefreshTimerRef.current = null;
       }
     };
-  }, [checkForDataChanges]);
-
+  }, []);
+  
   // Component lifecycle
   useEffect(() => {
     isComponentMountedRef.current = true;
+    const perfMark = `vehicle-list-mount-${Date.now()}`;
+    performance.mark(perfMark);
     
-    // Force refresh when mounted to ensure fresh data
-    forceVehicleDataRefresh();
+    // Check if we're returning from edit/add and need to refresh
+    const needsRefresh = localStorage.getItem('needsRefreshOnReturn') === 'true';
+    if (needsRefresh) {
+      // Clear the flag
+      localStorage.removeItem('needsRefreshOnReturn');
+      console.log('Returning from edit/add - forcing fresh data fetch');
+      // Force immediate refresh
+      forceVehicleDataRefresh();
+      // Fetch fresh data with delay to ensure server has processed changes
+      setTimeout(() => {
+        if (isComponentMountedRef.current) {
+          fetchVehicles(0, false, true); // Skip cache
+        }
+      }, 500);
+    } else {
+      // Try to load from cache first for instant rendering
+      const cachedData = vehicleCacheManager.get<Vehicle[]>('vehicle_list_current');
+      
+      if (cachedData && cachedData.length > 0) {
+        console.log(`Loaded ${cachedData.length} vehicles from cache for initial render`);
+        rawDataRef.current = [...cachedData];
+        
+        // Process cached data for display
+        const processedRows = processVehicleData(cachedData.slice(0, PAGE_SIZE));
+        setRows(processedRows);
+        setTotalElements(cachedData.length);
+        setTotalPages(Math.ceil(cachedData.length / PAGE_SIZE));
+        setHasMore(cachedData.length > PAGE_SIZE);
+        setInitialLoad(false);
+        
+        // After showing cached data, refresh in background
+        setTimeout(() => {
+          if (isComponentMountedRef.current) {
+            fetchVehicles(0, false, false);
+          }
+        }, 100);
+      } else {
+        // No cache, do normal load
+        fetchVehicles(0, false, false);
+      }
+    }
+    
+    // Add visibility change listener to refresh data when the page becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page became visible - checking for data updates');
+        checkForDataChanges();
+      }
+    };
+    
+    // Listen for visibility changes (when user navigates back to this page)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Measure initial render performance
+    setTimeout(() => {
+      performance.measure('vehicle-list-initial-render', perfMark);
+      const measurements = performance.getEntriesByName('vehicle-list-initial-render');
+      if (measurements.length > 0) {
+        console.log(`Initial render time: ${measurements[0].duration.toFixed(2)}ms`);
+      }
+      performance.clearMarks(perfMark);
+      performance.clearMeasures('vehicle-list-initial-render');
+    }, 0);
     
     return () => {
       isComponentMountedRef.current = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      // Save current state to cache when unmounting
+      if (rawDataRef.current.length > 0) {
+        vehicleCacheManager.set('vehicle_list_current', rawDataRef.current);
+      }
     };
-  }, []);
+  }, [fetchVehicles, processVehicleData, checkForDataChanges]);
 
   // Initial load and infinite scroll
   useEffect(() => {
@@ -1371,6 +1464,74 @@ export default function VehicleList() {
     </Box>
   ), [theme]);
 
+  const isMobile = window.innerWidth <= 600;
+
+  // Function to check if a vehicle was recently added or modified
+  const isRecentlyModified = useCallback((vehicleId: string) => {
+    try {
+      const recentChanges = JSON.parse(localStorage.getItem('recentVehicleChanges') || '[]');
+      return recentChanges.includes(vehicleId);
+    } catch (e) {
+      return false;
+    }
+  }, []);
+
+  // Add recently modified vehicles to track changes
+  const markAsModified = useCallback((vehicleId: string) => {
+    try {
+      const recentChanges = JSON.parse(localStorage.getItem('recentVehicleChanges') || '[]');
+      if (!recentChanges.includes(vehicleId)) {
+        recentChanges.push(vehicleId);
+        localStorage.setItem('recentVehicleChanges', JSON.stringify(recentChanges));
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }, []);
+
+  // Update handleEdit to mark vehicles as modified
+  const handleEdit = useCallback((id: string) => {
+    // Set a flag to indicate data will need refresh when returning
+    window.vehicleDataChanged = true;
+    localStorage.setItem('needsRefreshOnReturn', 'true');
+    // Mark this vehicle as modified
+    markAsModified(id);
+    // Navigate to edit page
+    navigate(`/admin/vehicle/edit/${id}`);
+  }, [navigate, markAsModified]);
+
+  const handleService = useCallback((id: string) => {
+    // Set a flag to indicate data will need refresh when returning
+    window.vehicleDataChanged = true;
+    localStorage.setItem('needsRefreshOnReturn', 'true');
+    // Navigate to service page
+    navigate(`/admin/vehicle/service/${id}`);
+  }, [navigate]);
+
+  const handleDetails = useCallback((id: string) => {
+    navigate(`/admin/vehicle/view/${id}`);
+  }, [navigate]);
+
+  const handlePrint = useCallback((id: string) => {
+    navigate(`/admin/vehicle/print/${id}`);
+  }, [navigate]);
+
+  // Clear the highlights after a delay
+  useEffect(() => {
+    // If we have recent changes, set a timer to clear them
+    const recentChanges = JSON.parse(localStorage.getItem('recentVehicleChanges') || '[]');
+    if (recentChanges.length > 0) {
+      // Clear highlights after 10 seconds
+      const timer = setTimeout(() => {
+        localStorage.removeItem('recentVehicleChanges');
+        // Trigger a re-render to remove highlights
+        forceUpdate();
+      }, 10000); // 10 seconds
+      
+      return () => clearTimeout(timer);
+    }
+  }, [forceUpdate, filteredRows]);
+
   return (
     <Box sx={{ width: '100%', maxWidth: { xs: '100%', md: '1700px' }, p: 2 }}>
       <Card elevation={3} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
@@ -1384,14 +1545,14 @@ export default function VehicleList() {
           >
             <Box>
               <Typography component="h1" variant="h5" fontWeight="bold" color="primary">
-                Vehicle List {forceUpdateCounter > 0 && `(Updated: ${new Date(lastUpdateTime).toLocaleTimeString()})`}
-        </Typography>
+                Vehicle List
+              </Typography>
               <Typography variant="body2" color="text.secondary" mt={0.5}>
                 {listType === 'serviceQueue' 
                   ? 'Vehicles currently in service queue' 
                   : listType === 'serviceHistory' 
                     ? 'Completed service history'
-                    : 'All registered vehicles'}
+                    : 'All registered vehicles'} · Last updated: {new Date(lastUpdateTime).toLocaleTimeString()}
               </Typography>
             </Box>
             <Stack direction="row" spacing={1} alignItems="center">
@@ -1414,10 +1575,12 @@ export default function VehicleList() {
               variant="contained" 
               color="primary" 
               startIcon={<AddIcon />}
-                onClick={() => {
-                  navigate("/admin/vehicle-add");
-                  // Force refresh when returning to this page
-                  forceVehicleDataRefresh();
+              onClick={() => {
+                // Set flag for refresh when returning
+                window.vehicleDataChanged = true;
+                localStorage.setItem('needsRefreshOnReturn', 'true');
+                // Navigate to add page
+                navigate("/admin/vehicle-add");
               }}
             >
           Add Vehicle
@@ -1581,120 +1744,130 @@ export default function VehicleList() {
                 <CustomizedDataGrid 
                   columns={columns} 
                   rows={filteredRows}
-                  autoHeight={true}
-                  density="standard"
+                    autoHeight={true}
+                    density="standard"
                   checkboxSelection={false}
                   disableRowSelectionOnClick
-                  getRowHeight={() => 'auto'}
-                  initialState={{
-                    pagination: { paginationModel: { pageSize: 20 } },
-                  }}
-                  pageSizeOptions={[10, 20, 50, 100]}
-                  disableColumnMenu
-                  columnVisibilityModel={{
-                    superwiser: window.innerWidth > 1200,
-                    technician: window.innerWidth > 1100,
-                    worker: window.innerWidth > 1000,
-                  }}
-                  sx={{
-                    width: '100%',
-                    height: 'auto',
-                    border: 'none',
-                    borderRadius: 1,
-                    overflow: 'visible',
-                    '& .MuiDataGrid-cell': {
-                      borderBottom: '1px solid #f0f0f0',
-                      padding: '8px 16px',
-                      fontSize: '0.875rem',
-                      whiteSpace: 'normal !important',
-                      wordWrap: 'break-word',
-                      lineHeight: '1.43',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      '@media (max-width: 600px)': {
-                        padding: '8px',
+                    getRowHeight={() => 'auto'}
+                    initialState={{
+                      pagination: { paginationModel: { pageSize: 20 } },
+                    }}
+                    getRowClassName={(params) => params.row.isNew ? 'highlighted-row' : ''}
+                    pageSizeOptions={[10, 20, 50, 100]}
+                    disableColumnMenu
+                    columnVisibilityModel={{
+                      superwiser: window.innerWidth > 1200,
+                      technician: window.innerWidth > 1100,
+                      worker: window.innerWidth > 1000,
+                    }}
+                    sx={{
+                      width: '100%',
+                      height: 'auto',
+                      border: 'none',
+                      borderRadius: 1,
+                      overflow: 'visible',
+                      '& .highlighted-row': {
+                        backgroundColor: alpha(theme.palette.success.light, 0.15),
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.success.light, 0.25),
+                        },
+                        '& .MuiDataGrid-cell': {
+                          borderColor: alpha(theme.palette.success.main, 0.2),
+                        }
                       },
-                      '&.wrap-cell-content': {
-                        whiteSpace: 'normal',
-                        lineHeight: '1.2em',
-                        paddingTop: '0.5rem',
-                        paddingBottom: '0.5rem',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                      },
-                    },
-                    '& .MuiDataGrid-row': {
-                      cursor: 'pointer',
-                      '&:hover': {
-                        backgroundColor: '#f5f5f5',
-                      },
-                      minHeight: '36px !important',
-                      maxHeight: 'none !important',
-                      '@media (max-width: 600px)': {
-                        minHeight: '48px !important',
-                      },
-                    },
-                    '& .MuiDataGrid-columnHeader': {
-                      padding: '8px 16px',
-                      backgroundColor: '#fafafa',
-                      borderBottom: '1px solid #e0e0e0',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      '@media (max-width: 600px)': {
-                        padding: '8px',
-                        '& .MuiDataGrid-columnHeaderTitle': {
-                          fontSize: '0.8125rem',
-                          fontWeight: 600,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
+                      '& .MuiDataGrid-cell': {
+                        borderBottom: '1px solid #f0f0f0',
+                        padding: '8px 16px',
+                        fontSize: '0.875rem',
+                        whiteSpace: 'normal !important',
+                        wordWrap: 'break-word',
+                        lineHeight: '1.43',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        '@media (max-width: 600px)': {
+                          padding: '8px',
+                        },
+                        '&.wrap-cell-content': {
+                          whiteSpace: 'normal',
+                          lineHeight: '1.2em',
+                          paddingTop: '0.5rem',
+                          paddingBottom: '0.5rem',
+                          display: 'flex',
+                          alignItems: 'flex-start',
                         },
                       },
-                    },
-                    '& .MuiDataGrid-columnHeaders': {
-                      borderBottom: 'none',
-                      position: 'sticky',
-                      top: 0,
-                      zIndex: 2,
-                      backgroundColor: '#fafafa',
-                    },
-                    '& .MuiDataGrid-columnHeaderTitleContainer': {
-                      padding: '0',
-                      overflow: 'hidden',
-                    },
-                    '& .MuiDataGrid-root': {
-                      borderWidth: 0
-                    },
-                    '& .MuiTablePagination-root': {
-                      margin: 0,
-                      borderTop: '1px solid #e0e0e0',
-                    },
-                    '& .MuiDataGrid-iconSeparator': {
-                      display: 'none'
-                    },
-                    '& .MuiDataGrid-virtualScroller': {
-                      overflow: 'visible',
-                      '@media (max-width: 600px)': {
-                        overflow: 'visible'
+                      '& .MuiDataGrid-row': {
+                        cursor: 'pointer',
+                        '&:hover': {
+                          backgroundColor: '#f5f5f5',
+                        },
+                        minHeight: '36px !important',
+                        maxHeight: 'none !important',
+                        '@media (max-width: 600px)': {
+                          minHeight: '48px !important',
+                        },
                       },
-                    },
-                    '& .MuiDataGrid-main': {
-                      overflow: 'visible',
-                      maxWidth: '100%',
-                      '@media (max-width: 600px)': {
-                        overflow: 'visible', 
+                      '& .MuiDataGrid-columnHeader': {
+                        padding: '8px 16px',
+                        backgroundColor: '#fafafa',
+                        borderBottom: '1px solid #e0e0e0',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        '@media (max-width: 600px)': {
+                          padding: '8px',
+                          '& .MuiDataGrid-columnHeaderTitle': {
+                            fontSize: '0.8125rem',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          },
+                        },
                       },
-                    },
-                    '& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell': {
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    },
-                    '& .MuiDataGrid-footerContainer': {
-                      borderTop: '1px solid #e0e0e0',
-                      backgroundColor: '#fafafa',
-                    },
-                  }}
-                />
+                      '& .MuiDataGrid-columnHeaders': {
+                        borderBottom: 'none',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 2,
+                        backgroundColor: '#fafafa',
+                      },
+                      '& .MuiDataGrid-columnHeaderTitleContainer': {
+                        padding: '0',
+                        overflow: 'hidden',
+                      },
+                      '& .MuiDataGrid-root': {
+                        borderWidth: 0
+                      },
+                      '& .MuiTablePagination-root': {
+                        margin: 0,
+                        borderTop: '1px solid #e0e0e0',
+                      },
+                      '& .MuiDataGrid-iconSeparator': {
+                        display: 'none'
+                      },
+                      '& .MuiDataGrid-virtualScroller': {
+                        overflow: 'visible',
+                        '@media (max-width: 600px)': {
+                          overflow: 'visible'
+                        },
+                      },
+                      '& .MuiDataGrid-main': {
+                        overflow: 'visible',
+                        maxWidth: '100%',
+                        '@media (max-width: 600px)': {
+                          overflow: 'visible', 
+                        },
+                      },
+                      '& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell': {
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      },
+                      '& .MuiDataGrid-footerContainer': {
+                        borderTop: '1px solid #e0e0e0',
+                        backgroundColor: '#fafafa',
+                      },
+                    }}
+                  />
                 
                 {loading && !initialLoad && !isSearching && (
                 <Box sx={{ 
