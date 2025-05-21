@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "Services/apiService";
 import { motion } from "framer-motion";
-import { FiAlertCircle, FiX } from "react-icons/fi";
+import { FiAlertCircle, FiX, FiSearch } from "react-icons/fi";
 import React from "react";
 import storageUtils from '../utils/storageUtils';
 
 const FiXIcon = FiX as React.FC<{ size?: number } & React.SVGProps<SVGSVGElement>>;
 const FiAlertCircleIcon = FiAlertCircle as React.FC<{ size?: number } & React.SVGProps<SVGSVGElement>>;
+const FiSearchIcon = FiSearch as React.FC<{ size?: number } & React.SVGProps<SVGSVGElement>>;
 
 interface SparePartType {
   sparePartId: number;
@@ -104,36 +105,50 @@ function SparePart() {
         console.log("Using regular fetch URL:", url);
       }
 
-      const response = await apiClient.get(url);
-      console.log("API Response for " + (isSearchQuery ? "search" : "regular fetch") + ":", response.data);
+      try {
+        const response = await apiClient.get(url);
+        console.log("API Response for " + (isSearchQuery ? "search" : "regular fetch") + ":", response.data);
 
-      // Process the results based on the response format
-      const processedParts = processSearchResults(response.data);
-      console.log("Processed parts after filtering:", processedParts);
-      
-      setSpareParts(processedParts);
-      
-      // Set pagination based on response format
-      if (response.data && response.data.totalPages !== undefined) {
-        setTotalPages(response.data.totalPages);
-        setCurrentPage(response.data.currentPage || 0);
-      } else {
-        // If no pagination info, assume it's all on one page
-        setTotalPages(1);
-        setCurrentPage(0);
-      }
-      
-      if (processedParts.length === 0 && isSearchQuery) {
-        // Show a more user-friendly message for zero search results
-        setError(`No spare parts found matching "${searchQuery}".`);
+        // Process the results based on the response format
+        const processedParts = processSearchResults(response.data);
+        console.log("Processed parts after filtering:", processedParts);
+        
+        setSpareParts(processedParts);
+        
+        // Set pagination based on response format
+        if (response.data && response.data.totalPages !== undefined) {
+          setTotalPages(response.data.totalPages);
+          setCurrentPage(response.data.currentPage || 0);
+        } else {
+          // If no pagination info, assume it's all on one page
+          setTotalPages(1);
+          setCurrentPage(0);
+        }
+        
+        if (processedParts.length === 0 && isSearchQuery) {
+          setError(`No spare parts found for the given search keyword.`);
+        }
+      } catch (apiErr: any) {
+        console.error("API Error:", apiErr);
+        
+        // Check if the error is "No spare parts found" message
+        if (apiErr.response?.status === 404 && 
+            apiErr.response?.data?.includes?.("No spare parts found") || 
+            apiErr.response?.data === "No spare parts found for the given search keyword.") {
+          setError("No spare parts found for the given search keyword.");
+        } else {
+          // For other actual errors
+          const errMsg =
+            apiErr.response?.data?.exception ||
+            apiErr.response?.data?.message ||
+            apiErr.response?.data ||
+            "Something went wrong. Please try again later.";
+          setError(errMsg);
+        }
       }
     } catch (err: any) {
-      console.error("Error fetching spare parts:", err);
-      const errMsg =
-        err.response?.data?.exception ||
-        err.response?.data?.message ||
-        "Failed to fetch data. Please try again.";
-      setError(errMsg);
+      console.error("Error in fetchSpareParts:", err);
+      setError("Something went wrong. Please try again later.");
     } finally {
       setLoading(false);
     }
@@ -297,8 +312,22 @@ function SparePart() {
           transition={{ duration: 0.5 }}
           className="flex flex-col items-center justify-center h-[40vh]"
         >
-          <FiAlertCircleIcon className="text-red-500 mb-4" size={64} />
-          <p className="text-red-500 text-lg mb-6">{error}</p>
+          {error.includes("No spare parts found") ? (
+            <>
+              <div className="bg-blue-50 border border-blue-200 rounded-full p-6 mb-5">
+                <FiSearchIcon className="text-blue-500" size={48} />
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-800 mb-2">No Results Found</h2>
+              <p className="text-gray-600 text-center mb-6 max-w-md">
+                {error}
+              </p>
+            </>
+          ) : (
+            <>
+              <FiAlertCircleIcon className="text-red-500 mb-4" size={64} />
+              <p className="text-red-500 text-lg mb-6">{error}</p>
+            </>
+          )}
           <div className="flex gap-4">
             <button
               onClick={() => fetchSpareParts(currentPage)}
