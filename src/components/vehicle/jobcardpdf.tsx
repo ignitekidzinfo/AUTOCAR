@@ -141,8 +141,6 @@ const JobCardPDF: React.FC = () => {
         technician: "N/A"
       });
     }
-    
-    // Set loading false after data processing
     setIsLoading(false);
   }, []);
 

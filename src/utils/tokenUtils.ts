@@ -2,6 +2,7 @@ import { jwtDecode } from 'jwt-decode';
 import logger from './logger';
 import secureStorage from './secureStorage';
 import { toast } from 'react-toastify';
+import apiClient from '../Services/apiService';
 
 // Token decoder interface
 export interface DecodedToken {
@@ -38,7 +39,7 @@ export const isTokenValid = (): boolean => {
 export const forceCheckTokenValidity = (): void => {
   // No-op: do not force logout on expiry
 };
-
+      
 // Get the decoded token if present (do not check expiration)
 export const getDecodedToken = (): DecodedToken | null => {
   try {
@@ -88,8 +89,50 @@ export const logout = (): void => {
   window.location.href = '/signIn';
 };
 
-// Get time until token expires (no longer used)
-export const getTimeUntilExpiration = (): number | null => null;
+// Get time until token expires in milliseconds
+export const getTimeUntilExpiration = (): number | null => {
+  try {
+    const decoded = getDecodedToken();
+    if (!decoded || !decoded.exp) return null;
+    
+    // exp is in seconds, convert to milliseconds
+    const expirationTime = decoded.exp * 1000;
+    const currentTime = Date.now();
+    
+    const timeRemaining = expirationTime - currentTime;
+    return timeRemaining > 0 ? timeRemaining : 0;
+  } catch (error) {
+    logger.error('Error calculating time until expiration:', error);
+    return null;
+  }
+};
+
+// Refresh token if needed or if forced
+export const refreshTokenIfNeeded = async (force = false): Promise<boolean> => {
+  try {
+    // Check if token needs refresh (5 min threshold or force)
+    const timeRemaining = getTimeUntilExpiration();
+    const needsRefresh = force || (timeRemaining !== null && timeRemaining < 5 * 60 * 1000);
+    
+    if (!needsRefresh) {
+      return true; // Token is still valid for a while
+    }
+    
+    // Call refresh token endpoint
+    const response = await apiClient.post('/api/auth/refresh-token');
+    
+    if (response.data && response.data.token) {
+      // Store new token
+      secureStorage.setItem('token', response.data.token);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    logger.error('Error refreshing token:', error);
+    return false;
+  }
+};
 
 // No-op for setupTokenExpirationListener
 export const setupTokenExpirationListener = () => () => {}; 

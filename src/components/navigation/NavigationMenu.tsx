@@ -33,6 +33,7 @@ const navigationItems: NavItem[] = [
   { name: 'Payment', path: '/payment', icon: <PaymentIcon /> },
   { name: 'Purchase', path: '/purchase', icon: <ShoppingCartIcon /> },
   { name: 'Vehicle Registration', path: '/vehicleRegistration', icon: <DirectionsCarIcon /> },
+  { name: 'Optimized Vehicle List', path: '/admin/vehicle/list', icon: <DirectionsCarIcon /> },
   { name: 'Bookings', path: '/bookings', icon: <EventNoteIcon /> },
   { name: 'Service Queue', path: '/serviceQueue', icon: <QueueIcon /> },
   { name: 'Service History', path: '/serviceHistory', icon: <HistoryIcon /> },

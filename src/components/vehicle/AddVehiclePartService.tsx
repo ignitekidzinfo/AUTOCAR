@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import apiClient from "Services/apiService";
 import {
   Grid,
@@ -24,17 +24,22 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Divider,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import CustomizedDataGrid from "components/CustomizedDataGrid";
 import { GridCellParams, GridRowsProp, GridColDef } from "@mui/x-data-grid";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CancelIcon from "@mui/icons-material/Cancel";
 import CloseIcon from "@mui/icons-material/Close";
 import SparePartDeleteModel from "./SparePartDeleteModel";
-import { Task, Description, NoteAdd, ErrorOutline } from "@mui/icons-material";
+import { Task, Description, NoteAdd, ErrorOutline, DirectionsCar, Person } from "@mui/icons-material";
+import { VehicleDataByID } from "Services/vehicleService";
 
-// Styled components
+const CACHE_KEY_PREFIX = 'vehicle_parts_';
+const CACHE_DURATION = 5 * 60 * 1000;
+const memoryCache = new Map();
+
 const FormGrid = styled(Grid)(({ theme }) => ({
   display: "flex",
   flexDirection: "column",
@@ -99,8 +104,62 @@ interface SpareFilterDto {
 }
 interface Feedback {
   message: string;
-  severity: "success" | "error";
+  severity: "success" | "error" | "warning" | "info";
 }
+
+const getCachedData = <T,>(key: string): T | null => {
+  try {
+    const memoryCached = memoryCache.get(key);
+    if (memoryCached && Date.now() - memoryCached.timestamp < CACHE_DURATION) {
+      return memoryCached.data as T;
+    }
+    
+    const cached = localStorage.getItem(key);
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (data.timestamp && Date.now() - data.timestamp < CACHE_DURATION) {
+    
+        memoryCache.set(key, {data: data.data, timestamp: Date.now()});
+        return data.data as T;
+      }
+    }
+  } catch (e) {
+    console.error('Error reading cache:', e);
+ 
+    try {
+      localStorage.removeItem(key);
+      memoryCache.delete(key);
+    } catch {
+    }
+  }
+  return null;
+};
+
+const saveToCache = <T,>(key: string, data: T): void => {
+  try {
+    const cacheData = {
+      data,
+      timestamp: Date.now()
+    };
+    
+    memoryCache.set(key, {data, timestamp: Date.now()});
+    
+    localStorage.setItem(key, JSON.stringify(cacheData));
+  } catch (e) {
+    console.error('Error saving to cache:', e);
+  }
+};
+
+interface VehicleDetails {
+  vehicleRegId?: string;
+  vehicleNumber: string;
+  vehicleBrand: string;
+  vehicleModelName: string;
+  vehicleVariant: string;
+  customerName: string;
+  customerMobileNumber: string;
+}
+
 const AddVehiclePartService: React.FC = () => {
   const [createData, setCreateData] = useState<CreateTransaction>(initialCreateData);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -113,23 +172,97 @@ const AddVehiclePartService: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>("spare");
   const [errorDialogOpen, setErrorDialogOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [realVehicleId, setRealVehicleId] = useState<string | null>(null);
+  const [isPendingId, setIsPendingId] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [vehicleDetails, setVehicleDetails] = useState<VehicleDetails | null>(null);
+
+  const loadingRef = useRef<boolean>(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams(); 
+  
+  useEffect(() => {
+    if (id && id.toString().startsWith('pending-')) {
+      setIsPendingId(true);
+      
+      const storedRealId = sessionStorage.getItem('realVehicleId');
+      if (storedRealId) {
+        setRealVehicleId(storedRealId);
+        window.history.replaceState(
+          null,
+          '',
+          location.pathname.replace(id, storedRealId)
+        );
+      } else {
+        const checkRealIdInterval = setInterval(() => {
+          const updatedRealId = sessionStorage.getItem('realVehicleId');
+          if (updatedRealId) {
+            setRealVehicleId(updatedRealId);
+            clearInterval(checkRealIdInterval);
+            window.history.replaceState(
+              null,
+              '',
+              location.pathname.replace(id, updatedRealId)
+            );
+          }
+        }, 1000); 
+        
+        return () => clearInterval(checkRealIdInterval);
+      }
+    }
+  }, [id, location.pathname]);
+  
+  const getEffectiveVehicleId = useCallback(() => {
+    return isPendingId && realVehicleId ? realVehicleId : id;
+  }, [isPendingId, realVehicleId, id]);
 
-  const fetchSparePartList = useCallback(async () => {
+  const fetchSparePartList = useCallback(async (skipCache = false) => {
+    const effectiveId = getEffectiveVehicleId();
+    
+    if (isPendingId && !realVehicleId) {
+      console.log("Waiting for real vehicle ID before fetching spare parts");
+      return;
+    }
+
+    if (loadingRef.current) {
+      return;
+    }
+
+    loadingRef.current = true;
+    setIsLoading(true);
+
+    if (!skipCache) {
+      const cacheKey = `${CACHE_KEY_PREFIX}${effectiveId}`;
+      const cachedData = getCachedData<GridRowsProp>(cacheKey);
+      
+      if (cachedData && cachedData.length > 0) {
+        setRows(cachedData);
+        loadingRef.current = false;
+        setIsLoading(false);
+        return;
+      }
+    }
+    
     try {
       const responsePart = await apiClient.get(
-        `/sparePartTransactions/vehicleRegId?vehicleRegId=${id}` );
+        `/sparePartTransactions/vehicleRegId?vehicleRegId=${effectiveId}` );
       if (!responsePart.data || responsePart.data.length === 0) {
         console.warn("No transactions found for this vehicleRegId");
-        return; }
+        setRows([]);
+        loadingRef.current = false;
+        setIsLoading(false);
+        return; 
+      }
+      
       const transactions: any = Array.isArray(responsePart.data)
         ? responsePart.data
         : [responsePart.data];
       const transactionsData = transactions[0].data;
       const newTransactions = transactionsData.map((resData: any, index: number) => ({
-        id: rows.length + index + 1,
+        id: index + 1, 
         partNumber: resData.partNumber,
         partName: resData.partName,
         manufacturer: resData.manufacturer,
@@ -140,40 +273,77 @@ const AddVehiclePartService: React.FC = () => {
         vehicleRegId: resData.vehicleRegId,
         sparePartTransactionId: resData.sparePartTransactionId,
         cgst: resData.cgst || 0,
-        sgst: resData.sgst || 0, }));
-      setRows([...newTransactions]);
+        sgst: resData.sgst || 0, 
+      }));
+      
+      setRows(newTransactions);
+      
+      const cacheKey = `${CACHE_KEY_PREFIX}${effectiveId}`;
+      saveToCache(cacheKey, newTransactions);
     } catch (err) {
       console.error("Error fetching transactions:", err);  
-    } 
-  }, [id, rows.length]);
+    } finally {
+      loadingRef.current = false;
+      setIsLoading(false);
+    }
+  }, [getEffectiveVehicleId, realVehicleId]);
 
   useEffect(() => {
-    if (id) {
+    const effectiveId = getEffectiveVehicleId();
+    if (effectiveId) {
+      fetchVehicleDetails(effectiveId);
       fetchSparePartList();
     }
-  }, [id, fetchSparePartList]);
+  }, [getEffectiveVehicleId]);
 
   useEffect(() => {
-    const handler = setTimeout(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
       setDebouncedSearch(searchKeyword);
-    }, 500);
+      debounceTimerRef.current = null;
+    }, 300);
+    
     return () => {
-      clearTimeout(handler);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
     };
   }, [searchKeyword]);
+
   const fetchPartSuggestions = useCallback(async (keyword: string) => {
     if (!keyword.trim()) {
       setPartSuggestions([]);
-      return; }
+      return; 
+    }
+    
+    const cacheKey = `part_suggestions_${keyword}`;
+    const cachedSuggestions = getCachedData<SpareFilterDto[]>(cacheKey);
+    
+    if (cachedSuggestions) {
+      setPartSuggestions(cachedSuggestions);
+      return;
+    }
+    
     try {
       const response = await apiClient.get(`/Filter/search?keyword=${keyword}`);
-      setPartSuggestions(response.data);
+      const suggestions = response.data;
+      setPartSuggestions(suggestions);
+      
+      saveToCache(cacheKey, suggestions);
     } catch (error) {
-      console.error("Error fetching part suggestions:", error); }
+      console.error("Error fetching part suggestions:", error); 
+    }
   }, []);
+
   useEffect(() => {
-    fetchPartSuggestions(debouncedSearch);
+    if (debouncedSearch) {
+      fetchPartSuggestions(debouncedSearch);
+    }
   }, [debouncedSearch, fetchPartSuggestions]);
+
   const handleCreateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
     setCreateData((prev) => ({
@@ -184,7 +354,10 @@ const AddVehiclePartService: React.FC = () => {
           ? Number(value) * prev.quantity
           : name === "quantity"
           ? prev.amount * Number(value)
-          : prev.total,  })); };
+          : prev.total,  
+    })); 
+  };
+
   const handleSelectSuggestion = (suggestion: SpareFilterDto) => {
     setCreateData((prev) => ({
       ...prev,
@@ -197,7 +370,9 @@ const AddVehiclePartService: React.FC = () => {
       sgst: suggestion.sgst,
     }));
     setSearchKeyword("");
-    setPartSuggestions([]); };
+    setPartSuggestions([]); 
+  };
+
   const handleClearSelection = () => {
     setCreateData((prev) => ({
       ...prev,
@@ -209,13 +384,31 @@ const AddVehiclePartService: React.FC = () => {
       cgst: 0,
       sgst: 0,
     }));
-    setSearchKeyword(""); };
+    setSearchKeyword(""); 
+  };
+
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const effectiveId = getEffectiveVehicleId();
+    
+    if (isPendingId && !realVehicleId) {
+      setFeedback({
+        message: "Please wait until vehicle registration is complete before adding parts",
+        severity: "error"
+      });
+      return;
+    }
+    if (loadingRef.current) {
+      return;
+    }
+    
+    loadingRef.current = true;
+    setIsLoading(true);
+    
     try {
       const updatedData = {
         ...createData,
-        vehicleRegId: Number(id),
+        vehicleRegId: Number(effectiveId),
         userId: null,
       };
       const response = await apiClient.post("/sparePartTransactions/add", updatedData);
@@ -234,7 +427,13 @@ const AddVehiclePartService: React.FC = () => {
         cgst: updatedData.cgst,
         sgst: updatedData.sgst,
       };
-      setRows((prevRows) => [...prevRows, newTransaction]);
+      
+      const newRows = [...rows, newTransaction];
+      setRows(newRows);
+      
+      const cacheKey = `${CACHE_KEY_PREFIX}${effectiveId}`;
+      saveToCache(cacheKey, newRows);
+      
       setFeedback({
         message: response.data.message || "Transaction created successfully",
         severity: "success",
@@ -255,28 +454,51 @@ const AddVehiclePartService: React.FC = () => {
           severity: "error",
         });
       }
+    } finally {
+      loadingRef.current = false;
+      setIsLoading(false);
     }
   };
+
   const handleCloseSnackbar = () => {
-    setFeedback(null); }; 
-  const handleDelete = (id: number) => {
+    setFeedback(null); 
+  };
+
+  const handleDelete = useCallback((id: number) => {
     setSelectedId(id);
-    setOpen(true); };
-  const handleDeleteConfirmed = (id: number) => {
-    setRows((prevRows) => prevRows.filter((row) => row.sparePartTransactionId !== id)); };
-  function renderActionButtons(params: GridCellParams) {
+    setOpen(true); 
+  }, []);
+
+  const handleDeleteConfirmed = useCallback((id: number) => {
+    const newRows = rows.filter((row) => row.sparePartTransactionId !== id);
+    setRows(newRows);
+    
+    const effectiveId = getEffectiveVehicleId();
+    const cacheKey = `${CACHE_KEY_PREFIX}${effectiveId}`;
+    saveToCache(cacheKey, newRows);
+  }, [rows, getEffectiveVehicleId]);
+
+  const renderActionButtons = useCallback((params: GridCellParams) => {
     return (
       <IconButton
         color="secondary"
-        onClick={() => handleDelete(params.row.sparePartTransactionId as number)} >
+        onClick={(e) => {
+          e.stopPropagation();  
+          handleDelete(params.row.sparePartTransactionId as number);
+        }} >
         <DeleteIcon />
-      </IconButton> );}
-  const computeGstAmounts = (row: any) => {
+      </IconButton> 
+    );
+  }, [handleDelete]);
+
+  const computeGstAmounts = useCallback((row: any) => {
     const base = row.total;
     const cgstAmount = (base * row.cgst) / 100;
     const sgstAmount = (base * row.sgst) / 100;
-    return { cgstAmount, sgstAmount }; };
-  const columns: GridColDef[] = [
+    return { cgstAmount, sgstAmount }; 
+  }, []);
+
+  const columns = useMemo<GridColDef[]>(() => [
     { field: "id", headerName: "ID", width: 80, sortable: false },
     { field: "partNumber", headerName: "Part Number", width: 150, sortable: false },
     { field: "partName", headerName: "Part Name", width: 200, sortable: false },
@@ -292,7 +514,9 @@ const AddVehiclePartService: React.FC = () => {
       valueGetter: (params: any) => {
         if (!params?.row) return "";
         const { cgstAmount } = computeGstAmounts(params.row);
-        return cgstAmount ? cgstAmount.toFixed(2) : "0.00"; }, },
+        return cgstAmount ? cgstAmount.toFixed(2) : "0.00"; 
+      }, 
+    },
     { field: "sgst", headerName: "SGST (%)", width: 120, sortable: false },
     {
       field: "sgstAmount",
@@ -302,23 +526,31 @@ const AddVehiclePartService: React.FC = () => {
       valueGetter: (params: any) => {
         if (!params?.row) return "";
         const { sgstAmount } = computeGstAmounts(params.row);
-        return sgstAmount ? sgstAmount.toFixed(2) : "0.00"; }, },
+        return sgstAmount ? sgstAmount.toFixed(2) : "0.00"; 
+      }, 
+    },
     { field: "total", headerName: "Total", width: 150, sortable: false },
     {
       field: "action",
       headerName: "Action",
       width: 120,
       sortable: false,
-      renderCell: (params) => renderActionButtons(params), }, ];
-  const grandTotal = rows.reduce((acc, row) => acc + (row.total as number), 0);
+      renderCell: renderActionButtons, 
+    }, 
+  ], [computeGstAmounts, renderActionButtons]);
 
-  const renderHeaderCards = () => {
+  const grandTotal = useMemo(() => 
+    rows.reduce((acc, row) => acc + (row.total as number), 0),
+    [rows]
+  );
+
+  const renderHeaderCards = useCallback(() => {
     const headerCards = [
       {
         label: "Job Card",
         icon: <Task fontSize="large" color="primary" />,
         value: "jobCard",
-        onClick: () => navigate(`/admin/job-card/${id}`),
+        onClick: () => navigate(`/admin/job-card/${getEffectiveVehicleId()}`),
       },
       {
         label: "Spare",
@@ -330,7 +562,7 @@ const AddVehiclePartService: React.FC = () => {
         label: "Service",
         icon: <NoteAdd fontSize="large" color="primary" />,
         value: "service",
-        onClick: () => navigate(`/admin/serviceTab/${id}`),
+        onClick: () => navigate(`/admin/serviceTab/${getEffectiveVehicleId()}`),
       },
     ];
 
@@ -357,6 +589,91 @@ const AddVehiclePartService: React.FC = () => {
         </Grid>
       </Box>
     );
+  }, [currentTab, getEffectiveVehicleId, navigate]);
+
+  const fetchVehicleDetails = async (id: string | number) => {
+    try {
+      const response = await VehicleDataByID(id);
+      if (response) {
+        setVehicleDetails({
+          vehicleRegId: response.vehicleRegId,
+          vehicleNumber: response.vehicleNumber || "",
+          vehicleBrand: response.vehicleBrand || "",
+          vehicleModelName: response.vehicleModelName || "",
+          vehicleVariant: response.vehicleVariant || "",
+          customerName: response.customerName || "",
+          customerMobileNumber: response.customerMobileNumber || "",
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching vehicle details:", error);
+      setFeedback({
+        message: "Failed to load vehicle details",
+        severity: "error",
+      });
+    }
+  };
+
+  const renderVehicleCustomerDetails = () => {
+    if (!vehicleDetails) return null;
+    
+    return (
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 2, 
+          mb: 3, 
+          borderRadius: 3, 
+          width: "100%",
+          backgroundColor: "#f8f9fa"
+        }}
+      >
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <DirectionsCar color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Vehicle Details
+              </Typography>
+            </Box>
+            <Divider sx={{ mb: 2 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Vehicle No:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.vehicleNumber}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Vehicle Name:</Typography>
+                <Typography variant="body1" fontWeight={500}>
+                  {vehicleDetails.vehicleBrand} - {vehicleDetails.vehicleModelName}
+                  {vehicleDetails.vehicleVariant && ` (${vehicleDetails.vehicleVariant})`}
+                </Typography>
+              </Grid>
+            </Grid>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Person color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Customer Details
+              </Typography>
+            </Box>
+            <Divider sx={{ mb: 2 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Cust Name:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.customerName}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Cust Contact:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.customerMobileNumber}</Typography>
+              </Grid>
+            </Grid>
+          </Grid>
+        </Grid>
+      </Paper>
+    );
   };
 
   return (
@@ -371,9 +688,16 @@ const AddVehiclePartService: React.FC = () => {
       }} >
       <Box sx={{ mb: 2 }}>
         <Typography variant="subtitle1" color="textSecondary">
-          Vehicle Registration ID: {id}
+          Vehicle Registration ID: {getEffectiveVehicleId()}
+          {isPendingId && !realVehicleId && (
+            <Typography component="span" color="warning.main" sx={{ ml: 1, fontStyle: 'italic' }}>
+              (Processing vehicle registration...)
+            </Typography>
+          )}
         </Typography>
       </Box>
+      
+      {renderVehicleCustomerDetails()}
       
       {renderHeaderCards()}
       
@@ -497,8 +821,14 @@ const AddVehiclePartService: React.FC = () => {
                   />
                 </FormGrid>
                 <Grid item xs={12}>
-                  <Button type="submit" variant="contained" color="primary" fullWidth>
-                    Create Transaction
+                  <Button 
+                    type="submit" 
+                    variant="contained" 
+                    color="primary" 
+                    fullWidth
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "Creating..." : "Create Transaction"}
                   </Button>
                 </Grid>
               </Grid>
@@ -508,7 +838,15 @@ const AddVehiclePartService: React.FC = () => {
             <>
               <Paper elevation={3} sx={{ p: 2, mb: 2, borderRadius: 3, width: "100%" }}>
                 <Box sx={{ width: "100%", overflowX: "auto" }}>
-                  <CustomizedDataGrid columns={columns} rows={rows} autoHeight />
+                  <CustomizedDataGrid 
+                    columns={columns} 
+                    rows={rows} 
+                    autoHeight 
+                    disableColumnMenu
+                    density="standard"
+                    getRowHeight={() => 'auto'}
+                    disableRowSelectionOnClick
+                  />
                 </Box>
               </Paper>
               <Paper elevation={3} sx={{ p: 2, textAlign: "right", borderRadius: 3, width: "100%" }}>
@@ -603,4 +941,4 @@ const AddVehiclePartService: React.FC = () => {
   );
 };
 
-export default AddVehiclePartService;
+export default React.memo(AddVehiclePartService);

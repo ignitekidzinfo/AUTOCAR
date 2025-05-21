@@ -202,18 +202,15 @@ export default function SignInCard() {
         }
         
         // Success message
-        toast.success("Signed in successfully!");
+        toast.success("Signed in successfully! Redirecting to dashboard...");
         
-        // Add a longer delay to ensure token is properly stored before redirecting
+        // Dispatch custom event to notify about authentication state change
+        window.dispatchEvent(new Event('auth-state-changed'));
+        
+        // Redirect to appropriate page after login
         setTimeout(() => {
-          const redirectPath = secureStorage.getItem("redirectAfterLogin");
-          if (redirectPath) {
-            secureStorage.removeItem("redirectAfterLogin");
-            navigate(redirectPath);
-            toast.success("Welcome back! Your session has been restored.");
-          } else {
-            navigate("/");
-          }
+          // Default to /dashboard for authenticated users
+          navigate("/");
         }, 1000);
       } catch (decodeError) {
         logger.error("Failed to decode token:", decodeError);

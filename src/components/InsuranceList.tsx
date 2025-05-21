@@ -91,8 +91,44 @@ const InsuranceList: React.FC = () => {
         apiClient.get<VehicleRegDto[]>('/vehicle-reg/expired'),
         apiClient.get<VehicleRegDto[]>('/vehicle-reg/active'),
       ]);
-      setExpiredInsurances(expiredResponse.data);
-      setActiveInsurances(activeResponse.data);
+      
+      // Process expired insurance data to remove duplicates
+      const expiredByVehicleNumber: Record<string, VehicleRegDto> = {};
+      expiredResponse.data.forEach(item => {
+        // If this vehicle number already exists, keep the one with the most recent insuredTo date
+        if (expiredByVehicleNumber[item.vehicleNumber]) {
+          const existingItem = expiredByVehicleNumber[item.vehicleNumber];
+          const existingDate = existingItem.insuredTo ? new Date(existingItem.insuredTo) : new Date(0);
+          const newDate = item.insuredTo ? new Date(item.insuredTo) : new Date(0);
+          
+          if (newDate > existingDate) {
+            expiredByVehicleNumber[item.vehicleNumber] = item;
+          }
+        } else {
+          expiredByVehicleNumber[item.vehicleNumber] = item;
+        }
+      });
+      
+      // Process active insurance data to remove duplicates
+      const activeByVehicleNumber: Record<string, VehicleRegDto> = {};
+      activeResponse.data.forEach(item => {
+        // If this vehicle number already exists, keep the one with the most recent insuredTo date
+        if (activeByVehicleNumber[item.vehicleNumber]) {
+          const existingItem = activeByVehicleNumber[item.vehicleNumber];
+          const existingDate = existingItem.insuredTo ? new Date(existingItem.insuredTo) : new Date(0);
+          const newDate = item.insuredTo ? new Date(item.insuredTo) : new Date(0);
+          
+          if (newDate > existingDate) {
+            activeByVehicleNumber[item.vehicleNumber] = item;
+          }
+        } else {
+          activeByVehicleNumber[item.vehicleNumber] = item;
+        }
+      });
+      
+      // Convert the deduplicated objects back to arrays
+      setExpiredInsurances(Object.values(expiredByVehicleNumber));
+      setActiveInsurances(Object.values(activeByVehicleNumber));
     } catch (err: any) {
       console.error(err);
       setError('Failed to load insurance data.');
@@ -604,7 +640,6 @@ const InsuranceList: React.FC = () => {
               </>
             )}
             
-            {/* Mobile scroll indicator */}
             {!isMobile && isTablet && filterData(tabValue === 0 ? expiredInsurances : activeInsurances).length > 0 && (
               <Box sx={{ 
                 textAlign: 'center', 

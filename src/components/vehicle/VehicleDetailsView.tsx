@@ -243,7 +243,6 @@ export default function VehicleDetailsView() {
         }
     }, [id]);
 
-    // Helper function to get status chip color
     const getStatusColor = (status: string) => {
         switch (status.toLowerCase()) {
             case 'complete':
@@ -257,7 +256,6 @@ export default function VehicleDetailsView() {
         }
     };
 
-    // Helper function to get insurance status chip color
     const getInsuranceColor = (status: string) => {
         return status.toLowerCase() === 'insured' ? 'success' : 'error';
     };
@@ -280,7 +278,6 @@ export default function VehicleDetailsView() {
             margin: '0 auto',
             p: 2,
         }}>
-            {/* Header */}
             <Card elevation={3} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
                 <Box 
                     sx={{ 
@@ -352,7 +349,6 @@ export default function VehicleDetailsView() {
                     </Box>
 
             <Grid container spacing={3}>
-                        {/* Vehicle Information Section */}
                         <Grid item xs={12} md={6}>
                             <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
                                 <SectionTitle>
@@ -442,7 +438,6 @@ export default function VehicleDetailsView() {
                             </Paper>
                         </Grid>
 
-                        {/* Customer Information Section */}
                         <Grid item xs={12} md={6}>
                             <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.info.main, 0.03) }}>
                                 <SectionTitle>
@@ -483,7 +478,6 @@ export default function VehicleDetailsView() {
                             </Paper>
                         </Grid>
 
-                        {/* Service Information Section */}
                         <Grid item xs={12} md={6}>
                             <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.secondary.main, 0.03) }}>
                                 <SectionTitle>
@@ -518,7 +512,6 @@ export default function VehicleDetailsView() {
                             </Paper>
                         </Grid>
 
-                        {/* Insurance Information Section */}
                         <Grid item xs={12} md={6}>
                             <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.success.main, 0.03) }}>
                                 <SectionTitle>
@@ -561,7 +554,6 @@ export default function VehicleDetailsView() {
                 </CardContent>
             </Card>
 
-            {/* Service Parts Card */}
             <Card elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
                 <Box 
                     sx={{ 

@@ -1,14 +1,16 @@
 import { filter } from "types/SparePart";
-import apiClient from "./apiService";
+import { apiClient } from "../utils/apiClient";
 import { VehicleFormData } from "types/Vahicle";
 
 export const VehicleListData = async () => {
     try {
       const response = await apiClient.get("/vehicle-reg/getAll");
+    
+    // Ensure we're returning the data in expected format
       return response.data;
     } catch (error) {
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
+    console.error("Error fetching vehicles:", error);
+    throw error; // Propagate error for better handling
     }
   };
 
@@ -82,12 +84,42 @@ export const VehicleListData = async () => {
     }
   }
 
-  export const GetVehicleByStatus = async ( filterData : filter) => {
-    try{
+  export const GetVehicleByStatus = async (filterData: filter) => {
+    // Create a cache key based on the status
+    const cacheKey = `vehicle_status_${filterData.status}`;
+    
+    // Check if we have a recent cached result (less than 2 minutes old)
+    const cachedData = sessionStorage.getItem(cacheKey);
+    if (cachedData) {
+      try {
+        const parsedData = JSON.parse(cachedData);
+        // If cache is fresh (less than 2 minutes old), use it
+        if (parsedData.timestamp > Date.now() - (2 * 60 * 1000)) {
+          console.log('Using cached vehicle status data');
+          return { data: parsedData.data };
+        }
+      } catch (e) {
+        console.error('Error parsing cached vehicle status data:', e);
+      }
+    }
+    
+    // If no valid cache exists, make the actual API call
+    try {
       const response = await apiClient.get(`vehicle-reg/GetStatus?status=${filterData.status}`);
+      
+      // Cache the response
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify({
+          data: response.data,
+          timestamp: Date.now()
+        }));
+      } catch (cacheError) {
+        console.warn('Failed to cache vehicle status data:', cacheError);
+      }
+      
       return response.data;
-    }catch(error) { 
-      console.error("Error fetching spare parts:", error);
-      throw new Error("Failed to fetch spare parts");
+    } catch (error) { 
+      console.error("Error fetching vehicles by status:", error);
+      throw new Error("Failed to fetch vehicles by status");
     }
   }

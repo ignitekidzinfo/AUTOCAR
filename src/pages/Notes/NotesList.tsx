@@ -192,7 +192,7 @@ const NotesList: React.FC = () => {
       const timestamp = new Date().getTime();
       const response = await apiClient.get(`/manageNotes/all?_t=${timestamp}`) as any;
       const payload = response.data;
-      
+
       let notesData: ManageNoteDto[] = [];
       if (Array.isArray(payload)) {
         notesData = payload;
@@ -231,8 +231,8 @@ const NotesList: React.FC = () => {
       
       // Don't clear notes if we already have cached data
       if (notes.length === 0) {
-        setNotes([]);
-        setFilteredNotes([]);
+      setNotes([]);
+      setFilteredNotes([]);
       }
     } finally {
       setInitialLoading(false);
@@ -451,116 +451,116 @@ const NotesList: React.FC = () => {
 
   // Memoized empty state component
   const EmptyState = useMemo(() => (
-    <Paper sx={{ p: 5, textAlign: 'center', borderRadius: 2, bgcolor: theme.palette.grey[50] }}>
-      <NotesIcon sx={{ fontSize: 60, color: theme.palette.grey[400], mb: 2 }} />
-      <Typography variant="h6" color="textSecondary">
-        {searchQuery ? "No notes match your search criteria." : "No notes yet. Click \"Add Note\" to create."}
-      </Typography>
-    </Paper>
+          <Paper sx={{ p: 5, textAlign: 'center', borderRadius: 2, bgcolor: theme.palette.grey[50] }}>
+            <NotesIcon sx={{ fontSize: 60, color: theme.palette.grey[400], mb: 2 }} />
+            <Typography variant="h6" color="textSecondary">
+              {searchQuery ? "No notes match your search criteria." : "No notes yet. Click \"Add Note\" to create."}
+            </Typography>
+          </Paper>
   ), [searchQuery, theme.palette.grey]);
 
   // Memoize note cards to avoid re-rendering all cards when only one changes
   const renderNoteCards = useMemo(() => {
     return filteredNotes.map(note => (
-      <Grid item xs={12} sm={6} md={4} key={`note-${note.manageNoteId}`}>
-        <Card 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            height: '100%',
-            transition: 'all 0.3s ease',
-            borderRadius: 2,
-            overflow: 'hidden',
-            position: 'relative',
-            '&:hover': {
-              transform: 'translateY(-5px)',
-              boxShadow: 8
-            },
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '4px',
-              backgroundColor: (() => {
-                const colorType = getNoteTypeColor(note.selectNoteOn);
-                return theme.palette[colorType].main;
-              })()
-            }
-          }} 
-          elevation={3}
-        >
-          <CardActionArea 
-            onClick={() => handleViewNote(note)}
-            sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch', height: '100%' }}
-          >
-            <CardContent sx={{ flexGrow: 1, pb: 1, pt: 3 }}>
-              <Chip
-                icon={getNoteTypeIcon(note.selectNoteOn)}
-                label={note.selectNoteOn}
-                size="small"
-                color={getNoteTypeColor(note.selectNoteOn)}
-                sx={{ mb: 2, fontWeight: 'medium' }}
-              />
-              <Typography 
-                variant="body1" 
-                sx={{ 
-                  fontWeight: 'bold',
-                  mb: 2,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  lineHeight: '1.5em',
-                  maxHeight: '4.5em' // 3 lines x 1.5em
-                }}
-              >
-                {note.writeNote}
-              </Typography>
-              {note.manageNoteId && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                  ID: {note.manageNoteId}
-                </Typography>
-              )}
-            </CardContent>
-          </CardActionArea>
-          <Divider />
-          <CardActions sx={{ p: 1, justifyContent: 'space-between', bgcolor: theme.palette.grey[50] }}>
-            <Box>
-              <Tooltip title="Edit">
-                <IconButton 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleEditNote(note);
+              <Grid item xs={12} sm={6} md={4} key={`note-${note.manageNoteId}`}>
+                <Card 
+                  sx={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    height: '100%',
+                    transition: 'all 0.3s ease',
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    position: 'relative',
+                    '&:hover': {
+                      transform: 'translateY(-5px)',
+                      boxShadow: 8
+                    },
+                    '&::before': {
+                      content: '""',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '4px',
+                      backgroundColor: (() => {
+                        const colorType = getNoteTypeColor(note.selectNoteOn);
+                        return theme.palette[colorType].main;
+                      })()
+                    }
                   }} 
-                  disabled={loading}
-                  size="small"
-                  color="primary"
+                  elevation={3}
                 >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton 
-                  color="error" 
-                  onClick={(e) => handleDeleteNote(note.manageNoteId, e)} 
-                  disabled={loading}
-                  size="small"
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <Tooltip title="Click to view full note">
-              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', pr: 1 }}>
-                Click to view
-              </Typography>
-            </Tooltip>
-          </CardActions>
-        </Card>
-      </Grid>
+                  <CardActionArea 
+                    onClick={() => handleViewNote(note)}
+                    sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch', height: '100%' }}
+                  >
+                    <CardContent sx={{ flexGrow: 1, pb: 1, pt: 3 }}>
+                      <Chip
+                        icon={getNoteTypeIcon(note.selectNoteOn)}
+                        label={note.selectNoteOn}
+                        size="small"
+                        color={getNoteTypeColor(note.selectNoteOn)}
+                        sx={{ mb: 2, fontWeight: 'medium' }}
+                      />
+                      <Typography 
+                        variant="body1" 
+                        sx={{ 
+                          fontWeight: 'bold',
+                          mb: 2,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          lineHeight: '1.5em',
+                          maxHeight: '4.5em' // 3 lines x 1.5em
+                        }}
+                      >
+                        {note.writeNote}
+                      </Typography>
+                      {note.manageNoteId && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                          ID: {note.manageNoteId}
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </CardActionArea>
+                  <Divider />
+                  <CardActions sx={{ p: 1, justifyContent: 'space-between', bgcolor: theme.palette.grey[50] }}>
+                    <Box>
+                      <Tooltip title="Edit">
+                        <IconButton 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditNote(note);
+                          }} 
+                          disabled={loading}
+                          size="small"
+                          color="primary"
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton 
+                          color="error" 
+                          onClick={(e) => handleDeleteNote(note.manageNoteId, e)} 
+                          disabled={loading}
+                          size="small"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                    <Tooltip title="Click to view full note">
+                      <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', pr: 1 }}>
+                        Click to view
+                      </Typography>
+                    </Tooltip>
+                  </CardActions>
+                </Card>
+              </Grid>
     ));
   }, [filteredNotes, theme, loading, handleViewNote, handleEditNote, handleDeleteNote]);
 

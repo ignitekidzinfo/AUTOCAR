@@ -1,6 +1,6 @@
 import { DataGrid, DataGridProps } from '@mui/x-data-grid';
 import { GridColDef, GridRowsProp } from '@mui/x-data-grid';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useState, useMemo, useCallback } from 'react';
 
 interface CustomizedDataGridProps extends Partial<DataGridProps> {
   columns: GridColDef[]; 
@@ -25,29 +25,18 @@ const CustomizedDataGrid = memo(function CustomizedDataGrid({
   const [localRows, setLocalRows] = useState<GridRowsProp>(rows);
   
   useEffect(() => {
-    console.log('CustomizedDataGrid received new rows:', rows);
-    setLocalRows(rows);
+      setLocalRows(rows);
   }, [rows]);
 
-  return (
-    <DataGrid
-      autoHeight={autoHeight}
-      checkboxSelection={checkboxSelection}
-      rows={localRows}
-      columns={columns}
-      getRowClassName={(params) =>
-        params.indexRelativeToCurrentPage % 2 === 0 ? 'even' : 'odd'
-      }
-      initialState={{
+  const getRowClassName = useCallback((params: any) => {
+    return params.indexRelativeToCurrentPage % 2 === 0 ? 'even' : 'odd';
+  }, []);
+
+  const initialState = useMemo(() => ({
         pagination: { paginationModel: { pageSize: 20 } },
-      }}
-      pageSizeOptions={[10, 20, 50]}
-      disableColumnResize
-      density="compact"
-      disableVirtualization={disableVirtualization}
-      disableRowSelectionOnClick={disableRowSelectionOnClick}
-      keepNonExistentRowsSelected={keepNonExistentRowsSelected}
-      slotProps={{
+  }), []);
+
+  const slotProps = useMemo(() => ({
         filterPanel: {
           filterFormProps: {
             logicOperatorInputProps: {
@@ -72,10 +61,43 @@ const CustomizedDataGrid = memo(function CustomizedDataGrid({
             },
           },
         },
-      }}
+  }), []);
+
+  const pageSizeOptions = useMemo(() => [10, 20, 50], []);
+
+  return useMemo(() => (
+    <DataGrid
+      autoHeight={autoHeight}
+      checkboxSelection={checkboxSelection}
+      rows={localRows}
+      columns={columns}
+      getRowClassName={getRowClassName}
+      initialState={initialState}
+      pageSizeOptions={pageSizeOptions}
+      disableColumnResize
+      density="compact"
+      disableVirtualization={disableVirtualization}
+      disableRowSelectionOnClick={disableRowSelectionOnClick}
+      keepNonExistentRowsSelected={keepNonExistentRowsSelected}
+      slotProps={slotProps}
+      rowBufferPx={100}
+      columnBufferPx={100}
       {...rest}
     />
-  );
+  ), [
+    localRows, 
+    columns, 
+    autoHeight, 
+    checkboxSelection, 
+    disableVirtualization, 
+    disableRowSelectionOnClick, 
+    keepNonExistentRowsSelected, 
+    getRowClassName,
+    initialState,
+    pageSizeOptions,
+    slotProps,
+    rest
+  ]);
 });
 
 export default CustomizedDataGrid;

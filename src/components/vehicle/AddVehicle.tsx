@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, RefObject } from 'react';
 import {
   Box,
   Grid,
@@ -28,6 +28,7 @@ import { SelectChangeEvent } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { VehicleAdd, VehicleDataByID, VehicleUpdate } from 'Services/vehicleService';
 import apiClient from 'Services/apiService';
+import CircularProgress from '@mui/material/CircularProgress';
 
 export interface VehicleRegDto {
   vehicleRegId: string;
@@ -58,6 +59,7 @@ export interface VehicleRegDto {
   insuranceFrom: string | null;
   insuranceTo: string | null;
   vehicleVariant: string; 
+  fuelType: string;
   manufactureYear: number | string;
   advancePayment?: number | string;
 }
@@ -90,6 +92,7 @@ export interface VehicleFormData {
   insuranceFrom: string;
   insuranceTo: string;
   fuelType: string;
+  variant: string;
   manufactureYear: string;
   advancePayment: number | string;
 }
@@ -122,6 +125,7 @@ const initialFormData: VehicleFormData = {
   insuranceFrom: "",
   insuranceTo: "",
   fuelType: "",
+  variant: "",
   manufactureYear: "",
   advancePayment: 0,
 };
@@ -181,7 +185,7 @@ const SectionCardHeader = styled(CardHeader)(({ theme }) => ({
   padding: theme.spacing(0.75, 2),
   '& .MuiCardHeader-title': {
     fontSize: '1rem',
-    fontWeight: 500
+    fontWeight: 700
   },
   [theme.breakpoints.down('sm')]: {
     padding: theme.spacing(0.5, 1),
@@ -215,9 +219,22 @@ const ResponsiveGrid = styled(Grid)(({ theme }) => ({
   }
 }));
 
+// Add styled FormLabel component
+const BoldFormLabel = styled(FormLabel)(({ theme }) => ({
+  fontWeight: 'bold',
+  marginBottom: theme.spacing(0.5)
+}));
+
 export default function AddVehicle() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  // Add refs for fields with potential errors
+  const kmsDrivenRef = useRef<HTMLDivElement>(null);
+  const customerNameRef = useRef<HTMLDivElement>(null);
+  const customerMobileRef = useRef<HTMLDivElement>(null);
+  const emailRef = useRef<HTMLDivElement>(null);
+  const insuranceToRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState<VehicleFormData>(initialFormData);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -228,6 +245,9 @@ export default function AddVehicle() {
   const [searchInput, setSearchInput] = useState("");
   const [searchResults, setSearchResults] = useState<VehicleRegDto[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleRegDto | null>(null);
+  const [loadingVehicle, setLoadingVehicle] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [processingDialogOpen, setProcessingDialogOpen] = useState(false);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setErrors((prev) => ({ ...prev, [event.target.name]: "" }));
@@ -252,61 +272,129 @@ export default function AddVehicle() {
 
   const validateFields = (): boolean => {
     const newErrors: { email?: string; customerName?: string; customerMobileNumber?: string; kmsDriven?: string; insuranceTo?: string } = {};
-    if (!formData.customerName.trim()) newErrors.customerName = "Customer name is required";
+    type DivRef = typeof kmsDrivenRef;
+    let firstErrorRef: DivRef | null = null;
+
+    if (!formData.customerName.trim()) {
+      newErrors.customerName = "Customer name is required";
+      firstErrorRef = customerNameRef;
+    }
+    
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
+      if (!firstErrorRef) firstErrorRef = emailRef;
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) newErrors.email = "Invalid email format";
+      if (!emailRegex.test(formData.email)) {
+        newErrors.email = "Invalid email format";
+        if (!firstErrorRef) firstErrorRef = emailRef;
     }
+    }
+    
     if (!formData.customerMobileNumber.trim()) {
       newErrors.customerMobileNumber = "Mobile number is required";
+      if (!firstErrorRef) firstErrorRef = customerMobileRef;
     } else {
       const mobileRegex = /^\d{10}$/;
-      if (!mobileRegex.test(formData.customerMobileNumber)) newErrors.customerMobileNumber = "Mobile number must be exactly 10 digits";
+      if (!mobileRegex.test(formData.customerMobileNumber)) {
+        newErrors.customerMobileNumber = "Mobile number must be exactly 10 digits";
+        if (!firstErrorRef) firstErrorRef = customerMobileRef;
     }
+    }
+    
     if (!formData.kmsDriven || formData.kmsDriven.toString().trim() === "" || Number(formData.kmsDriven) === 0) {
       newErrors.kmsDriven = "Kilometer Driven is required";
+      if (!firstErrorRef) firstErrorRef = kmsDrivenRef;
     }
+    
     if (formData.insuranceStatus === "Expired" && !formData.insuranceTo) {
       newErrors.insuranceTo = "Expired At date is required";
+      if (!firstErrorRef) firstErrorRef = insuranceToRef;
     }
+    
     setErrors(newErrors);
+    
+    // Scroll to the first error field if any
+    if (firstErrorRef && firstErrorRef.current) {
+      const ref = firstErrorRef; // Create a non-null reference to use inside the timeout
+      setTimeout(() => {
+        ref.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }, 100);
+    }
+    
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!validateFields()) return;
+    
+    setIsSubmitting(true);
+    
+    if (!id) {
+      setProcessingDialogOpen(true);
+    }
+    
     try {
-      const { fuelType, insuranceFrom, insuranceTo, ...restData } = formData;
-      
-      // Create payload with proper field mapping to match backend DTO
-      const payload = { 
-        ...restData, 
-        vehicleVariant: fuelType, 
+      const { variant, fuelType, insuranceFrom, insuranceTo, ...restData } = formData;
+  
+      let payload = {
+        ...restData,
+        vehicleVariant: variant || "",
+        fuelType: fuelType || "",
         status: id ? formData.status : "Waiting",
-        // Map to correct field names in the backend
         insuredFrom: insuranceFrom || null,
         insuredTo: insuranceTo || null
       };
-      
-      console.log("Sending payload:", payload);
-      
-      let response: any = "";
-      if (id) {
-        response = await VehicleUpdate(payload);
-      } else {
-        response = await VehicleAdd(payload);
-      }
-      console.log("Vehicle operation successful:", response);
-      setDialogTitle("Success");
-      setDialogMessage(`Vehicle ${id ? "updated" : "added"} successfully!`);
-      setDialogOpen(true);
       if (!id) {
-        const generatedId = response.data.vehicleRegId;
-        navigate(`/admin/vehicle/add/servicepart/${generatedId}`);
+        payload = {
+          ...payload,
+          vehicleRegId: '',
+          appointmentId: '',
+          customerId: '',
+          userId: '',
+        };
+      }
+      
+      if (id) {
+        const response = await VehicleUpdate(payload);
+        console.log("Vehicle update successful:", response);
+      setDialogTitle("Success");
+        setDialogMessage("Vehicle updated successfully!");
+      setDialogOpen(true);
+        setIsSubmitting(false);
+      } else {
+        const tempId = "pending-" + Date.now();
+      
+        sessionStorage.setItem('pendingVehicleData', JSON.stringify(payload));
+        sessionStorage.setItem('pendingVehicleId', tempId);
+        
+        setTimeout(() => {
+          setProcessingDialogOpen(false);
         resetForm();
+          navigate(`/admin/vehicle/add/servicepart/${tempId}`, { 
+            state: { 
+              isPending: true,
+              pendingVehicleData: payload 
+            } 
+          });
+        }, 1500);
+        
+        VehicleAdd(payload).then(response => {
+          console.log("Vehicle addition successful:", response);
+          const generatedId = response.data.vehicleRegId;
+          
+          sessionStorage.setItem('realVehicleId', generatedId);
+          sessionStorage.setItem('pendingVehicleId', ''); 
+
+        }).catch(error => {
+          console.error("Error processing vehicle in background:", error);
+          sessionStorage.setItem('vehicleAddError', error?.message || 'Unknown error');
+     
+        });
       }
     } catch (error: any) {
       console.error("Error processing vehicle:", error);
@@ -317,6 +405,8 @@ export default function AddVehicle() {
       setDialogTitle("Error");
       setDialogMessage(errorMsg);
       setDialogOpen(true);
+      setProcessingDialogOpen(false);
+      setIsSubmitting(false);
     }
   };
   React.useEffect(() => {
@@ -343,16 +433,16 @@ export default function AddVehicle() {
             superwiser: response.superwiser || "",
             technician: response.technician || "",
             worker: response.worker || "",
-            vehicleInspection: response.vehicleInspection || "",
+            vehicleInspection: '',
             kmsDriven: response.kmsDriven || "",
             status: response.status || "Waiting",
             userId: response.userId || "",
             date: response.date || "",
             insuranceStatus: response.insuranceStatus || "Expired",
-            // Map from backend field names to frontend field names
             insuranceFrom: response.insuredFrom || "",
             insuranceTo: response.insuredTo || "",
-            fuelType: response.vehicleVariant || "",
+            fuelType: response.fuelType || "",
+            variant: response.vehicleVariant || "",
             manufactureYear: response.manufactureYear ? String(response.manufactureYear) : "",
             advancePayment: response.advancePayment || 0,
           });
@@ -380,27 +470,49 @@ export default function AddVehicle() {
     };
     fetchSearchResults();
   }, [searchInput]);
-  const handleVehicleSelect = (event: any, value: VehicleRegDto | null) => {
+  const handleVehicleSelect = async (event: any, value: VehicleRegDto | null) => {
     setSelectedVehicle(value);
-    if (value) {
+    if (value && value.vehicleRegId) {
+      setLoadingVehicle(true);
+      try {
+        const response = await VehicleDataByID(value.vehicleRegId);
       setFormData({
-        ...initialFormData,
-        vehicleNumber: value.vehicleNumber || "",
-        vehicleBrand: value.vehicleBrand || "",
-        vehicleModelName: value.vehicleModelName || "",
-        engineNumber: value.engineNumber || "",
-        chasisNumber: value.chasisNumber || "",
-        numberPlateColour: value.numberPlateColour || "",
-        customerName: value.customerName || "",
-        customerAddress: value.customerAddress || "",
-        customerMobileNumber: value.customerMobileNumber || "",
-        customerAadharNo: value.customerAadharNo || "",
-        customerGstin: value.customerGstin || "",
-        email: value.email || "",
-        fuelType: value.vehicleVariant || "",
-        manufactureYear: value.manufactureYear ? String(value.manufactureYear) : "",
-        date: new Date().toISOString().split('T')[0]
-      });
+          vehicleRegId: response.vehicleRegId || "",
+          appointmentId: response.appointmentId || "",
+          vehicleNumber: response.vehicleNumber || "",
+          vehicleBrand: response.vehicleBrand || "",
+          vehicleModelName: response.vehicleModelName || "",
+          engineNumber: response.engineNumber || "",
+          chasisNumber: response.chasisNumber || "",
+          numberPlateColour: response.numberPlateColour || "",
+          customerId: response.customerId || "",
+          customerName: response.customerName || "",
+          customerAddress: response.customerAddress || "",
+          customerMobileNumber: response.customerMobileNumber || "",
+          customerAadharNo: response.customerAadharNo || "",
+          customerGstin: response.customerGstin || "",
+          email: response.email || "",
+          superwiser: '',
+          technician: '',
+          worker: '',
+          vehicleInspection: '',
+          kmsDriven: "",
+          status: response.status || "Waiting",
+          userId: response.userId || "",
+          date: response.date || "",
+          insuranceStatus: response.insuranceStatus || "Expired",
+          insuranceFrom: response.insuredFrom || "",
+          insuranceTo: response.insuredTo || "",
+          fuelType: response.fuelType || "",
+          variant: response.vehicleVariant || "",
+          manufactureYear: response.manufactureYear ? String(response.manufactureYear) : "",
+          advancePayment: response.advancePayment || 0,
+        });
+      } catch (error) {
+        console.error("Error fetching vehicle details:", error);
+      } finally {
+        setLoadingVehicle(false);
+      }
     } else {
       setFormData(initialFormData);
     }
@@ -409,7 +521,7 @@ export default function AddVehicle() {
   return (
     <ContainerBox>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography component="h2" variant="h6">
+        <Typography component="h2" variant="h6" fontWeight="bold">
           {id ? "Update " : "Add New "}Vehicle
         </Typography>
         <Button variant="contained" color="primary" onClick={() => navigate(-1)}>
@@ -417,50 +529,83 @@ export default function AddVehicle() {
         </Button>
       </Stack>
       
-      <Autocomplete
-        options={searchResults}
-        getOptionLabel={(option) => option.vehicleNumber}
-        value={selectedVehicle}
-        onChange={handleVehicleSelect}
-        onInputChange={(event, newInputValue) => setSearchInput(newInputValue)}
-        renderOption={(props, option) => (
-          <li {...props} key={option.vehicleRegId}>
-            {option.vehicleNumber}
-          </li>
-        )}
-        renderInput={(params) => (
-          <TextField {...params} label="Appointment Vehicle No" variant="outlined" fullWidth margin="normal" />
-        )}
-      />
-      
       <form onSubmit={handleSubmit}>
         <FormContainer container>
-          {/* VEHICLE DETAILS CARD */}
           <SectionCard>
             <SectionCardHeader title="Vehicle Details" />
             <SectionCardContent>
               <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
                 <Grid item xs={12} sm={6}>
-                  {/* Vehicle No */}
                   <FormGrid>
-                    <FormLabel htmlFor="vehicleNumber">Vehicle No*</FormLabel>
-            <OutlinedInput
-              id="vehicleNumber"
-              name="vehicleNumber"
-              value={formData.vehicleNumber}
-              onChange={handleChange}
-                      placeholder="Enter/Select Vehicle No"
-                      required
-                      size="small"
-                      fullWidth
+                    <BoldFormLabel htmlFor="vehicleNumber">Vehicle No*</BoldFormLabel>
+      <Autocomplete
+                      freeSolo
+        options={searchResults}
+                      getOptionLabel={(option) => typeof option === 'string' ? option : option.vehicleNumber}
+                      value={selectedVehicle || formData.vehicleNumber || ''}
+                      onChange={(event, value) => {
+                        if (typeof value === 'string') {
+                          setFormData({ ...formData, vehicleNumber: value });
+                          setSelectedVehicle(null);
+                        } else if (value && value.vehicleRegId) {
+                          setSelectedVehicle(value);
+                          setFormData({
+                            vehicleRegId: value.vehicleRegId || "",
+                            appointmentId: value.appointmentId || "",
+                            vehicleNumber: value.vehicleNumber || "",
+                            vehicleBrand: value.vehicleBrand || "",
+                            vehicleModelName: value.vehicleModelName || "",
+                            engineNumber: value.engineNumber || "",
+                            chasisNumber: value.chasisNumber || "",
+                            numberPlateColour: value.numberPlateColour || "",
+                            customerId: value.customerId || "",
+                            customerName: value.customerName || "",
+                            customerAddress: value.customerAddress || "",
+                            customerMobileNumber: value.customerMobileNumber || "",
+                            customerAadharNo: value.customerAadharNo || "",
+                            customerGstin: value.customerGstin || "",
+                            email: value.email || "",
+                            superwiser: '',
+                            technician: '',
+                            worker: '',
+                            vehicleInspection: '',
+                            kmsDriven: "",
+                            status: value.status || "Waiting",
+                            userId: value.userId || "",
+                            date: value.date || "",
+                            insuranceStatus: value.insuranceStatus || "Expired",
+                            insuranceFrom: value.insuranceFrom || "",
+                            insuranceTo: value.insuranceTo || "",
+                            fuelType: value.fuelType || "",
+                            variant: value.vehicleVariant || "",
+                            manufactureYear: value.manufactureYear ? String(value.manufactureYear) : "",
+                            advancePayment: value.advancePayment || 0,
+                          });
+                        } else {
+                          setFormData({ ...formData, vehicleNumber: '' });
+                          setSelectedVehicle(null);
+                        }
+                      }}
+                      onInputChange={(event, newInputValue) => {
+                        setSearchInput(newInputValue);
+                        setFormData({ ...formData, vehicleNumber: newInputValue });
+                      }}
+                      filterOptions={(options) => options}
+        renderOption={(props, option) => (
+                        <li {...props} key={typeof option === 'string' ? option : option.vehicleRegId}>
+                          {typeof option === 'string' ? option : option.vehicleNumber}
+          </li>
+        )}
+        renderInput={(params) => (
+                        <TextField {...params} label="Vehicle No*" variant="outlined" required size="small" fullWidth />
+                      )}
                     />
                   </FormGrid>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Number Plate Colour */}
                   <FormGrid>
-                    <FormLabel htmlFor="numberPlateColour">Number Plate Colour*</FormLabel>
+                    <BoldFormLabel htmlFor="numberPlateColour">Number Plate Colour*</BoldFormLabel>
                     <FormControl fullWidth size="small">
                       <Select
                         id="numberPlateColour"
@@ -481,26 +626,24 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Vehicle Maker */}
                   <FormGrid>
-                    <FormLabel htmlFor="vehicleBrand">Vehicle Maker*</FormLabel>
-                    <OutlinedInput
+                    <BoldFormLabel htmlFor="vehicleBrand">Vehicle Maker*</BoldFormLabel>
+            <OutlinedInput
                       id="vehicleBrand"
                       name="vehicleBrand"
                       value={formData.vehicleBrand}
-                      onChange={handleChange}
+              onChange={handleChange}
                       placeholder="Enter/Select Vehicle Maker"
-                      required
-                      size="small"
+              required
+              size="small"
                       fullWidth
-                    />
-                  </FormGrid>
+            />
+          </FormGrid>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Engine Number */}
                   <FormGrid>
-                    <FormLabel htmlFor="engineNumber">Engine Number</FormLabel>
+                    <BoldFormLabel htmlFor="engineNumber">Engine Number</BoldFormLabel>
                     <OutlinedInput
                       id="engineNumber"
                       name="engineNumber"
@@ -514,9 +657,9 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Model Line */}
+                 
                   <FormGrid>
-                    <FormLabel htmlFor="vehicleModelName">Model Line*</FormLabel>
+                    <BoldFormLabel htmlFor="vehicleModelName">Model Line*</BoldFormLabel>
                     <OutlinedInput
                       id="vehicleModelName"
                       name="vehicleModelName"
@@ -531,9 +674,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Sitting Capacity */}
                   <FormGrid>
-                    <FormLabel htmlFor="vehicleInspection">Sitting Capacity</FormLabel>
+                    <BoldFormLabel htmlFor="vehicleInspection">Sitting Capacity</BoldFormLabel>
                     <OutlinedInput
                       id="vehicleInspection"
                       name="vehicleInspection"
@@ -547,14 +689,14 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Variant */}
+                  
                   <FormGrid>
-                    <FormLabel htmlFor="fuelType">Variant*</FormLabel>
-                    <OutlinedInput
-                      id="fuelType"
-                      name="fuelType"
-                      value={formData.fuelType}
-                      onChange={handleChange}
+                    <BoldFormLabel htmlFor="variant">Variant*</BoldFormLabel>
+            <OutlinedInput
+                      id="variant"
+                      name="variant"
+                      value={formData.variant}
+              onChange={handleChange}
                       placeholder="Enter/Select Vehicle Variant"
               required
               size="small"
@@ -564,9 +706,9 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* CC Engine */}
+                 
                   <FormGrid>
-                    <FormLabel htmlFor="ccEngine">CC Engine</FormLabel>
+                    <BoldFormLabel htmlFor="ccEngine">CC Engine</BoldFormLabel>
                     <OutlinedInput
                       id="ccEngine"
                       name="ccEngine"
@@ -578,9 +720,9 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Fuel Type */}
+                
                   <FormGrid>
-                    <FormLabel htmlFor="fuelType">Fuel Type*</FormLabel>
+                    <BoldFormLabel htmlFor="fuelType">Fuel Type*</BoldFormLabel>
             <FormControl fullWidth size="small">
               <Select
                 id="fuelType"
@@ -600,9 +742,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Manufactured Year */}
                   <FormGrid>
-                    <FormLabel htmlFor="manufactureYear">Manufactured Year</FormLabel>
+                    <BoldFormLabel htmlFor="manufactureYear">Manufactured Year</BoldFormLabel>
             <OutlinedInput
               id="manufactureYear"
               name="manufactureYear"
@@ -616,9 +757,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Kilometer Driven */}
-                  <FormGrid>
-            <FormLabel htmlFor="kmsDriven">Kilometer Driven</FormLabel>
+                  <FormGrid ref={kmsDrivenRef}>
+            <BoldFormLabel htmlFor="kmsDriven">Kilometer Driven</BoldFormLabel>
             <OutlinedInput
               id="kmsDriven"
               name="kmsDriven"
@@ -634,9 +774,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Date of Admission */}
                   <FormGrid>
-            <FormLabel htmlFor="date">Date Of Admission</FormLabel>
+            <BoldFormLabel htmlFor="date">Date Of Admission</BoldFormLabel>
             <OutlinedInput
               id="date"
               name="date"
@@ -650,23 +789,22 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
-                  {/* Chasis Number */}
+             
                   <FormGrid>
-            <FormLabel htmlFor="chasisNumber">Chasis Number</FormLabel>
+            <BoldFormLabel htmlFor="chasisNumber">Chasis Number</BoldFormLabel>
             <OutlinedInput
               id="chasisNumber"
               name="chasisNumber"
               value={formData.chasisNumber}
               onChange={handleChange}
               placeholder="Enter Chasis Number"
-                      size="small"
+              size="small"
                       fullWidth
-                    />
-                  </FormGrid>
+            />
+          </FormGrid>
                 </Grid>
               </ResponsiveGrid>
             
-              {/* Status section for updates */}
               {id && (
                 <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }} sx={{ mt: 2 }}>
                   <Grid item xs={12} sm={6} md={4}>
@@ -682,9 +820,8 @@ export default function AddVehicle() {
                 </ResponsiveGrid>
               )}
               
-              {/* Insurance section */}
               <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle1" component="h3" sx={{ mb: 2 }}>
+              <Typography variant="subtitle1" component="h3" sx={{ mb: 2 }} fontWeight="bold">
                 Insurance Information
               </Typography>
               
@@ -713,34 +850,33 @@ export default function AddVehicle() {
                 )}
                 
                 {formData.insuranceStatus === "Expired" && (
-                  <Grid item xs={12} sm={6} md={4}>
+                  <Grid item xs={12} sm={6} md={4} ref={insuranceToRef}>
                     <FormLabel htmlFor="insuranceTo">Expired At</FormLabel>
-                    <OutlinedInput 
+            <OutlinedInput
                       id="insuranceTo" 
                       name="insuranceTo" 
                       type="date" 
                       value={formData.insuranceTo} 
-                      onChange={handleChange} 
+              onChange={handleChange}
               required
               size="small"
                       fullWidth
-                    />
+            />
                   </Grid>
                 )}
               </ResponsiveGrid>
             </SectionCardContent>
           </SectionCard>
           
-          {/* CUSTOMER DETAILS CARD */}
           <SectionCard>
             <SectionCardHeader title="Customer Details" />
             <SectionCardContent>
               <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Customer Name */}
-                  <FormGrid>
-                    <FormLabel htmlFor="customerName">Customer Name*</FormLabel>
+                 
+                  <FormGrid ref={customerNameRef}>
+                    <BoldFormLabel htmlFor="customerName">Customer Name*</BoldFormLabel>
             <OutlinedInput
                       id="customerName"
                       name="customerName"
@@ -757,9 +893,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  
-                  <FormGrid>
-                    <FormLabel htmlFor="customerMobileNumber">Mobile No*</FormLabel>
+                  <FormGrid ref={customerMobileRef}>
+                    <BoldFormLabel htmlFor="customerMobileNumber">Mobile No*</BoldFormLabel>
             <OutlinedInput
               id="customerMobileNumber"
               name="customerMobileNumber"
@@ -776,9 +911,9 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Email Id */}
-                  <FormGrid>
-                    <FormLabel htmlFor="email">Email Id</FormLabel>
+                
+                  <FormGrid ref={emailRef}>
+                    <BoldFormLabel htmlFor="email">Email Id</BoldFormLabel>
             <OutlinedInput
               id="email"
               name="email"
@@ -794,9 +929,9 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Customer Address */}
+                 
                   <FormGrid>
-                    <FormLabel htmlFor="customerAddress">Customer Address*</FormLabel>
+                    <BoldFormLabel htmlFor="customerAddress">Customer Address*</BoldFormLabel>
                     <OutlinedInput
                       id="customerAddress"
                       name="customerAddress"
@@ -811,9 +946,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Customer Aadhar No */}
                   <FormGrid>
-                    <FormLabel htmlFor="customerAadharNo">Customer Aadhar No.*</FormLabel>
+                    <BoldFormLabel htmlFor="customerAadharNo">Customer Aadhar No.*</BoldFormLabel>
             <OutlinedInput
               id="customerAadharNo"
               name="customerAadharNo"
@@ -828,9 +962,8 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Customer GSTIN */}
                   <FormGrid>
-            <FormLabel htmlFor="customerGstin">Customer GSTIN</FormLabel>
+            <BoldFormLabel htmlFor="customerGstin">Customer GSTIN</BoldFormLabel>
             <OutlinedInput
               id="customerGstin"
               name="customerGstin"
@@ -844,9 +977,9 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Advance Payment */}
+                  
                   <FormGrid>
-                    <FormLabel htmlFor="advancePayment">Advance Payment*</FormLabel>
+                    <BoldFormLabel htmlFor="advancePayment">Advance Payment*</BoldFormLabel>
             <OutlinedInput
                       id="advancePayment" 
                       name="advancePayment" 
@@ -864,15 +997,14 @@ export default function AddVehicle() {
             </SectionCardContent>
           </SectionCard>
           
-          {/* STAFF DETAILS CARD */}
           <SectionCard>
             <SectionCardHeader title="Staff Details" />
             <SectionCardContent>
               <ResponsiveGrid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Supervisor */}
+                 
                   <FormGrid>
-                    <FormLabel htmlFor="superwiser">Superwiser*</FormLabel>
+                    <BoldFormLabel htmlFor="superwiser">Superwiser*</BoldFormLabel>
             <OutlinedInput
               id="superwiser"
               name="superwiser"
@@ -887,9 +1019,9 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Technician */}
+                 
                   <FormGrid>
-                    <FormLabel htmlFor="technician">Technician*</FormLabel>
+                    <BoldFormLabel htmlFor="technician">Technician*</BoldFormLabel>
             <OutlinedInput
               id="technician"
               name="technician"
@@ -904,9 +1036,9 @@ export default function AddVehicle() {
                 </Grid>
                 
                 <Grid item xs={12} sm={6} md={4}>
-                  {/* Worker */}
+                
                   <FormGrid>
-                    <FormLabel htmlFor="worker">Worker*</FormLabel>
+                    <BoldFormLabel htmlFor="worker">Worker*</BoldFormLabel>
             <OutlinedInput
               id="worker"
               name="worker"
@@ -926,10 +1058,23 @@ export default function AddVehicle() {
         
         <Grid container sx={{ mt: 2 }}>
           <Grid item xs={12} display="flex" gap={2} flexDirection={{ xs: 'column', sm: 'row' }}>
-            <Button type="submit" variant="contained" color="primary" sx={{ flex: 1 }}>
-              Submit
+            <Button 
+              type="submit" 
+              variant="contained" 
+              color="primary" 
+              sx={{ flex: 1 }}
+              disabled={isSubmitting}
+              startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
+            >
+              {isSubmitting ? "Processing..." : "Submit"}
             </Button>
-            <Button type="button" variant="outlined" onClick={resetForm} sx={{ flex: 1 }}>
+            <Button 
+              type="button" 
+              variant="outlined" 
+              onClick={resetForm} 
+              sx={{ flex: 1 }}
+              disabled={isSubmitting}
+            >
               Reset
             </Button>
           </Grid>
@@ -951,6 +1096,44 @@ export default function AddVehicle() {
           <Button onClick={() => setDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+      
+      <Dialog
+        open={processingDialogOpen}
+        aria-labelledby="processing-dialog-title"
+        PaperProps={{ 
+          style: { 
+            padding: 30, 
+            textAlign: "center",
+            minWidth: '300px',
+            borderRadius: '12px'
+          } 
+        }}
+        disableEscapeKeyDown
+      >
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          gap: 3,
+          py: 2
+        }}>
+          <CircularProgress size={50} />
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Processing Vehicle Data
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              We're saving your data and preparing the next page...
+            </Typography>
+          </Box>
+        </Box>
+      </Dialog>
+      
+      {loadingVehicle && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', my: 2 }}>
+          <CircularProgress size={32} />
+        </Box>
+      )}
     </ContainerBox>
   );
 }

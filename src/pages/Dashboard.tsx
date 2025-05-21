@@ -29,16 +29,7 @@ import BuildIcon from '@mui/icons-material/Build';
 import StoreIcon from '@mui/icons-material/Store';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
-import PersonIcon from '@mui/icons-material/Person';
-import InventoryIcon from '@mui/icons-material/Inventory';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
-import SpeedIcon from '@mui/icons-material/Speed';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import AutorenewIcon from '@mui/icons-material/Autorenew';
-import LocalGasStationIcon from '@mui/icons-material/LocalGasStation';
-import TimeToLeaveIcon from '@mui/icons-material/TimeToLeave';
-import TireRepairIcon from '@mui/icons-material/TireRepair';
-import ElectricCarIcon from '@mui/icons-material/ElectricCar';
 import ConstructionIcon from '@mui/icons-material/Construction';
 import HandymanIcon from '@mui/icons-material/Handyman';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -47,7 +38,6 @@ import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import { jwtDecode } from "jwt-decode";
 import storageUtils from '../utils/storageUtils';
 
-// Primary dashboard items - these are unique to the dashboard
 const allComponents = [
   {
     value: "Purchase",
@@ -56,6 +46,22 @@ const allComponents = [
     description: "Manage purchases and transactions",
     badge: 3
   },
+
+  {
+    value: "Bookings",
+    icon: <GarageIcon sx={{ color: "success.main", fontSize: 40 }} />,
+    url: "/admin/appointmentList",
+    description: "Track all service appointments",
+    badge: 2
+  },
+
+  {
+    value: "Vehicle Registration",
+    icon: <GarageIcon sx={{ color: "info.main", fontSize: 40 }} />,
+    url: "/admin/vehicle/add",
+    description: "Register new vehicles",
+  },
+
   {
     value: "Service Queue",
     icon: <ArticleIcon sx={{ color: "secondary.main", fontSize: 40 }} />,
@@ -64,25 +70,21 @@ const allComponents = [
     badge: 5,
     urgent: true
   },
-  {
-    value: "Bookings",
-    icon: <GarageIcon sx={{ color: "success.main", fontSize: 40 }} />,
-    url: "/admin/appointmentList",
-    description: "Track all service appointments",
-    badge: 2
-  },
-  {
-    value: "Vehicle Registration",
-    icon: <GarageIcon sx={{ color: "info.main", fontSize: 40 }} />,
-    url: "/admin/vehicle/add",
-    description: "Register new vehicles",
-  },
+ 
   {
     value: "Service History",
     icon: <FormatListBulletedIcon sx={{ color: "warning.main", fontSize: 40 }} />,
     url: "/admin/vehicle?listType=serviceHistory",
     description: "View completed service records",
   },
+
+  {
+    value: "Quotation",
+    icon: <DescriptionIcon sx={{ color: "primary.dark", fontSize: 40 }} />,
+    url: "/admin/quatationlist",
+    description: "Create and manage quotations",
+  },
+
   {
     value: "Counter Sale",
     icon: <StoreIcon sx={{ color: "error.main", fontSize: 40 }} />,
@@ -90,12 +92,7 @@ const allComponents = [
     description: "Process direct sales transactions",
     badge: 1
   },
-  {
-    value: "Quotation",
-    icon: <DescriptionIcon sx={{ color: "primary.dark", fontSize: 40 }} />,
-    url: "/admin/quatationlist",
-    description: "Create and manage quotations",
-  },
+
   {
     value: "Insurance",
     icon: <SecurityIcon sx={{ color: "secondary.dark", fontSize: 40 }} />,
@@ -149,7 +146,6 @@ const pulse = keyframes`
   }
 `;
 
-// Add a new glow keyframe animation
 const glow = keyframes`
   0% {
     box-shadow: 0 0 10px rgba(66, 153, 225, 0.5), 0 0 20px rgba(66, 153, 225, 0);
@@ -195,22 +191,20 @@ const bounce = keyframes`
   }
 `;
 
-// Get color for card based on index
 const getCardGlowColor = (index: number) => {
   const colors = [
-    'rgba(99, 102, 241, 0.8)', // indigo
-    'rgba(236, 72, 153, 0.8)', // pink
-    'rgba(59, 130, 246, 0.8)', // blue
-    'rgba(16, 185, 129, 0.8)', // green
-    'rgba(245, 158, 11, 0.8)', // amber
-    'rgba(239, 68, 68, 0.8)',  // red
-    'rgba(139, 92, 246, 0.8)', // purple
-    'rgba(14, 165, 233, 0.8)'  // sky
+    'rgba(99, 102, 241, 0.8)', 
+    'rgba(236, 72, 153, 0.8)', 
+    'rgba(59, 130, 246, 0.8)', 
+    'rgba(16, 185, 129, 0.8)', 
+    'rgba(245, 158, 11, 0.8)', 
+    'rgba(239, 68, 68, 0.8)',  
+    'rgba(139, 92, 246, 0.8)', 
+    'rgba(14, 165, 233, 0.8)'  
   ];
   return colors[index % colors.length];
 };
 
-// Define colors for card borders
 const getCardBorderGlow = (index: number, isDark: boolean) => {
   const color = getCardGlowColor(index);
   return isDark 
@@ -218,7 +212,6 @@ const getCardBorderGlow = (index: number, isDark: boolean) => {
     : `0 0 15px ${color.replace('0.8', '0.5')}, inset 0 0 5px ${color.replace('0.8', '0.2')}`;
 };
 
-// Add these new animations after the existing ones
 const slideIn = keyframes`
   0% {
     transform: translateX(-100%);
@@ -257,7 +250,6 @@ const glitter = keyframes`
   }
 `;
 
-// Add these new animations after the existing ones
 const driveIn = keyframes`
   0% {
     transform: translateX(-100%) rotate(0deg);
@@ -284,7 +276,6 @@ const speedometer = keyframes`
   }
 `;
 
-// Add SVG path function for road
 const roadLine = (theme: any) => `
   linear-gradient(90deg, 
     ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'} 0%, 
@@ -295,7 +286,6 @@ const roadLine = (theme: any) => `
     ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'} 100%)
 `;
 
-// Add new animations
 const wrenchSpin = keyframes`
   0% {
     transform: rotate(0deg);
@@ -344,7 +334,6 @@ const revCounter = keyframes`
   }
 `;
 
-// Add these new animations
 const shimmer = keyframes`
   0% {
     background-position: -200% 0;
@@ -425,7 +414,6 @@ const flicker = keyframes`
   }
 `;
 
-// Add these new animations for tools and the logout button
 const wrenchWiggle = keyframes`
   0%, 100% {
     transform: rotate(0deg);
@@ -458,7 +446,6 @@ const hoverEffect = keyframes`
   }
 `;
 
-// Interface for activity items
 interface Activity {
   id: number;
   title: string;
@@ -489,10 +476,8 @@ export default function Dashboard() {
   const [tokenExpiryWarning, setTokenExpiryWarning] = useState(false);
   
   const findMatchingComponents = useCallback((componentNames: string[]) => {
-    // Create a Set to track components already added to prevent duplicates
     const addedComponentValues = new Set();
     
-    // First try to match exact names
     const exactMatches = allComponents.filter(component => {
       if (componentNames.includes(component.value)) {
         addedComponentValues.add(component.value);
@@ -501,25 +486,22 @@ export default function Dashboard() {
       return false;
     });
     
-    // If we don't have enough exact matches, try partial matches
     if (exactMatches.length < componentNames.length) {
       const remainingNames = componentNames.filter(
         name => !exactMatches.some(match => match.value === name)
       );
       
       const partialMatches = allComponents.filter(component => {
-        // Skip if this component was already added as an exact match
+        
         if (addedComponentValues.has(component.value)) {
           return false;
         }
         
-        // Check if this component matches any remaining component name
         const isMatch = remainingNames.some(name => 
           component.value.toLowerCase().includes(name.toLowerCase()) ||
           name.toLowerCase().includes(component.value.toLowerCase())
         );
         
-        // If it matches, add to tracking set and return true
         if (isMatch) {
           addedComponentValues.add(component.value);
           return true;
@@ -528,7 +510,6 @@ export default function Dashboard() {
         return false;
       });
       
-      // If we still don't have enough components, add some defaults
       if (exactMatches.length + partialMatches.length < componentNames.length) {
         const defaultComponents = allComponents.filter(component => 
           !addedComponentValues.has(component.value)
@@ -544,11 +525,11 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    // Animation intervals
+    
     let carInterval: NodeJS.Timeout;
     let toolInterval: NodeJS.Timeout;
     
-    // Start animations
+     
     setIsMoving(true);
     
     carInterval = setInterval(() => {
@@ -559,7 +540,6 @@ export default function Dashboard() {
       setToolAngle(prevAngle => (prevAngle + 15) % 360);
     }, 100);
     
-    // Load recent activities with timeout
     const timer = setTimeout(() => {
       setRecentActivities([
         { id: 1, title: "Oil Change Completed", status: "Completed", date: "Today" },
@@ -569,7 +549,6 @@ export default function Dashboard() {
       setLoading(false);
     }, 2000);
     
-    // Parse token for user info
     const token = storageUtils.getAuthToken();
     if (token) {
       try {
@@ -590,7 +569,6 @@ export default function Dashboard() {
       }
     }
     
-    // Clean up intervals and timers
     return () => {
       clearInterval(carInterval);
       clearInterval(toolInterval);
@@ -599,7 +577,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    // Set random tasks stats for display
+  
     setTasksCompleted(Math.floor(Math.random() * 15) + 10);
     setTasksPending(Math.floor(Math.random() * 8) + 2);
     
@@ -616,7 +594,6 @@ export default function Dashboard() {
           const userComponents = userData.componentNames || [];
           setAuthorizedComponents(userComponents);
           
-          // Use the helper function to find matching components
           const matchedComponents = findMatchingComponents(userComponents);
           setFilteredComponents(matchedComponents);
           
@@ -636,23 +613,21 @@ export default function Dashboard() {
     return "Good Evening";
   };
 
-  // Calculate grid column sizes based on number of components
   const getGridColumns = () => {
     const count = filteredComponents.length;
     
     if (isMobile) {
-      return count <= 2 ? 12 : 6; // 1 or a max of 2 columns on mobile
+      return count <= 2 ? 12 : 6; 
     } else if (isTablet) {
-      if (count <= 3) return 4; // 3 columns
-      return 4; // 3 columns  
+      if (count <= 3) return 4; 
+      return 4; 
     } else {
-      if (count <= 4) return 3; // 4 columns
-      if (count <= 8) return 3; // 4 columns
-      return 2; // 6 columns for many items
+      if (count <= 4) return 3; 
+      if (count <= 8) return 3; 
+      return 2; 
     }
   };
 
-  // Function to get the active tool icon
   const getToolIcon = (index: number) => {
     switch(index) {
       case 0:

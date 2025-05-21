@@ -82,8 +82,18 @@ const AddNewSupplierPage: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    // Validate mobile number
-    if (!isValidMobile(formData.mobileNumber)) {
+    // Validate required fields
+    if (!formData.name || !formData.address) {
+      setSnackbar({ 
+        open: true, 
+        message: "Name and Address are required fields.", 
+        severity: "error" 
+      });
+      return;
+    }
+
+    // Validate mobile number only if provided
+    if (formData.mobileNumber && !isValidMobile(formData.mobileNumber)) {
       setMobileError("Mobile number must be 10 digits.");
       return;
     } else {
@@ -143,12 +153,10 @@ const AddNewSupplierPage: React.FC = () => {
                   )
                 }}
               />
-              <FormHelperText>Name *</FormHelperText>
             </FormControl>
 
             <FormControl fullWidth sx={{ mb: 2 }}>
               <TextField
-                required
                 label="Mobile Number"
                 name="mobileNumber"
                 value={formData.mobileNumber}
@@ -156,7 +164,7 @@ const AddNewSupplierPage: React.FC = () => {
                 placeholder="Enter Supplier's Mobile Number"
                 variant="outlined"
                 error={!!mobileError}
-                helperText={mobileError || "Mobile Number *"}
+                helperText={mobileError || ""}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -169,7 +177,6 @@ const AddNewSupplierPage: React.FC = () => {
 
             <FormControl fullWidth sx={{ mb: 2 }}>
               <TextField
-                required
                 label="GST No"
                 name="gstno"
                 value={formData.gstno}
@@ -184,7 +191,6 @@ const AddNewSupplierPage: React.FC = () => {
                   )
                 }}
               />
-              <FormHelperText>GST No *</FormHelperText>
             </FormControl>
 
             <FormControl fullWidth sx={{ mb: 2 }}>
@@ -205,7 +211,6 @@ const AddNewSupplierPage: React.FC = () => {
                   )
                 }}
               />
-              <FormHelperText>Spare Brand</FormHelperText>
             </FormControl>
           </Grid>
 
@@ -228,12 +233,10 @@ const AddNewSupplierPage: React.FC = () => {
                   )
                 }}
               />
-              <FormHelperText>Address *</FormHelperText>
             </FormControl>
 
             <FormControl fullWidth sx={{ mb: 2 }}>
               <TextField
-                required
                 label="Email"
                 name="email"
                 value={formData.email}
@@ -248,12 +251,10 @@ const AddNewSupplierPage: React.FC = () => {
                   )
                 }}
               />
-              <FormHelperText>Email *</FormHelperText>
             </FormControl>
 
             <FormControl fullWidth sx={{ mb: 2 }}>
               <TextField
-                required
                 label="PAN No"
                 name="panNo"
                 value={formData.panNo}
@@ -268,7 +269,6 @@ const AddNewSupplierPage: React.FC = () => {
                   )
                 }}
               />
-              <FormHelperText>PAN No *</FormHelperText>
             </FormControl>
           </Grid>
 

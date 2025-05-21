@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { Box, Button, Snackbar, Alert } from '@mui/material';
 import NavigationMenu from './components/navigation/NavigationMenu';
 // import ConsoleSanitizer from './utils/ConsoleSanitizer';
@@ -9,6 +9,7 @@ import AddTermsAndConditions from './components/Terms/AddTermsAndConditions';
 import SignInSide from './pages/SignInSide';
 import SessionExpirationHandler from './components/navigation/SessionExpirationHandler';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import TokenExpiryNotification from './components/common/TokenExpiryNotification';
 import TokenValidityChecker from './components/common/TokenValidityChecker';
 import { initDevToolsProtection } from './utils/devToolsProtection';
 import { 
@@ -18,6 +19,7 @@ import {
   forceCheckTokenValidity,
   isTokenValid
 } from './utils/tokenUtils';
+import storageUtils from './utils/storageUtils';
 
 // Import Borrow components
 import CustomerDetailsList from './components/Borrow/CustomerDetailsList';
@@ -149,12 +151,44 @@ const App: React.FC = () => {
     role: '',
     components: []
   });
-
+  
+  // Check authentication on mount and whenever authentication state might change
   useEffect(() => {
-    // Instead of forcing a token check immediately, just get the user from token
-    // if it's valid. This prevents unnecessary redirect when the app loads.
-    const currentUser = getUserFromToken();
-    setUser(currentUser);
+    const checkAuthentication = () => {
+      const token = storageUtils.getAuthToken();
+      if (token && isTokenValid()) {
+        const currentUser = getUserFromToken();
+        setUser(currentUser);
+        logger.info("User authenticated:", currentUser.name);
+      } else {
+        // If no valid token, ensure user is not authenticated
+        setUser({
+          isAuthenticated: false,
+          name: '',
+          role: '',
+          components: []
+        });
+      }
+    };
+
+    // Check auth state now
+    checkAuthentication();
+
+    // Set up listener for auth changes
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'token') {
+        checkAuthentication();
+      }
+    });
+
+    // Set up a custom event for auth changes
+    const handleAuthChange = () => checkAuthentication();
+    window.addEventListener('auth-state-changed', handleAuthChange);
+
+    return () => {
+      window.removeEventListener('storage', checkAuthentication);
+      window.removeEventListener('auth-state-changed', handleAuthChange);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -174,15 +208,24 @@ const App: React.FC = () => {
       
       {/* Add the session expiration handler if user is authenticated */}
       {user.isAuthenticated && <SessionExpirationHandler />}
+      <TokenExpiryNotification />
       
       <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5' }}>
         <Header user={user} onLogout={handleLogout} />
         
         <Routes>
           <Route path="/dashboard" element={<Dashboard user={user} />} />
-          <Route path="/" element={<Box>Home Page</Box>} />
+          <Route path="/" element={
+            user.isAuthenticated 
+              ? <Navigate to="/dashboard" /> 
+              : <Box>Home Page - Please <Link to="/signIn">Sign In</Link> to continue</Box>
+          } />
           <Route path="/buy-accessories" element={<Box>Buy Accessories Page</Box>} />
-          <Route path="/signIn" element={<SignInSide />} />
+          <Route path="/signIn" element={
+            user.isAuthenticated 
+              ? <Navigate to="/dashboard" /> 
+              : <SignInSide />
+          } />
           
           {/* Terms and Conditions Routes - Protected with AuthGuard */}
           <Route 

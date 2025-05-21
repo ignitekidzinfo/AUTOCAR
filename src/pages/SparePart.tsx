@@ -35,34 +35,97 @@ function SparePart() {
     userRole = userData.authorities?.[0] || "";
   }
 
+  useEffect(() => {
+    // Only search if there's a query with at least 2 characters
+    if (searchQuery && searchQuery.length >= 2) {
+      console.log("Triggering search for:", searchQuery);
+      setCurrentPage(0);
+      fetchSpareParts(0);
+    } else if (searchQuery === "") {
+      // If search is cleared, reset to default list
+      console.log("Search cleared, fetching all spare parts");
+      setCurrentPage(0);
+      fetchSpareParts(0);
+    }
+    // Don't trigger for 1 character searches (too many results)
+  }, [searchQuery]);
+
+  const handleSearch = () => {
+    console.log("Manually triggered search for:", searchQuery);
+    if (searchQuery.trim() === "") {
+      console.log("Empty search query, fetching all items");
+    }
+    setCurrentPage(0);
+    fetchSpareParts(0);
+  };
+
+  // Add a separate debug function for search results
+  const processSearchResults = (data: any) => {
+    console.log("Processing search results:", data);
+    
+    if (data && Array.isArray(data.content)) {
+      console.log(`Found ${data.content.length} items in data.content`);
+      return data.content.filter((part: any) => part.isDeleted !== true);
+    } 
+    else if (data && Array.isArray(data.list)) {
+      console.log(`Found ${data.list.length} items in data.list`);
+      return data.list.filter((part: any) => part.isDeleted !== true);
+    }
+    else if (data && Array.isArray(data)) {
+      console.log(`Found ${data.length} items in direct array`);
+      return data.filter((part: any) => part.isDeleted !== true);
+    }
+    
+    console.warn("No recognizable data format in search results:", data);
+    return [];
+  };
+
+  // Load data when component mounts
+  useEffect(() => {
+    console.log("Initial data loading on component mount");
+    fetchSpareParts();
+  }, []);
+
   const fetchSpareParts = async (page: number = currentPage) => {
     try {
       setLoading(true);
       setError(null);
 
       let url = "";
-      if (searchQuery.trim()) {
+      const isSearchQuery = searchQuery.trim().length > 0;
+      
+      if (isSearchQuery) {
         url = `/Filter/searchBarFilter?searchBarInput=${encodeURIComponent(
           searchQuery
-        )}&page=${page}&size=${size}`;
+        )}&page=${page}&size=${size}&includeDeleted=false`;
+        console.log("Using search URL:", url);
       } else {
-        url = `/sparePartManagement/getAll?page=${page}&size=${size}`;
+        url = `/sparePartManagement/getAll?page=${page}&size=${size}&includeDeleted=false`;
+        console.log("Using regular fetch URL:", url);
       }
 
       const response = await apiClient.get(url);
-      console.log("API Response:", response.data);
+      console.log("API Response for " + (isSearchQuery ? "search" : "regular fetch") + ":", response.data);
 
-      if (response.data && Array.isArray(response.data.content)) {
-        setSpareParts(response.data.content);
+      // Process the results based on the response format
+      const processedParts = processSearchResults(response.data);
+      console.log("Processed parts after filtering:", processedParts);
+      
+      setSpareParts(processedParts);
+      
+      // Set pagination based on response format
+      if (response.data && response.data.totalPages !== undefined) {
         setTotalPages(response.data.totalPages);
-        setCurrentPage(response.data.currentPage);
-      } else if (response.data && Array.isArray(response.data.list)) {
-        setSpareParts(response.data.list);
+        setCurrentPage(response.data.currentPage || 0);
+      } else {
+        // If no pagination info, assume it's all on one page
         setTotalPages(1);
         setCurrentPage(0);
-      } else {
-        setError("Invalid data format from API");
-        setSpareParts([]);
+      }
+      
+      if (processedParts.length === 0 && isSearchQuery) {
+        // Show a more user-friendly message for zero search results
+        setError(`No spare parts found matching "${searchQuery}".`);
       }
     } catch (err: any) {
       console.error("Error fetching spare parts:", err);
@@ -74,20 +137,6 @@ function SparePart() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchSpareParts();
-  }, []);
-
-  useEffect(() => {
-    setCurrentPage(0); 
-    fetchSpareParts(0);
-  }, [searchQuery]);
-
-  const handleSearch = () => {
-    setCurrentPage(0);
-    fetchSpareParts(0);
   };
 
   const handlePageChange = (page: number) => {

@@ -1,7 +1,8 @@
 import * as React from 'react';
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent, useMemo } from "react";
 import apiClient from "Services/apiService";
 import storageUtils from '../../utils/storageUtils';
+import PartSearch from '../../components/common/PartSearch';
 
 import {
   Box,
@@ -24,6 +25,7 @@ import {
   TableHead,
   TableRow,
   Paper,
+  CircularProgress,
 } from "@mui/material";
 import { useNavigate } from 'react-router-dom';
 
@@ -142,6 +144,22 @@ interface GSTBreakdown {
   };
 }
 
+interface SearchResponsePart {
+  sparePartId: number;
+  partName: string;
+  description: string;
+  manufacturer: string;
+  price: number;
+  updateAt: string;
+  photo: any[];
+  partNumber: string;
+  totalGST: number | null;
+  buyingPrice: number;
+  vendor: any | null;
+  sgst: number | null;
+  cgst: number | null;
+}
+
 const initialCreateData: CreateTransaction = {
   transactionType: "CREDIT",
   userId: 10006,
@@ -191,11 +209,6 @@ const TransactionAdd: React.FC = () => {
   const [vendorSuggestions, setVendorSuggestions] = useState<Vendor[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
 
-  const [partSuggestions, setPartSuggestions] = useState<SparePartDto[]>([]);
-  const [selectedPart, setSelectedPart] = useState<SparePartDto | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-
   const [gstBreakdown, setGstBreakdown] = useState<GSTBreakdown>(initialGSTBreakdown);
 
   const navigate = useNavigate();
@@ -205,6 +218,8 @@ const TransactionAdd: React.FC = () => {
   if (userData) {
     userRole = userData.authorities?.[0] || "";
   }
+
+  const memoizedVendorSuggestions = useMemo(() => vendorSuggestions, [vendorSuggestions]);
 
   useEffect(() => {
     fetchVendors();
@@ -223,52 +238,14 @@ const TransactionAdd: React.FC = () => {
     }
   };
 
-  const fetchPartsBySearch = async (query: string) => {
-    try {
-      const response = await apiClient.get(`/Filter/searchBarFilter?searchBarInput=${query}`);
-
-      const parts: SparePartDto[] = response.data.list || response.data.content || [];
-      setPartSuggestions(parts);
-    } catch (error) {
-      console.error("Error fetching parts:", error);
-      setPartSuggestions([]);
-    }
-  };
-
-  // Debounce the search term
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 300); // 300ms delay
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [searchTerm]);
-
-  // Add effect to trigger search when debounced term changes
-  useEffect(() => {
-    if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
-      fetchPartsBySearch(debouncedSearchTerm);
-    }
-  }, [debouncedSearchTerm]);
-
-  const handlePartInputChange = (event: any, value: string, reason: string) => {
-    setSearchTerm(value);
-    if (value.length < 2) {
-      setPartSuggestions([]);
-    }
-  };
-
-  const handleSelectPart = (event: any, newValue: SparePartDto | null) => {
-    setSelectedPart(newValue);
-    if (newValue) {
+  const handlePartSelect = (part: SparePartDto | null) => {
+    if (part) {
       setCreateData((prev) => ({
         ...prev,
-        manufacturer: newValue.manufacturer,
-        partNumber: newValue.partNumber,
-        partName: newValue.partName,
-        description: newValue.description || "",
+        manufacturer: part.manufacturer,
+        partNumber: part.partNumber,
+        partName: part.partName,
+        description: part.description || "",
       }));
     } else {
       setCreateData(prev => ({
@@ -310,9 +287,7 @@ const TransactionAdd: React.FC = () => {
       vendorId: prev.vendorId,
       userId: prev.userId
     }));
-    setSelectedPart(null);
-    setSearchTerm("");
-    setPartSuggestions([]);
+    setSelectedVendor(null);
   };
 
   const calculateGSTValues = (price: number, quantity: number, gstPercentage: number) => {
@@ -511,7 +486,7 @@ const TransactionAdd: React.FC = () => {
               disablePortal
               openOnFocus
               noOptionsText="No vendors available"
-              options={vendorSuggestions}
+              options={memoizedVendorSuggestions}
               getOptionLabel={(option) => option.name}
               onChange={handleSelectVendor}
               value={selectedVendor}
@@ -536,26 +511,7 @@ const TransactionAdd: React.FC = () => {
 
           <FormGrid item xs={12} md={6}>
             <FormLabel htmlFor="partName">Spare Part (Search)</FormLabel>
-            <Autocomplete
-              disablePortal
-              openOnFocus
-              noOptionsText="No parts found"
-              options={partSuggestions}
-              filterOptions={filterOptions}
-              getOptionLabel={(option) =>
-           
-                `${option.manufacturer} - ${option.partName} - ${option.description || "No Description"}`
-              }
-              onInputChange={handlePartInputChange}
-              onChange={handleSelectPart}
-              value={selectedPart}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Part Search with Part Number/Name/Manufacturer/Description"
-                />
-              )}
-            />
+            <PartSearch onPartSelect={handlePartSelect} />
           </FormGrid>
 
           <FormGrid item xs={12} md={6}>
