@@ -39,12 +39,10 @@ function SparePart() {
   useEffect(() => {
     // Only search if there's a query with at least 2 characters
     if (searchQuery && searchQuery.length >= 2) {
-      console.log("Triggering search for:", searchQuery);
       setCurrentPage(0);
       fetchSpareParts(0);
     } else if (searchQuery === "") {
-      // If search is cleared, reset to default list
-      console.log("Search cleared, fetching all spare parts");
+      
       setCurrentPage(0);
       fetchSpareParts(0);
     }
@@ -52,9 +50,7 @@ function SparePart() {
   }, [searchQuery]);
 
   const handleSearch = () => {
-    console.log("Manually triggered search for:", searchQuery);
     if (searchQuery.trim() === "") {
-      console.log("Empty search query, fetching all items");
     }
     setCurrentPage(0);
     fetchSpareParts(0);
@@ -62,28 +58,21 @@ function SparePart() {
 
   // Add a separate debug function for search results
   const processSearchResults = (data: any) => {
-    console.log("Processing search results:", data);
     
     if (data && Array.isArray(data.content)) {
-      console.log(`Found ${data.content.length} items in data.content`);
       return data.content.filter((part: any) => part.isDeleted !== true);
     } 
     else if (data && Array.isArray(data.list)) {
-      console.log(`Found ${data.list.length} items in data.list`);
       return data.list.filter((part: any) => part.isDeleted !== true);
     }
     else if (data && Array.isArray(data)) {
-      console.log(`Found ${data.length} items in direct array`);
       return data.filter((part: any) => part.isDeleted !== true);
     }
-    
-    console.warn("No recognizable data format in search results:", data);
     return [];
   };
 
   // Load data when component mounts
   useEffect(() => {
-    console.log("Initial data loading on component mount");
     fetchSpareParts();
   }, []);
 
@@ -99,19 +88,15 @@ function SparePart() {
         url = `/Filter/searchBarFilter?searchBarInput=${encodeURIComponent(
           searchQuery
         )}&page=${page}&size=${size}&includeDeleted=false`;
-        console.log("Using search URL:", url);
       } else {
         url = `/sparePartManagement/getAll?page=${page}&size=${size}&includeDeleted=false`;
-        console.log("Using regular fetch URL:", url);
       }
 
       try {
         const response = await apiClient.get(url);
-        console.log("API Response for " + (isSearchQuery ? "search" : "regular fetch") + ":", response.data);
-
+       
         // Process the results based on the response format
         const processedParts = processSearchResults(response.data);
-        console.log("Processed parts after filtering:", processedParts);
         
         setSpareParts(processedParts);
         
@@ -129,9 +114,7 @@ function SparePart() {
           setError(`No spare parts found for the given search keyword.`);
         }
       } catch (apiErr: any) {
-        console.error("API Error:", apiErr);
         
-        // Check if the error is "No spare parts found" message
         if (apiErr.response?.status === 404 && 
             apiErr.response?.data?.includes?.("No spare parts found") || 
             apiErr.response?.data === "No spare parts found for the given search keyword.") {
@@ -147,7 +130,6 @@ function SparePart() {
         }
       }
     } catch (err: any) {
-      console.error("Error in fetchSpareParts:", err);
       setError("Something went wrong. Please try again later.");
     } finally {
       setLoading(false);
@@ -368,7 +350,6 @@ function SparePart() {
                         alt={sparePart.partName}
                         className="w-full h-full object-contain"
                         onError={(e) => {
-                          console.error("Image Load Error:", e);
                           (e.target as HTMLImageElement).src = "/placeholder.jpg";
                         }}
                       />

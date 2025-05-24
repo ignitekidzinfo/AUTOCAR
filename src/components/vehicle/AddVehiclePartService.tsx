@@ -124,7 +124,6 @@ const getCachedData = <T,>(key: string): T | null => {
       }
     }
   } catch (e) {
-    console.error('Error reading cache:', e);
  
     try {
       localStorage.removeItem(key);
@@ -146,7 +145,6 @@ const saveToCache = <T,>(key: string, data: T): void => {
     
     localStorage.setItem(key, JSON.stringify(cacheData));
   } catch (e) {
-    console.error('Error saving to cache:', e);
   }
 };
 
@@ -223,7 +221,6 @@ const AddVehiclePartService: React.FC = () => {
     const effectiveId = getEffectiveVehicleId();
     
     if (isPendingId && !realVehicleId) {
-      console.log("Waiting for real vehicle ID before fetching spare parts");
       return;
     }
 
@@ -250,7 +247,6 @@ const AddVehiclePartService: React.FC = () => {
       const responsePart = await apiClient.get(
         `/sparePartTransactions/vehicleRegId?vehicleRegId=${effectiveId}` );
       if (!responsePart.data || responsePart.data.length === 0) {
-        console.warn("No transactions found for this vehicleRegId");
         setRows([]);
         loadingRef.current = false;
         setIsLoading(false);
@@ -281,7 +277,6 @@ const AddVehiclePartService: React.FC = () => {
       const cacheKey = `${CACHE_KEY_PREFIX}${effectiveId}`;
       saveToCache(cacheKey, newTransactions);
     } catch (err) {
-      console.error("Error fetching transactions:", err);  
     } finally {
       loadingRef.current = false;
       setIsLoading(false);
@@ -334,7 +329,6 @@ const AddVehiclePartService: React.FC = () => {
       
       saveToCache(cacheKey, suggestions);
     } catch (error) {
-      console.error("Error fetching part suggestions:", error); 
     }
   }, []);
 
@@ -440,7 +434,6 @@ const AddVehiclePartService: React.FC = () => {
       });
       setCreateData(initialCreateData);
     } catch (error: any) {
-      console.error("Transaction error:", error.response?.data);
       
       const errorData = error.response?.data;
       if (errorData?.exception && 
@@ -606,7 +599,6 @@ const AddVehiclePartService: React.FC = () => {
         });
       }
     } catch (error) {
-      console.error("Error fetching vehicle details:", error);
       setFeedback({
         message: "Failed to load vehicle details",
         severity: "error",

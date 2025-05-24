@@ -70,7 +70,6 @@ function BookAppointment() {
       }
     } catch (err) {
       setError("Failed to book appointment. Please try again.");
-      console.error("Error booking appointment:", err);
     } finally {
       setLoading(false);
     }

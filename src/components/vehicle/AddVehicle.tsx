@@ -361,7 +361,6 @@ export default function AddVehicle() {
       
       if (id) {
         const response = await VehicleUpdate(payload);
-        console.log("Vehicle update successful:", response);
       setDialogTitle("Success");
         setDialogMessage("Vehicle updated successfully!");
       setDialogOpen(true);
@@ -384,20 +383,17 @@ export default function AddVehicle() {
         }, 1500);
         
         VehicleAdd(payload).then(response => {
-          console.log("Vehicle addition successful:", response);
           const generatedId = response.data.vehicleRegId;
           
           sessionStorage.setItem('realVehicleId', generatedId);
           sessionStorage.setItem('pendingVehicleId', ''); 
 
         }).catch(error => {
-          console.error("Error processing vehicle in background:", error);
           sessionStorage.setItem('vehicleAddError', error?.message || 'Unknown error');
      
         });
       }
     } catch (error: any) {
-      console.error("Error processing vehicle:", error);
       let errorMsg = "Failed to process vehicle.";
       if (error.response && error.response.data && error.response.data.message) {
         errorMsg = error.response.data.message;
@@ -447,7 +443,6 @@ export default function AddVehicle() {
             advancePayment: response.advancePayment || 0,
           });
         } catch (error) {
-          console.error("Error fetching vehicle data:", error);
         }
       };
       getVehicleData();
@@ -465,7 +460,6 @@ export default function AddVehicle() {
         });
         setSearchResults(response.data);
       } catch (error) {
-        console.error("Error fetching search results:", error);
       }
     };
     fetchSearchResults();
@@ -509,7 +503,6 @@ export default function AddVehicle() {
           advancePayment: response.advancePayment || 0,
         });
       } catch (error) {
-        console.error("Error fetching vehicle details:", error);
       } finally {
         setLoadingVehicle(false);
       }

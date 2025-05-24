@@ -29,7 +29,7 @@ export default function OTPComponent({ open, handleClose, email ,isVerifySuccess
   const handleVerifyOTP = async () => {
     try {
       setLoading(true);
-      const otpCode = otp.join(""); // Convert array to string
+      const otpCode = otp.join(""); 
       const data= {
         email : email,
         otp : otpCode

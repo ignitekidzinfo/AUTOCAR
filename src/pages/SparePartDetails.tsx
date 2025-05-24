@@ -71,7 +71,6 @@ function SparePartDetails() {
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Error fetching details:", err);
         setError("Failed to fetch data");
         setLoading(false);
       });
@@ -99,7 +98,6 @@ function SparePartDetails() {
       setShowDeleteConfirmation(false);
       navigate("/getAll"); 
     } catch (error) {
-      console.error("Error deleting spare part:", error);
       alert("Failed to delete spare part.");
     }
   };

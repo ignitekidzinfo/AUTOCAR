@@ -39,7 +39,6 @@ const BillForm = () => {
             link.click(); 
             link.remove(); 
         } catch (error) {
-            console.error('Error generating PDF:', error);
         }
     };
 

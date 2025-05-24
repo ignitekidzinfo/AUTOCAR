@@ -31,7 +31,6 @@ import {
 import { Task, NoteAdd, Delete, Save, RemoveCircleOutline, Description } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "Services/apiService";
-import JobOptionForm from "components/JobCard/JobOptionForm";
 
 const StyledTextArea = styled(TextareaAutosize)(({ theme }) => ({
   width: "100%",

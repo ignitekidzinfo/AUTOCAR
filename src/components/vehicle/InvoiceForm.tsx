@@ -377,7 +377,6 @@ export default function InvoiceForm() {
           igst: igst.toFixed(2)}; });
       setFormData(prev => ({ ...prev, parts }));
     } catch (error: any) {
-      console.error('Error fetching data:', error);
       setDialogTitle("Error");
       setDialogMessage("Error fetching vehicle or parts data.");
       setDialogOpen(true);

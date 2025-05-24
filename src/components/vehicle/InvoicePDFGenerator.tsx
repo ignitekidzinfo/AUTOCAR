@@ -91,7 +91,6 @@ const CounterBillPDF: FC = () => {
         try {
           setIsLoading(true);
           const response = await apiClient.get(`/api/vehicle-invoices/search/invoice/${invoiceNumber}`);
-          console.log('Fetched invoice data by invoice number:', response.data);
           
           if (response.data) {
             // Transform API response to match the LocationState structure
@@ -138,7 +137,6 @@ const CounterBillPDF: FC = () => {
         try {
           setIsLoading(true);
           const response = await apiClient.get(`/api/vehicle-invoices/search/vehicle-reg/${vehicleRegId}`);
-          console.log('Fetched invoice data by vehicle ID:', response.data);
           
           if (response.data && response.data.length > 0) {
             // Use the most recent invoice if multiple exist
@@ -914,7 +912,6 @@ const CounterBillPDF: FC = () => {
                     const cgst = (taxableAmount *Number(part.cgstPercent)) / 100;
                     const sgst = (taxableAmount *Number(part.sgstPercent)) / 100;
                     const igst = (taxableAmount *Number(part.igstPercent)) / 100;
-                    console.log(sgst,cgst,igst)
                     const amount = taxableAmount;
                     return (
                       <tr key={index}>
