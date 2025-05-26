@@ -2742,7 +2742,202 @@ const TransactionAdd: React.FC = () => {
 
       {/* New part dialog */}
       <Dialog open={isNewPartDialogOpen} onClose={() => setIsNewPartDialogOpen(false)} maxWidth="md">
-        {/* ... dialog content ... */}
+        <DialogTitle>
+          {newPartData.partName ? `Add New Part: ${newPartData.partName}` : 'Add New Part'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ p: 1 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Manufacturer <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="manufacturer"
+                  value={newPartData.manufacturer}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter manufacturer"
+                  required
+                  autoFocus
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Part Name <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="partName"
+                  value={newPartData.partName}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter part name"
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Part Number <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="partNumber"
+                  value={newPartData.partNumber}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter part number"
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Description
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="description"
+                  value={newPartData.description}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter description"
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Selling Price (MRP) <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="price"
+                  type="number"
+                  value={newPartData.price === 0 ? '' : newPartData.price}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter selling price"
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Initial Quantity <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="quantity"
+                  type="number"
+                  value={newPartData.quantity === 0 ? '' : newPartData.quantity}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter initial quantity"
+                  required
+                  inputProps={{ min: 1 }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  CGST % <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="cGST"
+                  type="number"
+                  value={newPartData.cGST === 0 ? '' : newPartData.cGST}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter CGST percentage"
+                  disabled
+                  sx={{ bgcolor: '#f9f9f9' }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  SGST % <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="sGST"
+                  type="number"
+                  value={newPartData.sGST === 0 ? '' : newPartData.sGST}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter SGST percentage"
+                  disabled
+                  sx={{ bgcolor: '#f9f9f9' }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Total GST % <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  select
+                  fullWidth
+                  size="small"
+                  name="totalGST"
+                  value={newPartData.totalGST}
+                  onChange={handleNewPartChange}
+                  required
+                >
+                  {gstOptions.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option}%
+                    </MenuItem>
+                  ))}
+                </SquareTextField>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Buying Price <span style={{ color: 'red' }}>*</span>
+                </Typography>
+                <SquareTextField
+                  fullWidth
+                  size="small"
+                  name="buyingPrice"
+                  type="number"
+                  value={newPartData.buyingPrice === 0 ? '' : newPartData.buyingPrice}
+                  onChange={handleNewPartChange}
+                  placeholder="Enter buying price"
+                  required
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={() => setIsNewPartDialogOpen(false)} 
+            color="secondary"
+            variant="outlined"
+            sx={{ borderRadius: 0 }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleNewPartSubmit} 
+            color="primary" 
+            variant="contained"
+            disabled={isCreatingPart || !newPartData.partName || !newPartData.partNumber || !newPartData.manufacturer}
+            sx={{ borderRadius: 0 }}
+          >
+            {isCreatingPart ? 
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <CircularProgress size={20} sx={{ mr: 1 }} /> Creating...
+              </Box> : 
+              'Create Part'
+            }
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Snackbar for feedback */}
