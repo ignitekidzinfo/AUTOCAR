@@ -375,7 +375,7 @@ const PurchaseList: React.FC = () => {
               <body>
                 <div class="header">
                   <div class="title">${bill.shopName || 'Auto Car Care Point'}</div>
-                  <div class="address">${bill.shopAddress || 'Bavassheb Nagar, Shingnapur Road, Kolki, Phalton, Tal.Phaltan(415523), Dist.Satara.'}</div>
+                  <div class="address">${bill.shopAddress || 'Buvasaheb Nagar, Shingnapur Road, Kolki, Phaltan, Tal.Phaltan(415523), Dist.Satara.'}</div>
                   <div class="contact">Contact No : ${bill.shopContact || '9767102794'}</div>
                   <div class="separator-line" style="margin: 3px 0;"></div>
                   <div class="subtitle">PURCHASE BILL</div>

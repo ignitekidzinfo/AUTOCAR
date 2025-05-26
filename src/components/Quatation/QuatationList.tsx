@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Grid from '@mui/material/Grid';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -12,6 +12,9 @@ import {
   IconButton,
   InputAdornment,
   OutlinedInput,
+  Skeleton,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { GridCellParams, GridRowsProp, GridColDef } from '@mui/x-data-grid';
@@ -35,16 +38,37 @@ interface Quotation {
   labourLines: any[];
 }
 
+// Cache implementation
+const CACHE_KEY = 'quotations_cache';
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+
 export default function QuotationList() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<GridRowsProp>([]);
   const [open, setOpen] = useState<boolean>(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [localSearchTerm, setLocalSearchTerm] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch quotations from the API
-  const getQuotationList = async () => {
+  // Fetch quotations from the API with caching
+  const getQuotationList = useCallback(async (forceRefresh = false) => {
+    setLoading(true);
     try {
+      // Check cache first if not forcing refresh
+      if (!forceRefresh) {
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        if (cachedData) {
+          const { data, timestamp } = JSON.parse(cachedData);
+          // Use cache if it's not expired
+          if (Date.now() - timestamp < CACHE_EXPIRY) {
+            setRows(data);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
       const response = await apiClient.get('/api/quotations');
       const data: Quotation[] = response.data;
       const formattedRows = data.map((quotation) => ({
@@ -55,32 +79,50 @@ export default function QuotationList() {
         customerMobile: quotation.customerMobile ?? '',
         vehicleNumber: quotation.vehicleNumber ?? '',
       }));
+      
+      // Update state and cache the data
       setRows(formattedRows);
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        data: formattedRows,
+        timestamp: Date.now()
+      }));
+      setError(null);
     } catch (error) {
       console.error('Error fetching quotations:', error);
+      setError('Failed to load quotations. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     getQuotationList();
-  }, []);
+  }, [getQuotationList]);
 
   const handleDelete = async (id: number) => {
-    setSelectedId(id);
-    setOpen(true);    
-    if (open) {
-      try {
+    try {
+      setSelectedId(id);
+      setOpen(true);    
+      
+      if (open) {
         const response = await apiClient.delete(`/api/quotations/${id}`);
         if (response.status >= 200 && response.status < 300) {
           // Refresh the list after deletion
-          getQuotationList();
+          getQuotationList(true);
         } else {
           console.error('Failed to delete quotation:', response.statusText);
+          setError('Failed to delete quotation. Please try again.');
         }
-      } catch (error) {
-        console.error('Error deleting quotation:', error);
       }
+    } catch (error) {
+      console.error('Error deleting quotation:', error);
+      setError('Failed to delete quotation. Please try again.');
     }
+  };
+
+  const handlePrint = (id: number) => {
+    // Navigate to the QuatationPDFGeneration component with the correct ID
+    navigate(`/admin/quotation/pdf/${id}`);
   };
 
   const renderActionButtons = (params: GridCellParams) => {
@@ -100,7 +142,7 @@ export default function QuotationList() {
         </IconButton>
         <IconButton
           color="secondary"
-          onClick={() => navigate(`/admin/quatationpdfgenerator/${params.row.id}`)}
+          onClick={() => handlePrint(params.row.id)}
         >
           <Print />
         </IconButton>
@@ -116,14 +158,15 @@ export default function QuotationList() {
     { field: 'Action', headerName: 'Action', flex: 1, minWidth: 150, renderCell: renderActionButtons },
   ];
 
-  const filteredRows = rows.filter((row) => {
+  // Memoize filtered rows for better performance
+  const filteredRows = useMemo(() => {
     const search = localSearchTerm.toLowerCase();
-    return (
+    return rows.filter((row) => (
       row.customerName.toLowerCase().includes(search) ||
       (row.customerMobile && row.customerMobile.toLowerCase().includes(search)) ||
       (row.vehicleNumber && row.vehicleNumber.toLowerCase().includes(search))
-    );
-  });
+    ));
+  }, [rows, localSearchTerm]);
 
   return (
     <Box sx={{ width: '100%', maxWidth: { xs: '100%', md: '1700px' } }}>
@@ -154,9 +197,27 @@ export default function QuotationList() {
 
       <Grid container spacing={1} columns={12}>
         <Grid item xs={12}>
-          <CustomizedDataGrid columns={columns} rows={filteredRows} />
+          {loading ? (
+            <Box sx={{ width: '100%' }}>
+              <Skeleton variant="rectangular" width="100%" height={400} />
+            </Box>
+          ) : (
+            <CustomizedDataGrid columns={columns} rows={filteredRows} />
+          )}
         </Grid>
       </Grid>
+      
+      <Snackbar 
+        open={!!error} 
+        autoHideDuration={6000} 
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+          {error}
+        </Alert>
+      </Snackbar>
+      
       <Copyright sx={{ my: 4 }} />
     </Box>
   );

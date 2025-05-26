@@ -1,19 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     Container,
     Stack,
     Typography,
     Button,
     Grid,
-    FormLabel,
-    OutlinedInput,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
+    Paper,
+    Divider,
+    CircularProgress,
+    Box,
+    Snackbar,
+    Alert,
+    TextField,
+    InputAdornment,
+    IconButton,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import apiClient from 'Services/apiService';
+
+// Cache key for quotation data
+const CACHE_KEY_PREFIX = 'quotation_edit_';
 
 interface PartLine {
     id: number;
@@ -55,193 +62,264 @@ const QuotationEdit: React.FC = () => {
     const navigate = useNavigate();
     const [quotation, setQuotation] = useState<Quotation | null>(null);
     const [formData, setFormData] = useState<Quotation | null>(null);
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [dialogMessage, setDialogMessage] = useState('');
-    const [dialogTitle, setDialogTitle] = useState('');
+    const [loading, setLoading] = useState<boolean>(true);
+    const [saving, setSaving] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
 
+    // Prefetch data from cache if available
+    useEffect(() => {
+        const cachedData = localStorage.getItem(`${CACHE_KEY_PREFIX}${id}`);
+        if (cachedData) {
+            try {
+                const parsedData = JSON.parse(cachedData);
+                setQuotation(parsedData);
+                setFormData(parsedData);
+                setLoading(false);
+            } catch (e) {
+                console.error('Error parsing cached data:', e);
+            }
+        }
+    }, [id]);
+
+    // Fetch data from API
     useEffect(() => {
         const fetchQuotation = async () => {
+            if (!loading && formData) return; // Skip if already loaded from cache
+            
+            setLoading(true);
             try {
                 const response = await apiClient.get(`/api/quotations/${id}`);
                 const data: Quotation = response.data;
                 setQuotation(data);
-                setFormData(data); // Initialize form data with fetched quotation
+                setFormData(data);
+                setError(null);
+                
+                // Cache the data for future use
+                localStorage.setItem(`${CACHE_KEY_PREFIX}${id}`, JSON.stringify(data));
             } catch (error) {
                 console.error('Error fetching quotation:', error);
+                setError('Failed to load quotation data. Please try again.');
+            } finally {
+                setLoading(false);
             }
         };
 
         fetchQuotation();
-    }, [id]);
+    }, [id, loading, formData]);
 
-    const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
-        const { name, value } = event.target as { name: string; value: string }; // Type assertion for name
+    const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
+        const { name, value } = event.target as { name: string; value: string };
         if (formData) {
-            setFormData({ ...formData, [name]: value });
+            setFormData(prev => prev ? { ...prev, [name]: value } : null);
         }
-    };
+    }, [formData]);
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (formData) {
-            // Create an object with only the fields that have changed
+            setSaving(true);
             const updates = {
+                quotationDate: formData.quotationDate,
+                vehicleNumber: formData.vehicleNumber,
                 customerName: formData.customerName,
-                customerAddress: formData.customerAddress,
                 customerMobile: formData.customerMobile,
                 customerEmail: formData.customerEmail,
-                vehicleNumber: formData.vehicleNumber,
-                quotationDate: formData.quotationDate,
-                quotationNumber: formData.quotationNumber,
-                // Add partLines and labourLines if needed
+                customerAddress: formData.customerAddress,
             };
 
             try {
                 const response = await apiClient.patch(`/api/quotations/${id}`, updates);
 
                 if (response.status >= 200 && response.status < 300) {
-                    setDialogTitle('Success');
-                    setDialogMessage('Quotation updated successfully!');
+                    setSuccess('Quotation updated successfully!');
+                    // Update the quotation state and cache
+                    const updatedQuotation = {...quotation!, ...updates};
+                    setQuotation(updatedQuotation);
+                    localStorage.setItem(`${CACHE_KEY_PREFIX}${id}`, JSON.stringify(updatedQuotation));
                 } else {
-                    setDialogTitle('Error');
-                    setDialogMessage('Failed to update quotation.');
+                    setError('Failed to update quotation.');
                 }
-                setDialogOpen(true);
             } catch (error) {
                 console.error('Error updating quotation:', error);
-                setDialogTitle('Error');
-                setDialogMessage('Failed to update quotation.');
-                setDialogOpen(true);
+                setError('Failed to update quotation. Please try again.');
+            } finally {
+                setSaving(false);
             }
         }
     };
 
-    if (!quotation) {
-        return <div>Loading...</div>; // Handle loading state
+    // Show minimal loading indicator
+    if (loading && !formData) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" height="80vh">
+                <CircularProgress size={40} />
+            </Box>
+        );
+    }
+
+    if (!formData) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" height="80vh">
+                <Typography color="error">Failed to load quotation data. Please try again.</Typography>
+            </Box>
+        );
     }
 
     return (
-        <>
-        <Container>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-                <Typography component="h2" variant="h6">
-                    Update Quotation
-                </Typography>
-                <Button variant="contained" color="primary" onClick={() => navigate(-1)}>
-                    Back
-                </Button>
-            </Stack>
-            <form onSubmit={handleSubmit}>
-                <Grid container spacing={3}>
-                    <Grid item xs={12} md={6}>
-                        <FormLabel htmlFor="customerName">Customer Name</FormLabel>
-                        <OutlinedInput
-                            id="customerName"
-                            name="customerName"
-                            value={formData!.customerName || "NA"} // Non-null assertion
-                            onChange={handleChange}
-                            placeholder="Enter Customer Name"
-                            required
-                            size="small"
-                        />
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                        <FormLabel htmlFor="customerAddress">Customer Address</FormLabel>
-                        <OutlinedInput
-                            id="customerAddress"
-                            name="customerAddress"
-                            value={formData!.customerAddress || "NA"} // Non-null assertion
-                            onChange={handleChange}
-                            placeholder="Enter Customer Address"
-                            required
-                            size="small"
-                        />
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                        <FormLabel htmlFor="customerMobile">Mobile Number</FormLabel>
-                        <OutlinedInput
-                            id="customerMobile"
-                            name="customerMobile"
-                            value={formData!.customerMobile || "NA"} // Non-null assertion
-                            onChange={handleChange}
-                            placeholder="Enter Mobile Number"
-                            required
-                            size="small"
-                        />
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                        <FormLabel htmlFor="customerEmail">Email</FormLabel>
-                        <OutlinedInput
-                            id="customerEmail"
-                            name="customerEmail"
-                            value={formData!.customerEmail || "NA"} // Non-null assertion
-                            onChange={handleChange}
-                            placeholder="Enter Email"
-                            required
-                            size="small"
-                        />
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                        <FormLabel htmlFor="vehicleNumber">Vehicle Number</FormLabel>
-                        <OutlinedInput
-                            id="vehicleNumber"
-                            name="vehicleNumber"
-                            value={formData!.vehicleNumber || "NA"} // Non-null assertion
-                            onChange={handleChange}
-                            placeholder="Enter Vehicle Number"
-                            required
-                            size="small"
-                        />
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                        <FormLabel htmlFor="quotationNumber">Vehicle Number</FormLabel>
-                        <OutlinedInput
-                            id="quotationNumber"
-                            name="quotationNumber"
-                            value={formData!.quotationNumber || "NA"} // Non-null assertion
-                            onChange={handleChange}
-                            placeholder="Enter Quotation Number"
-                            required
-                            size="small"
-                        />
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                        <FormLabel htmlFor="quotationDate">Quotation Date</FormLabel>
-                        <OutlinedInput
-                            id="quotationDate"
-                            name="quotationDate"
-                            type="date"
-                            value={formData!.quotationDate || "NA"} // Non-null assertion
-                            onChange={handleChange}
-                            required
-                            size="small"
-                        />
-                    </Grid>
-                    {/* Add more fields as necessary for partLines and labourLines */}
-                    <Grid item xs={12}>
-                        <Button type="submit" variant="contained" color="primary" fullWidth>
-                            Update Quotation
+        <Container maxWidth="lg">
+            <Paper elevation={3} sx={{ p: 4, mt: 3, borderRadius: 2 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
+                    <Typography variant="h5" fontWeight="500">
+                        Edit Quotation #{formData.quotationNumber}
+                    </Typography>
+                    <Box>
+                        <Button 
+                            variant="outlined" 
+                            color="primary" 
+                            onClick={() => navigate(-1)}
+                            sx={{ mr: 2 }}
+                        >
+                            Cancel
                         </Button>
+                        <Button 
+                            variant="contained" 
+                            color="primary" 
+                            onClick={(e) => handleSubmit(e as any)}
+                            disabled={saving}
+                        >
+                            {saving ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                    </Box>
+                </Stack>
+
+                <Divider sx={{ mb: 3 }} />
+
+                <Box component="form" onSubmit={handleSubmit} noValidate>
+                    <Grid container spacing={3}>
+                        {/* Field order matches the image: Quotation Date, Vehicle No, Customer Name, Mobile No, Email ID, Address */}
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                fullWidth
+                                id="quotationDate"
+                                name="quotationDate"
+                                label="Quotation Date*"
+                                type="date"
+                                value={formData.quotationDate || ""}
+                                onChange={handleChange}
+                                required
+                                variant="outlined"
+                                size="small"
+                                InputLabelProps={{ shrink: true }}
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <IconButton edge="end">
+                                                <CalendarTodayIcon />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
+                        </Grid>
+                        
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                fullWidth
+                                id="vehicleNumber"
+                                name="vehicleNumber"
+                                label="Vehicle No*"
+                                value={formData.vehicleNumber || ""}
+                                onChange={handleChange}
+                                required
+                                variant="outlined"
+                                size="small"
+                            />
+                        </Grid>
+                        
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                fullWidth
+                                id="customerName"
+                                name="customerName"
+                                label="Customer Name*"
+                                value={formData.customerName || ""}
+                                onChange={handleChange}
+                                required
+                                variant="outlined"
+                                size="small"
+                            />
+                        </Grid>
+                        
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                fullWidth
+                                id="customerMobile"
+                                name="customerMobile"
+                                label="Mobile No*"
+                                value={formData.customerMobile || ""}
+                                onChange={handleChange}
+                                required
+                                variant="outlined"
+                                size="small"
+                            />
+                        </Grid>
+                        
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                fullWidth
+                                id="customerEmail"
+                                name="customerEmail"
+                                label="Email Id"
+                                type="email"
+                                value={formData.customerEmail || ""}
+                                onChange={handleChange}
+                                variant="outlined"
+                                size="small"
+                            />
+                        </Grid>
+                        
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                id="customerAddress"
+                                name="customerAddress"
+                                label="Customer Address*"
+                                value={formData.customerAddress || ""}
+                                onChange={handleChange}
+                                required
+                                variant="outlined"
+                                size="small"
+                                multiline
+                                rows={2}
+                            />
+                        </Grid>
                     </Grid>
-                </Grid>
-            </form>
-            <Dialog
-    open={dialogOpen}
-    onClose={() => setDialogOpen(false)}
-    aria-labelledby="dialog-title"
-    aria-describedby="dialog-description"
-    PaperProps={{ style: { padding: 20, textAlign: "center" } }}
->
-    <DialogTitle id="dialog-title">{dialogTitle}</DialogTitle>
-    <DialogContent>
-        <Typography id="dialog-description">{dialogMessage}</Typography>
-    </DialogContent>
-    <DialogActions>
-        <Button onClick={() => setDialogOpen(false)}>Close</Button>
-    </DialogActions>
-</Dialog>
+                </Box>
+            </Paper>
+
+            <Snackbar 
+                open={!!error} 
+                autoHideDuration={6000} 
+                onClose={() => setError(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+                    {error}
+                </Alert>
+            </Snackbar>
+
+            <Snackbar 
+                open={!!success} 
+                autoHideDuration={3000} 
+                onClose={() => setSuccess(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert onClose={() => setSuccess(null)} severity="success" sx={{ width: '100%' }}>
+                    {success}
+                </Alert>
+            </Snackbar>
         </Container>
-        </>
     );
 };
 

@@ -136,6 +136,7 @@ const AppRoutes = () => {
                 <Route path="customer/add" element={<AddCustomer />} />
                 <Route path="jobCardgrid" element={<JobCardGrid />} />
                 <Route path="manageVendor" element={<VendorManagementGrid />} />
+                <Route path="quatationpdfgenerator/:id" element={<QuatationPDFGeneration />} />
                 <Route path="billForm/:id" element={<InvoiceForm />} />
                 <Route path="customer/payment/view/:id" element={<ViewCustomerPayments />} />
                 <Route path="customer/payment/add/:id" element={<AddCustomerPayment />} />
@@ -200,6 +201,7 @@ const AppRoutes = () => {
                 <Route path="serviceTab/:vehicleId" element={<ServiceTab />} />
                 <Route path="spareTab/:vehicleId" element={<SpareTab />} />
                 <Route path="quotation/edit/:id" element={<QuatationEdit/>} />
+                <Route path="quotation/pdf/:id" element={<QuatationPDFGeneration />} />
 
                 <Route path="vehicle/edit/:id" element={<AddVehicle/>} />
                 <Route path="vehicle/view/:id" element={<VehicleDetailsView/>} />
