@@ -114,7 +114,7 @@ const PartSearch: React.FC<PartSearchProps> = ({ onPartSelect, value, onNotFound
       onSearchTermChange(value);
     }
     if (value.trim() !== '') {
-      fetchPartsBySearch(value);
+    fetchPartsBySearch(value);
     } else {
       setSuggestions([]);
     }

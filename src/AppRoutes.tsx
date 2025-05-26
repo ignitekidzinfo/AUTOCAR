@@ -15,6 +15,7 @@ import EmployeeSalaryList from "components/Employee/EmployeeSalaryList";
 import AddEmployeeSalary from "components/Employee/AddEmployeeSalary";
 import AddEmployeeAdvancePayment from "components/Employee/AddEmployeeAdvancePayment";
 import EmployeeAdvancePaymentList from "components/Employee/EmployeeAdvancePaymentList";
+import PurchaseList from "pages/TransactionManagement/PurchaseList";
 const LoadingFallback = () => (
   <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
     <CircularProgress />
@@ -223,6 +224,8 @@ const AppRoutes = () => {
                 <Route path="bank-deposits" element={<BankDepositList />} />
                 <Route path="add-bank-deposit" element={<AddBankDeposit />} />
                 <Route path="edit-bank-deposit/:id" element={<AddBankDeposit />} />
+
+                <Route path="purchase-list" element={<PurchaseList />} />
             </Route>
         </Routes>
         </Suspense>

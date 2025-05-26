@@ -183,7 +183,7 @@ interface SparePartItem {
   manufacturer?: string;
   price: number;
   quantity: number;
-  rate?: number;
+  rate?: number;  // Make rate optional
   gstPercentage: number;
   taxableAmount: number;
   cgst: number;
@@ -274,7 +274,7 @@ const TransactionAdd: React.FC = () => {
     partName: "",
     quantity: 1,
     price: 0,
-    rate: undefined,
+    rate: undefined, // Changed from 0 to undefined
     gstPercentage: 0,
     taxableAmount: 0,
     cgst: 0,
@@ -362,80 +362,6 @@ const TransactionAdd: React.FC = () => {
   // Add a state variable to track submission progress
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionProgress, setSubmissionProgress] = useState({ current: 0, total: 0 });
-
-  // Add this near the top of the component, after other useEffect hooks
-  // Check for edit mode and load bill data if available
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const editBillId = urlParams.get('edit');
-    const isEditMode = !!editBillId;
-    
-    if (isEditMode) {
-      // Try to get bill data from sessionStorage
-      const storedBillData = sessionStorage.getItem('editBillData');
-      if (storedBillData) {
-        try {
-          const billData = JSON.parse(storedBillData);
-          console.log('Loading bill for editing:', billData);
-          
-          // Load vendor data
-          if (billData.vendorId) {
-            const vendor = vendorSuggestions.find(v => v.vendorId === billData.vendorId);
-            if (vendor) {
-              setSelectedVendor(vendor);
-              setCreateData(prev => ({
-                ...prev,
-                name: vendor.name,
-                vendorId: vendor.vendorId,
-              }));
-            }
-          }
-          
-          // Set invoice details
-          setCreateData(prev => ({
-            ...prev,
-            invoiceNo: billData.billNo || '',
-            invoiceDate: billData.billDate ? new Date(billData.billDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-          }));
-          
-          // Load items
-          if (billData.items && Array.isArray(billData.items)) {
-            const mappedItems: SparePartItem[] = billData.items.map((item: any, index: number) => ({
-              id: index + 1,
-              transactionId: item.transactionId,
-              sparePartId: item.sparePartId,
-              partName: item.itemName,
-              partNumber: item.partNumber || '',
-              manufacturer: item.manufacturer || '',
-              price: item.mrp || item.price || 0,
-              quantity: item.quantity || 1,
-              rate: item.rate || 0,
-              gstPercentage: (item.cgstPercentage + item.sgstPercentage) || 0,
-              taxableAmount: item.taxableAmount || (item.rate * item.quantity),
-              cgst: item.cgst || 0,
-              sgst: item.sgst || 0,
-              total: item.amount || 0
-            }));
-            
-            setSparePartItems(mappedItems);
-            calculateTotals(mappedItems);
-            
-            // Set other bill totals
-            setNetTotal(billData.subTotal || 0);
-            setRoundOff(billData.roundOff || 0);
-            setGrandTotal(billData.grandTotal || 0);
-            setPaid(billData.paid || 0);
-          }
-        } catch (error) {
-          console.error('Error parsing stored bill data:', error);
-          setFeedback({
-            message: "Failed to load bill data for editing",
-            severity: "error"
-          });
-        }
-      }
-    }
-  }, [vendorSuggestions]);
 
   useEffect(() => {
     console.log("Component mounted, fetching vendors...");
@@ -572,60 +498,50 @@ const TransactionAdd: React.FC = () => {
     }));
   };
 
-  // Update the handleItemChange function to allow clearing values and fix TypeScript errors
   const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    
-    // Update the current item with the raw value (including empty string)
-    setCurrentItem(prev => ({
+    setCurrentItem((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
 
     // Calculate values if price, quantity or GST changes
     if (name === 'price' || name === 'quantity' || name === 'gstPercentage' || name === 'rate') {
-      // Use the raw value for the changed field, and current values for the others
-      const price = name === 'price' ? value : currentItem.price;
-      const quantity = name === 'quantity' ? value : currentItem.quantity;
-      const gstPercentage = name === 'gstPercentage' ? value : currentItem.gstPercentage;
-      const rate = name === 'rate' ? value : currentItem.rate;
+      const price = name === 'price' ? (value === '' ? 0 : parseFloat(value) || 0) : (typeof currentItem.price === 'string' && currentItem.price === '' ? 0 : Number(currentItem.price || 0));
+      const quantity = name === 'quantity' ? (value === '' ? 1 : parseFloat(value) || 1) : (typeof currentItem.quantity === 'string' && currentItem.quantity === '' ? 1 : Number(currentItem.quantity || 1));
+      const gstPercentage = name === 'gstPercentage' ? (value === '' ? 0 : parseFloat(value) || 0) : (typeof currentItem.gstPercentage === 'string' && currentItem.gstPercentage === '' ? 0 : Number(currentItem.gstPercentage || 0));
+      const rate = name === 'rate' ? (value === '' ? undefined : parseFloat(value) || undefined) : (currentItem.rate);
       
-      // Only calculate if rate is not empty and is a number
-      if (rate !== undefined && rate !== null && rate !== '') {
-        const numRate = parseFloat(rate.toString());
+      // Only calculate if rate has a value
+      if (rate !== undefined && rate !== null) {
+        const taxableAmount = Number(rate) * quantity;
+        const gstAmount = (taxableAmount * gstPercentage) / 100;
+    const cgst = gstPercentage > 0 ? gstAmount / 2 : 0;
+    const sgst = gstPercentage > 0 ? gstAmount / 2 : 0;
+        const total = taxableAmount + gstAmount;
         
-        // Fix TypeScript errors with proper type checking
-        const numQuantity = typeof quantity === 'string' ? 
-          (quantity === '' ? 1 : parseFloat(quantity) || 1) : 
-          (quantity || 1);
+        console.log("Updated calculations:", {
+          price, quantity, rate, gstPercentage, taxableAmount, cgst, sgst, total
+        });
         
-        const numGstPercentage = typeof gstPercentage === 'string' ? 
-          (gstPercentage === '' ? 0 : parseFloat(gstPercentage) || 0) : 
-          (gstPercentage || 0);
-        
-        if (!isNaN(numRate) && numRate > 0) {
-          const taxableAmount = numRate * numQuantity;
-          const gstAmount = (taxableAmount * numGstPercentage) / 100;
-          const cgst = numGstPercentage > 0 ? gstAmount / 2 : 0;
-          const sgst = numGstPercentage > 0 ? gstAmount / 2 : 0;
-          const total = taxableAmount + gstAmount;
-          
-          console.log("Updated calculations:", {
-            price, quantity, rate, gstPercentage, taxableAmount, cgst, sgst, total
-          });
-          
-          setCurrentItem(prev => ({
-            ...prev,
-            taxableAmount,
-            cgst,
-            sgst,
-            total
-          }));
-        }
-      } else {
-        // If rate is empty, clear calculated values
         setCurrentItem(prev => ({
           ...prev,
+      price,
+      quantity, 
+          rate,
+          gstPercentage,
+          taxableAmount,
+          cgst,
+          sgst,
+          total
+        }));
+      } else {
+        // If rate is not set, clear calculated values
+        setCurrentItem(prev => ({
+          ...prev,
+          price,
+          quantity,
+          gstPercentage,
           taxableAmount: 0,
           cgst: 0,
           sgst: 0,
@@ -767,7 +683,7 @@ const TransactionAdd: React.FC = () => {
     setGrandTotal(wholeNumberTotal);
   };
 
-  // Modify the handleSubmit function to handle both create and update
+  // Optimize the handleSubmit function with improved browser concurrency handling
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
       
@@ -791,12 +707,7 @@ const TransactionAdd: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Check if we're in edit mode
-      const urlParams = new URLSearchParams(window.location.search);
-      const editBillId = urlParams.get('edit');
-      const isEditMode = !!editBillId;
-      
-      // Prepare bill data
+      // First, create the bill immediately for better user experience
       const billData = {
         vendorId: selectedVendor.vendorId,
         vendorName: selectedVendor.name,
@@ -809,8 +720,7 @@ const TransactionAdd: React.FC = () => {
           rate: item.rate || 0,
           cgstPercentage: item.gstPercentage / 2,
           sgstPercentage: item.gstPercentage / 2,
-          amount: item.total,
-          transactionId: item.transactionId
+          amount: item.total
         })),
         subTotal: netTotal,
         totalCgst: sparePartItems.reduce((sum, item) => sum + item.cgst, 0),
@@ -820,34 +730,20 @@ const TransactionAdd: React.FC = () => {
         paid: paid
       };
       
-      let apiEndpoint = "/bills/create";
-      let successMessage = "Bill created successfully!";
-      let httpMethod = "post";
+      console.log("Saving bill first:", billData);
       
-      // If in edit mode, update the bill instead of creating a new one
-      if (isEditMode) {
-        apiEndpoint = `/bills/update/${editBillId}`;
-        successMessage = "Bill updated successfully!";
-        httpMethod = "put"; // Use PUT method for updates
-        
-        // Add the bill ID to the data using type assertion
-        (billData as any).billId = parseInt(editBillId);
-      }
-      
-      console.log(`${isEditMode ? 'Updating' : 'Saving'} bill:`, billData);
-      
-      // Call the API to save/update the bill
-      const billResponse = isEditMode 
-        ? await apiClient.put(apiEndpoint, billData)  // Use PUT for updates
-        : await apiClient.post(apiEndpoint, billData); // Use POST for creates
-        
+      // Call the API to save the bill
+      const billResponse = await apiClient.post("/bills/create", billData);
       console.log("Bill saved successfully:", billResponse.data);
       
       // Show success message
       setFeedback({
-        message: successMessage,
+        message: "Bill created successfully! Processing transactions in background...",
         severity: "success"
       });
+      
+      // Store bill ID for reference
+      const billId = billResponse.data?.data?.billId || billResponse.data?.billId;
       
       // Reset form
       resetForm();
@@ -863,9 +759,8 @@ const TransactionAdd: React.FC = () => {
       
     } catch (billError: any) {
       console.error("Error saving bill:", billError);
-      const isEditMode = window.location.search.includes('edit=');
       setFeedback({
-        message: `Failed to ${isEditMode ? 'update' : 'create'} bill: ${billError.response?.data?.message || "Unknown error"}`,
+        message: `Failed to create bill: ${billError.response?.data?.message || "Unknown error"}`,
         severity: "error"
       });
       setIsSubmitting(false);
@@ -1003,33 +898,31 @@ const TransactionAdd: React.FC = () => {
     );
   };
 
-  // Update the handleTableCellChange function to allow clearing values
   const handleTableCellChange = (id: number, field: keyof SparePartItem, value: string | number) => {
     setSparePartItems(prev => {
       const updatedItems = prev.map(item => {
         if (item.id === id) {
-          // Allow empty string values
-          const updatedItem = { ...item, [field]: value };
+          // Convert value to number if it's a string, but allow empty string
+          const numValue = typeof value === 'string' ? (value === '' ? '' : parseFloat(value) || 0) : value;
+          
+          // Create updated item with the new field value
+          const updatedItem = { ...item, [field]: numValue };
           
           // Recalculate values if rate or quantity changes
           if (field === 'rate' || field === 'quantity') {
-            const rate = field === 'rate' ? value : item.rate;
-            const quantity = field === 'quantity' ? value : item.quantity;
+            const rate = field === 'rate' ? numValue : item.rate;
+            const quantity = field === 'quantity' ? (numValue === '' ? 1 : Number(numValue)) : Number(item.quantity);
             
-            // Only calculate if rate is defined and not empty
-            if (rate !== undefined && rate !== null && rate !== '') {
-              // Calculate with proper number conversions
-              const numRate = rate === '' ? 0 : (typeof rate === 'string' ? parseFloat(rate) : rate) || 0;
-              const numQuantity = quantity === '' ? 1 : (typeof quantity === 'string' ? parseFloat(quantity) : quantity) || 1;
-              
+            // Only calculate if rate is defined and not empty string
+            if (rate !== undefined && rate !== '' && rate !== null) {
               // Calculate taxable amount (rate * quantity)
-              const taxableAmount = numRate * numQuantity;
+              const rateValue = typeof rate === 'string' ? parseFloat(rate) : Number(rate);
+              const taxableAmount = rateValue * quantity;
               
               // Calculate GST amounts
-              const numGstPercentage = typeof item.gstPercentage === 'string' ? parseFloat(item.gstPercentage) || 0 : (item.gstPercentage || 0);
-              const gstAmount = (taxableAmount * numGstPercentage) / 100;
-              const cgst = numGstPercentage > 0 ? gstAmount / 2 : 0;
-              const sgst = numGstPercentage > 0 ? gstAmount / 2 : 0;
+              const gstAmount = (taxableAmount * item.gstPercentage) / 100;
+              const cgst = item.gstPercentage > 0 ? gstAmount / 2 : 0;
+              const sgst = item.gstPercentage > 0 ? gstAmount / 2 : 0;
               
               // Calculate total (taxable + GST)
               const total = taxableAmount + gstAmount;
@@ -1065,39 +958,35 @@ const TransactionAdd: React.FC = () => {
                 }, 1000); // 1 second delay
               }
     
-              return {
-                ...updatedItem,
-                taxableAmount,
-                cgst,
-                sgst,
-                total
-              };
-            } else {
-              // If rate is undefined or empty, set calculated values to 0
-              return {
-                ...updatedItem,
-                taxableAmount: 0,
-                cgst: 0,
-                sgst: 0,
-                total: 0
-              };
-            }
+            return {
+              ...updatedItem,
+              taxableAmount,
+              cgst,
+              sgst,
+              total
+            };
+          } else {
+            // If rate is undefined, set calculated values to 0
+            return {
+              ...updatedItem,
+              taxableAmount: 0,
+              cgst: 0,
+              sgst: 0,
+              total: 0
+            };
           }
-          
-          // Return the updated item with the new field value
-          return item;
         }
         
-        // Return the original item unchanged
-        return item;
-      });
-      
-      // Recalculate totals after updating an item
-      calculateTotals(updatedItems);
-      
-      return updatedItems;
+        return updatedItem;
+      }
+      return item;
     });
-  };
+    
+    // Recalculate totals after updating an item
+    calculateTotals(updatedItems);
+    
+    return updatedItems;
+  });
   
   const updateTransactionQuantity = async (transactionId: number, item: SparePartItem) => {
     setIsUpdating(true);
@@ -1197,7 +1086,7 @@ const TransactionAdd: React.FC = () => {
       try {
         console.log("Deleting transaction ID:", transactionToDelete);
         
-        // Call the API to delete the transaction using the correct endpoint
+        // Call the API to delete the transaction
         const response = await apiClient.delete(
           `/sparePartTransactions/delete?transactionId=${transactionToDelete}`
         );
@@ -1985,25 +1874,39 @@ const TransactionAdd: React.FC = () => {
     };
   }, [sparePartItems, selectedItems, openFileSelector, handleRemoveSelected]);
 
-  // Remove the duplicatePartForTesting function
-  const duplicatePartForTesting = () => {};
+  // Remove the duplicatePartForTesting function completely
+  const duplicatePartForTesting = (part: SparePartItem, count: number) => {
+    if (!part || !part.partName) {
+      setFeedback({
+        message: "Please select a part to duplicate",
+        severity: "error"
+      });
+      return;
+    }
 
-  // Remove the testing dialog and related functionality
-  const [isTestingDialogOpen, setIsTestingDialogOpen] = useState(false);
-  const [testingCount, setTestingCount] = useState(80);
-  const [selectedPartForTesting, setSelectedPartForTesting] = useState<SparePartItem | null>(null);
-
-  // Replace the openTestingDialog function with an empty function
-  const openTestingDialog = () => {};
-
-  // Replace the handleTestingDuplicate function with an empty function
-  const handleTestingDuplicate = () => {};
-
-  // Remove the renderTestingButton function
-  const renderTestingButton = () => null;
-
-  // Replace the TestingDialogComponent with an empty component
-  const TestingDialogComponent = () => null;
+    const newItems: SparePartItem[] = [];
+    
+    // Create multiple copies of the part
+    for (let i = 0; i < count; i++) {
+      const newItem: SparePartItem = {
+        ...part,
+        id: sparePartItems.length + newItems.length + 1
+      };
+      newItems.push(newItem);
+    }
+    
+    // Add all new items to the list
+    setSparePartItems(prev => {
+      const updated = [...prev, ...newItems];
+      calculateTotals(updated);
+      return updated;
+    });
+    
+    setFeedback({
+      message: `Added ${count} copies of ${part.partName}`,
+      severity: "success"
+    });
+  };
 
   return (
     <Box
@@ -2332,7 +2235,7 @@ const TransactionAdd: React.FC = () => {
                   size="small"
                   name="rate"
               type="number"
-                  value={currentItem.rate === 0 ? '' : currentItem.rate || ''}
+                  value={currentItem.rate || ''}
                   onChange={handleItemChange}
                   placeholder="Rate/Item"
                   variant="outlined"
@@ -2360,7 +2263,7 @@ const TransactionAdd: React.FC = () => {
               size="small"
                   name="quantity"
                   type="number"
-                  value={currentItem.quantity === 0 ? '' : currentItem.quantity || ''}
+                  value={currentItem.quantity || ''}
                   onChange={handleItemChange}
                   inputProps={{ min: 1 }}
                   variant="outlined"
@@ -2506,7 +2409,7 @@ const TransactionAdd: React.FC = () => {
                       fullWidth
                       size="small"
                       type="number"
-                      value={item.rate === 0 ? '' : item.rate || ''}
+                      value={item.rate}
                       onChange={(e) => handleTableCellChange(item.id, 'rate', e.target.value)}
                       variant="outlined"
                       sx={{ 
@@ -2534,7 +2437,7 @@ const TransactionAdd: React.FC = () => {
                       fullWidth
                       size="small"
                       type="number"
-                      value={item.quantity === 0 ? '' : item.quantity || ''}
+                      value={item.quantity}
                       onChange={(e) => handleTableCellChange(item.id, 'quantity', e.target.value)}
                       variant="outlined"
                       sx={{ 
@@ -2641,7 +2544,7 @@ const TransactionAdd: React.FC = () => {
                 size="small"
                 type="number"
                 value={paid}
-                onChange={(e) => setPaid(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setPaid(e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
                 variant="outlined"
               />
             </Grid>
