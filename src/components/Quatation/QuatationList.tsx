@@ -101,10 +101,10 @@ export default function QuotationList() {
 
   const handleDelete = async (id: number) => {
     try {
-      setSelectedId(id);
-      setOpen(true);    
+    setSelectedId(id);
+    setOpen(true);    
       
-      if (open) {
+    if (open) {
         const response = await apiClient.delete(`/api/quotations/${id}`);
         if (response.status >= 200 && response.status < 300) {
           // Refresh the list after deletion
@@ -202,7 +202,7 @@ export default function QuotationList() {
               <Skeleton variant="rectangular" width="100%" height={400} />
             </Box>
           ) : (
-            <CustomizedDataGrid columns={columns} rows={filteredRows} />
+          <CustomizedDataGrid columns={columns} rows={filteredRows} />
           )}
         </Grid>
       </Grid>

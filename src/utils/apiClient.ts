@@ -1,478 +1,433 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import logger from './logger';
-import storageUtils from './storageUtils';
-import { cacheManager } from './performance';
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 
-const DEBUG_DISABLE_LOGOUT_ON_401 = false; 
-
-interface CachedAxiosResponse<T = any> extends AxiosResponse<T> {
-  cached?: boolean;
+// Advanced cache configuration
+interface CacheOptions {
+  ttl: number; // Time to live in milliseconds
+  staleWhileRevalidate?: boolean; // Enable SWR pattern
+  forceRefresh?: boolean; // Force refresh from server
+  cacheGroup?: string; // Group for batch invalidation
+  batchKey?: string; // Key for request batching
 }
 
-interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
-  __throttled?: boolean;
-  __throttleDelay?: number;
-  __retryCount?: number;
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  staleTimestamp: number; // When data becomes stale
+  promise?: Promise<any>; // For in-flight requests
+  etag?: string; // For conditional requests
 }
 
-declare module 'axios' {
-  interface InternalAxiosRequestConfig {
-    __throttled?: boolean;
-    __throttleDelay?: number;
-    __retryCount?: number;
+interface BatchRequestMap {
+  [key: string]: {
+    promise: Promise<any>;
+    resolve: (value: any) => void;
+    reject: (reason: any) => void;
+    requestIds: string[];
+    timer: NodeJS.Timeout;
   }
 }
 
+// Cache configuration constants
+const DEFAULT_CACHE_TTL = 5 * 60 * 1000; // 5 min
+const DEFAULT_STALE_TTL = 30 * 60 * 1000; // 30 min
+const BATCH_DELAY = 50; // ms to wait for batching similar requests
+
+// Advanced performance-optimized in-memory cache with LRU capabilities
+class OptimizedCache {
+  private cache: Map<string, CacheEntry> = new Map();
+  private cacheGroups: Map<string, Set<string>> = new Map();
+  private readonly maxSize: number;
+  private pendingRequests: Map<string, Promise<any>> = new Map();
+  private batchRequests: BatchRequestMap = {};
+  
+  constructor(maxSize = 100) {
+    this.maxSize = maxSize;
+  }
+  
+  // Get an item from cache with SWR support
+  get<T>(key: string): { data: T | null, stale: boolean, promise: Promise<T> | null } {
+    const entry = this.cache.get(key);
+    
+    if (!entry) {
+      return { data: null, stale: false, promise: null };
+    }
+    
+    const now = Date.now();
+    const stale = now > entry.staleTimestamp;
+    
+    return {
+      data: entry.data,
+      stale,
+      promise: entry.promise || null
+    };
+  }
+  
+  // Set an item in cache with proper TTL
+  set(key: string, data: any, options: Partial<CacheOptions> = {}): void {
+    const now = Date.now();
+    const ttl = options.ttl || DEFAULT_CACHE_TTL;
+    
+    // Check if we need to evict the oldest item
+    if (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) {
+        this.cache.delete(oldestKey);
+      }
+    }
+    
+    // Add to cache group if specified
+    if (options.cacheGroup) {
+      if (!this.cacheGroups.has(options.cacheGroup)) {
+        this.cacheGroups.set(options.cacheGroup, new Set());
+      }
+      this.cacheGroups.get(options.cacheGroup)?.add(key);
+    }
+    
+    // Store in cache
+    this.cache.set(key, {
+      data,
+      timestamp: now,
+      staleTimestamp: now + ttl,
+      etag: data.headers?.etag
+    });
+  }
+  
+  // Delete a specific cache entry
+  delete(key: string): boolean {
+    // Also remove from any groups
+    for (const [groupName, keys] of this.cacheGroups.entries()) {
+      if (keys.has(key)) {
+        keys.delete(key);
+        if (keys.size === 0) {
+          this.cacheGroups.delete(groupName);
+        }
+      }
+    }
+    
+    return this.cache.delete(key);
+  }
+  
+  // Clear entire cache or specific group
+  clear(cacheGroup?: string): void {
+    if (cacheGroup) {
+      const keys = this.cacheGroups.get(cacheGroup);
+      if (keys) {
+        for (const key of keys) {
+          this.cache.delete(key);
+        }
+        this.cacheGroups.delete(cacheGroup);
+      }
+    } else {
+      this.cache.clear();
+      this.cacheGroups.clear();
+    }
+  }
+  
+  // Check if we have a cached request
+  has(key: string): boolean {
+    return this.cache.has(key);
+  }
+  
+  // Set a pending request to avoid duplicates
+  setPending(key: string, promise: Promise<any>): void {
+    this.pendingRequests.set(key, promise);
+  }
+  
+  // Get a pending request
+  getPending(key: string): Promise<any> | undefined {
+    return this.pendingRequests.get(key);
+  }
+  
+  // Remove a pending request
+  removePending(key: string): boolean {
+    return this.pendingRequests.delete(key);
+  }
+  
+  // Add a request to batch
+  addToBatch(batchKey: string, requestId: string): Promise<any> {
+    return new Promise<any>((resolve, reject) => {
+      if (!this.batchRequests[batchKey]) {
+        // Create a new batch
+        const timer = setTimeout(() => {
+          // Time to execute the batch
+          this.executeBatch(batchKey);
+        }, BATCH_DELAY);
+        
+        this.batchRequests[batchKey] = {
+          promise: null as any,
+          resolve: null as any,
+          reject: null as any,
+          requestIds: [requestId],
+          timer
+        };
+        
+        this.batchRequests[batchKey].promise = new Promise((res, rej) => {
+          this.batchRequests[batchKey].resolve = res;
+          this.batchRequests[batchKey].reject = rej;
+        });
+      } else {
+        // Add to existing batch
+        this.batchRequests[batchKey].requestIds.push(requestId);
+      }
+      
+      // Return a promise that will resolve when the batch completes
+      this.batchRequests[batchKey].promise.then(
+        (results) => resolve(results[requestId]),
+        (error) => reject(error)
+      );
+    });
+  }
+  
+  // Execute a batch of requests
+  private executeBatch(batchKey: string): void {
+    // This would need to be implemented based on your API's batching support
+    // This is a placeholder for the actual implementation
+    // The server would need to support a batch endpoint
+  }
+}
+
+// Initialize the optimized cache
+const apiCache = new OptimizedCache(200);
+
+// Environment check for API base URL
 const API_BASE_URL = 'https://carauto01-production-8b0b.up.railway.app';
 // const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
 
+// API request cache system
 const CACHE_DURATION = 5 * 60 * 1000; 
-const apiCache: Record<string, { data: any; timestamp: number }> = {};
 
-const getCsrfToken = (): string | null => {
-  const token = document.cookie
-    .split('; ')
-    .find(row => row.startsWith('XSRF-TOKEN='))
-    ?.split('=')[1];
-  
-  return token || storageUtils.getItem('csrfToken');
-};
+// Create the advanced axios instance
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 15000,
+});
 
-const SENSITIVE_KEYS = [
-  'password', 'token', 'accessToken', 'refreshToken', 'authorization', 'auth', 
-  'secret', 'key', 'apiKey', 'pin', 'credential', 'ssn', 'social', 
-  'creditCard', 'credit', 'cvv', 'cvc', 'authorization', 'x-auth',
-  'jwt', 'id_token', 'access_token', 'x-api-key'
-];
+// Generate a cache key from request config
+function generateCacheKey(config: AxiosRequestConfig): string {
+  const { method, url, params, data } = config;
+  return `${method}_${url}_${JSON.stringify(params || {})}_${JSON.stringify(data || {})}`;
+}
 
-const sanitizeResponseData = (data: any): any => {
-  if (!data) return data;
-  
-  if (typeof data !== 'object') return data;
-  
-  if (Array.isArray(data)) {
-    return data.map(item => sanitizeResponseData(item));
-  }
-  
-  const sanitized = { ...data };
-  for (const key in sanitized) {
-    const isSensitive = SENSITIVE_KEYS.some(pattern => 
-      key.toLowerCase().includes(pattern.toLowerCase())
-    );
-    
-    if (isSensitive) {
-      if (typeof sanitized[key] === 'string') {
-        sanitized[key] = '********';
-      } else if (typeof sanitized[key] === 'number') {
-        sanitized[key] = 0;
-      } else {
-        sanitized[key] = '[REDACTED]';
-      }
-    } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
-      sanitized[key] = sanitizeResponseData(sanitized[key]);
-    }
-  }
-  
-  return sanitized;
-};
-
-const installResponseSanitizer = () => {
-  if (typeof window !== 'undefined') {
-   
-    const originalXHROpen = XMLHttpRequest.prototype.open;
-    const originalXHRSend = XMLHttpRequest.prototype.send;
-    
-    XMLHttpRequest.prototype.open = function(
-      method: string,
-      url: string | URL,
-      async: boolean = true,
-      username?: string | null,
-      password?: string | null
-    ): void {
-      Object.defineProperty(this, '_url', {
-        value: url,
-        writable: true,
-        configurable: true
-      });
-      
-      return originalXHROpen.call(this, method, url, async, username, password);
-    };
-    
-    XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null): void {
-      
-      this.addEventListener('readystatechange', function(this: XMLHttpRequest) {
-        if (this.readyState === 4) {
-          try {
-            const contentType = this.getResponseHeader('content-type');
-            if (this.responseType === 'json' || 
-                (contentType && contentType.includes('application/json'))) {
-              
-              const originalResponseGetter = Object.getOwnPropertyDescriptor(
-                XMLHttpRequest.prototype, 'response'
-              );
-              
-              if (originalResponseGetter) {
-                Object.defineProperty(this, 'response', {
-                  get: function(this: XMLHttpRequest) {
-                    try {
-                      const originalResponse = originalResponseGetter.get?.call(this);
-                      if (originalResponse) {
-                        return sanitizeResponseData(originalResponse);
-                      }
-                      return originalResponse;
-                    } catch (err) {
-                      logger.error('Error sanitizing XHR response:', err);
-                      return originalResponseGetter.get?.call(this);
-                    }
-                  }
-                });
-              }
-            }
-          } catch (err) {
-            logger.error('Error setting up XHR response sanitizer:', err);
-          }
-        }
-      });
-      
-      return originalXHRSend.call(this, body);
-    };
-    
-    const originalFetch = window.fetch;
-    
-    window.fetch = async function fetchOverride(
-      input: RequestInfo | URL,
-      init?: RequestInit
-    ): Promise<Response> {
-      const response: Response = await originalFetch.call(window, input, init);
-      
-      const clonedResponse = response.clone();
-      
-      const contentType = clonedResponse.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const originalJsonMethod = response.json;
-        response.json = async function(): Promise<any> {
-          const data = await originalJsonMethod.call(this);
-          return sanitizeResponseData(data);
-        };
-      }
-      
-      return response;
-    };
-    
-    logger.debug('Response sanitizer installed');
-  }
-};
-installResponseSanitizer();
-
-const createApiClient = (): AxiosInstance => {
-  const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
-  
-  const client = axios.create({
-    baseURL: apiBaseUrl,
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Accept-Encoding': 'gzip, deflate, br', // Support compression
-      'Connection': 'keep-alive', // Enable connection reuse
-      'X-HTTP-Version': 'HTTP/2.0', // Signal HTTP/2 support
-    },
-    timeout: 30000, // 30 seconds timeout
-    // Enable HTTP/2 multiplexing via adapter config
-    httpAgent: false, // Let Axios select appropriate agent
-    httpsAgent: false, // Let Axios select appropriate agent
-    decompress: true, // Enable automatic decompression
-    // Performance optimizations
-    maxContentLength: 10 * 1024 * 1024, // 10MB max content size
-    maxRedirects: 5,
-    validateStatus: (status) => status >= 200 && status < 500, // Handle 4xx errors in code
-  });
-
-  // Configure request batching and debouncing
-  const pendingRequests = new Map<string, Promise<any>>();
-  const requestTimestamps = new Map<string, number>();
-
-  // Request throttling configuration
-  const THROTTLE_INTERVAL = 50; // ms between requests to same endpoint
-  const MAX_CONCURRENT_REQUESTS = 6; // Typical browser connection limit
-  let activeRequests = 0;
-  let requestQueue: Array<() => void> = [];
-
-  // Set up request queuing to avoid overwhelming browser connection limits
-  const executeQueuedRequests = () => {
-    while (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT_REQUESTS) {
-      const nextRequest = requestQueue.shift();
-      if (nextRequest) {
-        activeRequests++;
-        nextRequest();
-      }
-    }
-  };
-
-  // Add request interceptor with HTTP/2 optimizations
-  client.interceptors.request.use(
-    (config) => {
-      logger.debug(`API Request: ${config.method?.toUpperCase()} ${config.url}`, 
-        config.params ? { params: config.params } : '');
-      
-      const token = storageUtils.getAuthToken();
-      if (token) {      
-        if (config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      }
-      
-      if (config.method?.toLowerCase() !== 'get') {
-        const csrfToken = getCsrfToken();
-        if (csrfToken && config.headers) {
-          config.headers['X-CSRF-Token'] = csrfToken;
-        }
-      }
-      
-      // Implement HTTP/2 request multiplexing optimization
-      const requestKey = `${config.method}:${config.url}:${JSON.stringify(config.params || {})}`;
-      
-      // Return from cache if available for GET requests
-      if (config.method?.toLowerCase() === 'get' && config.url && !config.params?.forceRefresh) {
-        const cacheKey = `${config.url}${JSON.stringify(config.params || {})}`;
-        const cachedResponse = apiCache[cacheKey];
-        
-        if (cachedResponse && Date.now() - cachedResponse.timestamp < CACHE_DURATION) {
-          config.adapter = () => {
-            return Promise.resolve({
-              data: cachedResponse.data,
-              status: 200,
-              statusText: 'OK',
-              headers: {
-                'x-cache': 'HIT',
-                'content-type': 'application/json'
-              },
-              config,
-              request: null,
-              cached: true
-            } as CachedAxiosResponse);
-          };
-        }
-        
-        // Check for in-flight requests to the same endpoint
-        const pendingRequest = pendingRequests.get(requestKey);
-        if (pendingRequest && !config.params?.bypassDeduplication) {
-          logger.debug(`Reusing in-flight request for ${requestKey}`);
-          config.adapter = () => pendingRequest.then(response => ({...response, cached: true}));
-        }
-      }
-      
-      // Implement request throttling for same endpoints
-      const lastRequestTime = requestTimestamps.get(requestKey) || 0;
-      const timeSinceLastRequest = Date.now() - lastRequestTime;
-      
-      // Cast config to our extended type
-      const extendedConfig = config as ExtendedAxiosRequestConfig;
-      
-      if (timeSinceLastRequest < THROTTLE_INTERVAL) {
-        // Throttle requests to same endpoint
-        const delay = THROTTLE_INTERVAL - timeSinceLastRequest;
-        extendedConfig.__throttled = true;
-        extendedConfig.__throttleDelay = delay;
-        
-        // Add artificial delay for throttled requests
-        const originalAdapter = config.adapter;
-        config.adapter = (axiosConfig) => {
-          return new Promise((resolve) => {
-            setTimeout(() => {
-              // Use the original adapter if available, or let Axios handle it
-              if (typeof originalAdapter === 'function') {
-                resolve(originalAdapter(axiosConfig));
-              } else {
-                // Remove the adapter and let Axios use the default one
-                const configWithDefaultAdapter = { ...axiosConfig };
-                delete configWithDefaultAdapter.adapter;
-                resolve(axios(configWithDefaultAdapter));
-              }
-            }, delay);
-          });
-        };
-      }
-      
-      // Update request timestamp
-      requestTimestamps.set(requestKey, Date.now());
-      
-      // Handle queue if we're at connection limit
-      if (activeRequests >= MAX_CONCURRENT_REQUESTS && !config.params?.priority) {
-        return new Promise((resolve) => {
-          requestQueue.push(() => resolve(config));
-        }) as any;
-      }
-      
-      // Increase active requests count for non-cached requests
-      if (!config.adapter) {
-        activeRequests++;
-      }
-      
+// Request interceptor for caching and deduplication
+apiClient.interceptors.request.use(
+  async (config) => {
+    // Skip caching for non-GET requests unless explicitly enabled
+    if (config.method !== 'get' && !config.headers?.['use-cache']) {
       return config;
-    },
-    (error) => {
-      logger.error('API Request Error:', error);
-      return Promise.reject(error);
     }
-  );
-
-  // Add response interceptor with compression detection
-  client.interceptors.response.use(
-    (response: CachedAxiosResponse) => {
-      // Track request completion to maintain connection limits
-      activeRequests = Math.max(0, activeRequests - 1);
-      executeQueuedRequests();
+    
+    // Extract cache options
+    const cacheOptionsStr = config.headers?.['cache-options'] as string;
+    const cacheOptions: CacheOptions = cacheOptionsStr 
+      ? JSON.parse(cacheOptionsStr)
+      : {} as CacheOptions;
+    
+    delete config.headers?.['cache-options']; // Clean up
+    
+    // Generate cache key
+    const cacheKey = generateCacheKey(config);
+    
+    // Check for batch request capability
+    if (cacheOptions.batchKey && config.method === 'get') {
+      const batchPromise = apiCache.addToBatch(
+        cacheOptions.batchKey, 
+        cacheKey
+      );
       
-      // Detect if response was compressed
-      const contentEncoding = response.headers['content-encoding'];
-      const wasCompressed = contentEncoding && 
-                           ['gzip', 'deflate', 'br'].includes(contentEncoding.toLowerCase());
-      
-      if (wasCompressed) {
-        logger.debug(`Received compressed response (${contentEncoding}) for ${response.config.url}`);
-      }
-      
-      // Cache GET responses that aren't already from cache
-      if (response.config.method?.toLowerCase() === 'get' && 
-          response.config.url && 
-          !response.config.params?.forceRefresh && 
-          !response.cached) {
-        const cacheKey = `${response.config.url}${JSON.stringify(response.config.params || {})}`;
-        
-        // Store the response in the cache
-        apiCache[cacheKey] = {
-          data: response.data,
-          timestamp: Date.now()
+      // Convert to a canceled request since batching will handle it
+      // This is a pattern to short-circuit Axios
+      return {
+        ...config,
+        adapter: () => batchPromise
+      };
+    }
+    
+    // Request deduplication - check if this exact request is already in-flight
+    const pendingRequest = apiCache.getPending(cacheKey);
+    if (pendingRequest) {
+      // Return the existing promise to avoid duplicate requests
+      return {
+        ...config,
+        adapter: () => pendingRequest
+      };
+    }
+    
+    // Check cache for this request
+    const { data: cachedData, stale } = apiCache.get(cacheKey);
+    
+    // Force refresh or no cached data available
+    if (cacheOptions.forceRefresh || !cachedData) {
+      return config;
+    }
+    
+    // We have valid, non-stale cached data
+    if (!stale) {
+      // Return cached data without making a new request
+      return {
+        ...config,
+        adapter: () => Promise.resolve({
+          data: cachedData,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+          request: {}
+        })
+      };
+    }
+    
+    // We have stale data and SWR is enabled
+    if (stale && cacheOptions.staleWhileRevalidate) {
+      // Use stale data but trigger background refresh
+      setTimeout(() => {
+        // Clone the config but force a refresh
+        const refreshConfig = {
+          ...config,
+          headers: {
+            ...config.headers,
+            'cache-control': 'no-cache'
+          }
         };
+        apiClient.request(refreshConfig).catch(console.error); // Silently refresh
+      }, 0);
+      
+      // Return the stale data immediately
+      return {
+        ...config,
+        adapter: () => Promise.resolve({
+          data: cachedData,
+          status: 200,
+          statusText: 'OK (stale)',
+          headers: { 'from-cache': 'true', 'stale-data': 'true' },
+          config,
+          request: {}
+        })
+      };
+    }
+    
+    // Add If-None-Match header for conditional requests if we have an ETag
+    if (cachedData && typeof cachedData === 'object' && 'etag' in cachedData && cachedData.etag) {
+      // For Axios types compatibility, type assertion is needed
+      // This is safe because we're just setting a header value on the existing object
+      const headers = config.headers || {};
+      headers['If-None-Match'] = cachedData.etag;
+      config.headers = headers as typeof config.headers;
+    }
+    
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-        // Also store in the global cache manager for better persistence
-        if (cacheManager && !response.config.params?.skipPersistentCache) {
-          cacheManager.set(cacheKey, response.data);
-        }
-      }
+// Response interceptor for caching
+apiClient.interceptors.response.use(
+  (response: AxiosResponse) => {
+    // Only cache GET requests by default
+    if (response.config.method === 'get' || response.config.headers?.['use-cache']) {
+      // Extract and parse cache options
+      const cacheOptionsStr = response.config.headers?.['cache-options'] as string;
+      const cacheOptions: CacheOptions = cacheOptionsStr 
+        ? JSON.parse(cacheOptionsStr) 
+        : {} as CacheOptions;
       
-      // Clear pending request
-      const requestKey = `${response.config.method}:${response.config.url}:${JSON.stringify(response.config.params || {})}`;
-      pendingRequests.delete(requestKey);
+      // Generate cache key
+      const cacheKey = generateCacheKey(response.config);
       
-      // Remove overly verbose response info from logs
-      const logResponse: Partial<CachedAxiosResponse> = {...response};
-      // Safe deletion by checking properties first
-      if ('request' in logResponse) {
-        delete logResponse.request;
-      }
-      if ('config' in logResponse) {
-        delete logResponse.config;
-      }
-      
-      logger.debug(`API Response (${response.status}): ${response.config.url}`, 
-        response.data ? { dataLength: JSON.stringify(response.data).length } : undefined);
-      
-      return response;
-    },
-    (error) => {
-      // Track request completion to maintain connection limits
-      activeRequests = Math.max(0, activeRequests - 1);
-      executeQueuedRequests();
-      
-      // Log detailed error info
-      logger.error('API Response Error:', {
-        url: error.config?.url,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message
+      // Cache the response
+      apiCache.set(cacheKey, response.data, {
+        ttl: cacheOptions.ttl || DEFAULT_CACHE_TTL,
+        cacheGroup: cacheOptions.cacheGroup
       });
       
-      // Handle authentication errors
-      if (error.response && error.response.status === 401) {
-        logger.warn('Received 401 Unauthorized - Token may be expired or invalid');
-        
-        // Optional redirect to login page
-        // window.location.href = '/signIn';
-      }
+      // Remove from pending requests
+      apiCache.removePending(cacheKey);
+    }
+    
+    return response;
+  },
+  (error: AxiosError) => {
+    // If we got a 304 Not Modified, return the cached data
+    if (error.response?.status === 304) {
+      const cacheKey = generateCacheKey(error.config!);
+      const { data } = apiCache.get(cacheKey);
       
-      // Handle server errors with exponential backoff
-      const extendedConfig = error.config as ExtendedAxiosRequestConfig;
-      if (error.response && error.response.status >= 500 && extendedConfig && !extendedConfig.__retryCount) {
-        extendedConfig.__retryCount = 1;
-        const retryDelay = 1000 * Math.pow(2, extendedConfig.__retryCount - 1);
-        
-        logger.warn(`Retrying request to ${extendedConfig.url} after ${retryDelay}ms`);
-        
-        return new Promise(resolve => {
-          setTimeout(() => {
-            resolve(client(extendedConfig));
-          }, retryDelay);
+      if (data) {
+        return Promise.resolve({
+          data,
+          status: 200,
+          statusText: 'OK (cached)',
+          headers: { 'from-cache': 'true' },
+          config: error.config!,
+          request: error.request
         });
       }
-      
-      return Promise.reject(error);
     }
-  );
-
-  return client;
-};
-
-export const apiClient = createApiClient();
-
-export const forceRefresh = (url: string, params = {}) => {
-  return apiClient.get(url, { 
-    params: { 
-      ...params,
-      forceRefresh: true,
-      _t: Date.now() // Add timestamp to prevent browser caching
-    } 
-  });
-};
-
-export const clearCache = (url?: string, params = {}) => {
-  if (url) {
-    const cacheKey = `${url}${JSON.stringify(params || {})}`;
-    delete apiCache[cacheKey];
     
-    // Also clear from persistent cache
-    cacheManager.delete(cacheKey);
-  } else {
-    Object.keys(apiCache).forEach(key => {
-      delete apiCache[key];
-    });
-    
-    // Also clear persistent cache
-    cacheManager.clearAll();
-  }
-};
-
-export const graphqlClient = {
-  query: async <T = any>(
-    query: string, 
-    variables?: Record<string, any>, 
-    options?: Partial<AxiosRequestConfig>
-  ): Promise<T> => {
-    try {
-      const response = await apiClient.post('/graphql', {
-        query,
-        variables
-      }, {
-        ...options,
-        headers: {
-          ...options?.headers,
-          'Content-Type': 'application/json'
-        }
+    // Handle expired token error
+    if (error.response?.status === 401) {
+      // Get message from the response data
+      const responseData = error.response?.data as Record<string, any>;
+      const errorMessage = responseData?.message || 'Your session has expired. Please login again.';
+      
+      // Dispatch token expiration event
+      const event = new CustomEvent('token-expired', { 
+        detail: { message: errorMessage }
       });
-      
-      if (response.data.errors?.length) {
-        throw new Error(
-          `GraphQL Error: ${response.data.errors.map((e: any) => e.message).join(', ')}`
-        );
-      }
-      
-      return response.data.data as T;
-    } catch (error) {
-      logger.error('GraphQL Error:', error);
-      throw error;
+      document.dispatchEvent(event);
     }
+    
+    // Clean up any pending request
+    if (error.config) {
+      const cacheKey = generateCacheKey(error.config);
+      apiCache.removePending(cacheKey);
+    }
+    
+    return Promise.reject(error);
   }
-};
+);
 
-export default apiClient; 
+// Utility function to invalidate cache by group
+export function invalidateCache(cacheGroup?: string) {
+  apiCache.clear(cacheGroup);
+}
+
+// Utility function to pre-fetch and cache endpoints
+export async function prefetchEndpoints(endpoints: string[], cacheGroup?: string) {
+  const prefetchPromises = endpoints.map(endpoint => 
+    apiClient.get(endpoint, {
+      headers: {
+        'cache-options': JSON.stringify({
+          ttl: DEFAULT_CACHE_TTL,
+          cacheGroup
+        })
+      }
+    }).catch(err => {
+      console.warn(`Failed to prefetch ${endpoint}:`, err);
+      return null;
+    })
+  );
+  
+  return Promise.all(prefetchPromises);
+}
+
+// Utility function to batch requests
+export async function batchRequests<T>(requests: Array<{endpoint: string, params?: any}>, batchKey: string): Promise<T[]> {
+  const batchPromises = requests.map(({ endpoint, params }) => 
+    apiClient.get(endpoint, {
+      params,
+      headers: {
+        'cache-options': JSON.stringify({
+          batchKey,
+          ttl: DEFAULT_CACHE_TTL
+        })
+      }
+    })
+  );
+  
+  return Promise.all(batchPromises).then(responses => responses.map(r => r.data));
+}
+
+export default apiClient;

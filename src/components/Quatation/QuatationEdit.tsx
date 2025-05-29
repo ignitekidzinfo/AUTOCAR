@@ -172,7 +172,7 @@ const QuotationEdit: React.FC = () => {
                 <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
                     <Typography variant="h5" fontWeight="500">
                         Edit Quotation #{formData.quotationNumber}
-                    </Typography>
+                </Typography>
                     <Box>
                         <Button 
                             variant="outlined" 
@@ -189,16 +189,16 @@ const QuotationEdit: React.FC = () => {
                             disabled={saving}
                         >
                             {saving ? 'Saving...' : 'Save Changes'}
-                        </Button>
+                </Button>
                     </Box>
-                </Stack>
+            </Stack>
 
                 <Divider sx={{ mb: 3 }} />
 
                 <Box component="form" onSubmit={handleSubmit} noValidate>
-                    <Grid container spacing={3}>
+                <Grid container spacing={3}>
                         {/* Field order matches the image: Quotation Date, Vehicle No, Customer Name, Mobile No, Email ID, Address */}
-                        <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={6}>
                             <TextField
                                 fullWidth
                                 id="quotationDate"
@@ -206,10 +206,10 @@ const QuotationEdit: React.FC = () => {
                                 label="Quotation Date*"
                                 type="date"
                                 value={formData.quotationDate || ""}
-                                onChange={handleChange}
-                                required
+                            onChange={handleChange}
+                            required
                                 variant="outlined"
-                                size="small"
+                            size="small"
                                 InputLabelProps={{ shrink: true }}
                                 InputProps={{
                                     endAdornment: (
@@ -220,52 +220,52 @@ const QuotationEdit: React.FC = () => {
                                         </InputAdornment>
                                     ),
                                 }}
-                            />
-                        </Grid>
+                        />
+                    </Grid>
                         
-                        <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={6}>
                             <TextField
                                 fullWidth
                                 id="vehicleNumber"
                                 name="vehicleNumber"
                                 label="Vehicle No*"
                                 value={formData.vehicleNumber || ""}
-                                onChange={handleChange}
-                                required
+                            onChange={handleChange}
+                            required
                                 variant="outlined"
-                                size="small"
-                            />
-                        </Grid>
+                            size="small"
+                        />
+                    </Grid>
                         
-                        <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={6}>
                             <TextField
                                 fullWidth
                                 id="customerName"
                                 name="customerName"
                                 label="Customer Name*"
                                 value={formData.customerName || ""}
-                                onChange={handleChange}
-                                required
+                            onChange={handleChange}
+                            required
                                 variant="outlined"
-                                size="small"
-                            />
-                        </Grid>
+                            size="small"
+                        />
+                    </Grid>
                         
-                        <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={6}>
                             <TextField
                                 fullWidth
                                 id="customerMobile"
                                 name="customerMobile"
                                 label="Mobile No*"
                                 value={formData.customerMobile || ""}
-                                onChange={handleChange}
-                                required
+                            onChange={handleChange}
+                            required
                                 variant="outlined"
-                                size="small"
-                            />
-                        </Grid>
+                            size="small"
+                        />
+                    </Grid>
                         
-                        <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={6}>
                             <TextField
                                 fullWidth
                                 id="customerEmail"
@@ -273,11 +273,11 @@ const QuotationEdit: React.FC = () => {
                                 label="Email Id"
                                 type="email"
                                 value={formData.customerEmail || ""}
-                                onChange={handleChange}
+                            onChange={handleChange}
                                 variant="outlined"
-                                size="small"
-                            />
-                        </Grid>
+                            size="small"
+                        />
+                    </Grid>
                         
                         <Grid item xs={12}>
                             <TextField
@@ -286,14 +286,14 @@ const QuotationEdit: React.FC = () => {
                                 name="customerAddress"
                                 label="Customer Address*"
                                 value={formData.customerAddress || ""}
-                                onChange={handleChange}
-                                required
+                            onChange={handleChange}
+                            required
                                 variant="outlined"
-                                size="small"
+                            size="small"
                                 multiline
                                 rows={2}
-                            />
-                        </Grid>
+                        />
+                    </Grid>
                     </Grid>
                 </Box>
             </Paper>
@@ -303,7 +303,7 @@ const QuotationEdit: React.FC = () => {
                 autoHideDuration={6000} 
                 onClose={() => setError(null)}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
+>
                 <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
                     {error}
                 </Alert>
