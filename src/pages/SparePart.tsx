@@ -58,16 +58,37 @@ function SparePart() {
 
   // Add a separate debug function for search results
   const processSearchResults = (data: any) => {
+    // Enhanced filtering function 
+    const filterNonDeleted = (items: any[]) => {
+      if (!items || !Array.isArray(items)) return [];
+      
+      // Ensure we're consistently filtering out deleted items
+      return items.filter((part: any) => {
+        // Check various possible deletion flags that might exist
+        const isDeleted = 
+          part.isDeleted === true || 
+          part.deleted === true || 
+          part.status === "DELETED" || 
+          part.status === "INACTIVE";
+          
+        return !isDeleted;
+      });
+    };
     
+    console.log("Processing search results:", data);
+    
+    // Handle different response formats consistently
     if (data && Array.isArray(data.content)) {
-      return data.content.filter((part: any) => part.isDeleted !== true);
+      return filterNonDeleted(data.content);
     } 
     else if (data && Array.isArray(data.list)) {
-      return data.list.filter((part: any) => part.isDeleted !== true);
+      return filterNonDeleted(data.list);
     }
     else if (data && Array.isArray(data)) {
-      return data.filter((part: any) => part.isDeleted !== true);
+      return filterNonDeleted(data);
     }
+    
+    console.log("No valid data format found in response");
     return [];
   };
 
@@ -84,6 +105,7 @@ function SparePart() {
       let url = "";
       const isSearchQuery = searchQuery.trim().length > 0;
       
+      // Ensure the includeDeleted=false parameter is always included and correct
       if (isSearchQuery) {
         url = `/Filter/searchBarFilter?searchBarInput=${encodeURIComponent(
           searchQuery
@@ -92,11 +114,24 @@ function SparePart() {
         url = `/sparePartManagement/getAll?page=${page}&size=${size}&includeDeleted=false`;
       }
 
+      // Add a timestamp parameter to prevent caching
+      url += `&_t=${Date.now()}`;
+
       try {
-        const response = await apiClient.get(url);
+        console.log("Fetching spare parts from URL:", url);
+        const response = await apiClient.get(url, {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        });
        
+        console.log("Raw response data:", response.data);
+        
         // Process the results based on the response format
         const processedParts = processSearchResults(response.data);
+        console.log("Processed parts:", processedParts);
         
         setSpareParts(processedParts);
         
