@@ -165,7 +165,7 @@ const QuotationPDFGeneration: FC = () => {
   const [generating, setGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const invoiceRef = useRef<HTMLDivElement>(null);
+  const invoiceRef = useRef<HTMLDivElement>(null); 
 
   // Add print styles when component mounts
   useEffect(() => {
@@ -193,7 +193,7 @@ const QuotationPDFGeneration: FC = () => {
 
     fetchQuotation();
   }, [id]);
-
+  
   // Auto-generate PDF when data is loaded
   useEffect(() => {
     if (quotation && !generating && invoiceRef.current) {
@@ -218,13 +218,13 @@ const QuotationPDFGeneration: FC = () => {
     };
 
     const computeItemTotal = (item: PartLine | LabourLine) => {
-      const quantity = Number(item.quantity) || 0;
-      const unitPrice = Number(item.unitPrice) || 0;
-      const discountPercent = Number(item.discountPercent) || 0;
+        const quantity = Number(item.quantity) || 0;
+        const unitPrice = Number(item.unitPrice) || 0;
+        const discountPercent = Number(item.discountPercent) || 0;
 
-      const baseAmount = quantity * unitPrice;
-      const discount = (baseAmount * discountPercent) / 100;
-      const taxableAmount = baseAmount - discount;
+        const baseAmount = quantity * unitPrice;
+        const discount = (baseAmount * discountPercent) / 100;
+        const taxableAmount = baseAmount - discount;
 
       return { total: taxableAmount, discount, baseAmount };
     };
@@ -267,17 +267,17 @@ const QuotationPDFGeneration: FC = () => {
       const canvas = await html2canvas(invoiceRef.current, options as any);
       const imgData = canvas.toDataURL("image/png", 0.7); // Compress image
 
-      const pageWidth = 210;
-      const pageHeight = 297;
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const pageWidth = 210; 
+    const pageHeight = 297; 
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width; 
       const scaleFactor = imgHeight > pageHeight ? pageHeight / imgHeight : 1;
       const finalHeight = imgHeight * scaleFactor;
 
-      const pdf = new jsPDF({
+    const pdf = new jsPDF({
         orientation: "portrait",
-        unit: "mm",
-        format: "a4",
+      unit: "mm",
+      format: "a4",
         compress: true,
       });
       
@@ -350,169 +350,169 @@ const QuotationPDFGeneration: FC = () => {
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <div
-        ref={invoiceRef}
-        id="invoice-container"
+    <div
+      ref={invoiceRef}
+       id="invoice-container"
         className="print-content"
-        style={{
-          width: '100%',
+      style={{
+        width: '100%',
           minHeight: 'auto',
-          margin: '0 auto',
-          padding: '5mm',
-          fontFamily: 'Arial, sans-serif',
-          fontSize: '0.6rem',
-          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
-          color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+        margin: '0 auto',
+        padding: '5mm',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '0.6rem',
+        backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
+        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
           pageBreakAfter: 'avoid',
           pageBreakInside: 'avoid',
-        }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody>
-            <tr>
-              <td
-                style={{
-                  border: '1px solid #000',
-                  padding: '6px',
-                  textAlign: 'center',
-                  verticalAlign: 'top',
-                  width: '70%',
-                }}>
-                <h2 style={{ margin: 0, fontWeight: 'bold' }}>AUTO CAR CARE POINT</h2>
-                <p style={{ margin: 0 }}>
-                  Buvasaheb Nagar, Shingnapur Road, Kolki, Tal.Phaltan(415523), Dist.Satara.
-                </p>
-                <p style={{ margin: 0 }}>
-                  Ph : 9595054555 / 7758817766   Email : autocarcarepoint@gmail.com
-                </p>
-                <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}>GSTIN : 27GLYPS9891C1ZV</p>
-              </td>
-              <td
-                style={{
-                  border: '1px solid #000',
-                  padding: '6px',
-                  textAlign: 'center',
-                  verticalAlign: 'middle',
-                  width: '30%',
-                }}
-              >
-                <strong style={{ fontSize: '1.2rem' }}>QUOTATION</strong>
-              </td>
-            </tr>
-            <tr>
-              <td colSpan={2} style={{ padding: '0' }}>
-                <div style={{ display: 'flex', width: '100%' }}>
-                  <div style={{ width: '50%', border: '1px solid #000', padding: '6px', fontWeight: 'bold' }}>
-                    CUSTOMER DETAILS
-                  </div>
-                  <div style={{ width: '50%', border: '1px solid #000', padding: '6px', fontWeight: 'bold' }}>
-                    QUOTATION DETAILS
-                  </div>
-                </div>
-              </td>
-            </tr>
+      }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <tbody>
+          <tr>
+            <td
+              style={{
+                border: '1px solid #000',
+                padding: '6px',
+                textAlign: 'center',
+                verticalAlign: 'top',
+                width: '70%',
+              }}>
+              <h2 style={{ margin: 0, fontWeight: 'bold' }}>AUTO CAR CARE POINT</h2>
+              <p style={{ margin: 0 }}>
+                Buvasaheb Nagar, Shingnapur Road, Kolki, Tal.Phaltan(415523), Dist.Satara.
+              </p>
+              <p style={{ margin: 0 }}>
+                Ph : 9595054555 / 7758817766   Email : autocarcarepoint@gmail.com
+              </p>
+              <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}>GSTIN : 27GLYPS9891C1ZV</p>
+            </td>
+            <td
+              style={{
+                border: '1px solid #000',
+                padding: '6px',
+                textAlign: 'center',
+                verticalAlign: 'middle',
+                width: '30%',
+              }}
+            >
+              <strong style={{ fontSize: '1.2rem' }}>QUOTATION</strong>
+            </td>
+          </tr>
+         <tr>
+  <td colSpan={2} style={{ padding: '0' }}>
+    <div style={{ display: 'flex', width: '100%' }}>
+      <div style={{ width: '50%', border: '1px solid #000', padding: '6px', fontWeight: 'bold' }}>
+        CUSTOMER DETAILS
+      </div>
+      <div style={{ width: '50%', border: '1px solid #000', padding: '6px', fontWeight: 'bold' }}>
+        QUOTATION DETAILS
+      </div>
+    </div>
+  </td>
+</tr>
 
-            <tr>
+           <tr>
               <td colSpan={2} style={{ padding: '0' }}>
-                <div style={{ display: 'flex', width: '100%' }}>
-                  <div style={{ width: '50%', border: '1px solid #000', padding: '6px', }}>
-                    <p style={{ margin: 0 }}>Name: {quotation.customerName || "NA"}</p>
-                    <p style={{ margin: 0 }}>Address: {quotation.customerAddress || "NA"}</p>
-                    <p style={{ margin: 0 }}>Mobile: {quotation.customerMobile || "NA"}</p>
-                    <p style={{ margin: 0 }}>Email: {quotation.customerEmail || "NA"}</p>
-                  </div>
-                  <div style={{ width: '50%', border: '1px solid #000', padding: '6px',}}>
+               <div style={{ display: 'flex', width: '100%' }}>
+               <div style={{ width: '50%', border: '1px solid #000', padding: '6px', }}>
+              <p style={{ margin: 0 }}>Name: {quotation.customerName || "NA"}</p>
+              <p style={{ margin: 0 }}>Address: {quotation.customerAddress || "NA"}</p>
+              <p style={{ margin: 0 }}>Mobile: {quotation.customerMobile || "NA"}</p>
+              <p style={{ margin: 0 }}>Email: {quotation.customerEmail || "NA"}</p>
+              </div>
+              <div style={{ width: '50%', border: '1px solid #000', padding: '6px',}}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
-                      <div>
-                        <p style={{ margin: 0, textAlign: 'left' }}>
-                          Quotation No : {quotation.quotationNumber || "NA"}
-                        </p>
-                        <p style={{ margin: 0, textAlign: 'left' }}>
-                          Quotation Date : {quotation.quotationDate || "NA"}
-                        </p>
-                        <p style={{ margin: 0, textAlign: 'left' }}>
-                          Vehicle No : {quotation.vehicleNumber || "NA"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </td>
-            </tr>
+              <div>
+              <p style={{ margin: 0, textAlign: 'left' }}>
+              Quotation No : {quotation.quotationNumber || "NA"}
+              </p>
+              <p style={{ margin: 0, textAlign: 'left' }}>
+              Quotation Date : {quotation.quotationDate || "NA"}
+              </p>
+              <p style={{ margin: 0, textAlign: 'left' }}>
+              Vehicle No : {quotation.vehicleNumber || "NA"}
+              </p>
+              </div>
+              </div>
+              </div>
+              </div>
+            </td>
+          </tr> 
 
-            <tr>
-              <td colSpan={2} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center' }}>
-                <strong>SPARES / ITEMS</strong>
-              </td>
-            </tr>
+          <tr>
+            <td colSpan={2} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center' }}>
+              <strong>SPARES / ITEMS</strong>
+            </td>
+          </tr>
 
-            <tr>
-              <td colSpan={2} style={{ padding: 0, border: '1px solid #000' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
+          <tr>
+            <td colSpan={2} style={{ padding: 0, border: '1px solid #000' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+          <tr>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
-                        S.No
-                      </td>
+            S.No
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
-                        Particulars Of Parts
-                      </td>
+            Particulars Of Parts
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
-                        Qty
-                      </td>
+            Qty
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
                         Rate
-                      </td>
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
                         Disc%
-                      </td>
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
                         Amount
-                      </td>
-                    </tr>
-                  </thead>
-                  <tbody>
+          </td>
+        </tr>
+                </thead>
+                <tbody>
                     {quotation.partLines && quotation.partLines.map((part, index) => (
                       <tr key={`part-${part.id || index}`}>
                         <td style={{ border: '1px solid grey', textAlign: 'center', padding: '4px' }}>
@@ -535,85 +535,85 @@ const QuotationPDFGeneration: FC = () => {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </td>
-            </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
 
-            <tr>
-              <td colSpan={2} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center' }}>
+<tr>
+            <td colSpan={2} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center' }}>
                 <strong>LABOUR CHARGES</strong>
-              </td>
-            </tr>
+            </td>
+          </tr>
 
-            <tr>
-              <td colSpan={2} style={{ padding: 0, border: '1px solid #000' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
+          <tr>
+            <td colSpan={2} style={{ padding: 0, border: '1px solid #000' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+          <tr>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
-                        S.No
-                      </td>
+            S.No
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
                         Description
-                      </td>
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
-                        Qty
-                      </td>
+            Qty
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
                         Rate
-                      </td>
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
                         Disc%
-                      </td>
+          </td>
                       <td style={{
-                        border: '1px solid grey',
-                        textAlign: 'center',
-                        padding: '8px',
-                        fontWeight: 'bold',
-                        backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
-                        color: theme.palette.mode === 'dark' ? '#fff' : '#000',
+              border: '1px solid grey',
+              textAlign: 'center',
+              padding: '8px',
+              fontWeight: 'bold',
+              backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#f5f5f5',
+              color: theme.palette.mode === 'dark' ? '#fff' : '#000',
                       }}>
-                        Amount
-                      </td>
-                    </tr>
-                  </thead>
-                  <tbody>
+           Amount
+          </td>
+        </tr>
+                </thead>
+                <tbody>
                     {quotation.labourLines && quotation.labourLines.map((labour, index) => (
                       <tr key={`labour-${labour.id || index}`}>
                         <td style={{ border: '1px solid grey', textAlign: 'center', padding: '4px' }}>
@@ -624,24 +624,24 @@ const QuotationPDFGeneration: FC = () => {
                         </td>
                         <td style={{ border: '1px solid grey', textAlign: 'center', padding: '4px' }}>
                           {labour.quantity}
-                        </td>
+                    </td>
                         <td style={{ border: '1px solid grey', textAlign: 'right', padding: '4px' }}>
                           {labour.unitPrice.toFixed(2)}
-                        </td>
+                    </td>
                         <td style={{ border: '1px solid grey', textAlign: 'center', padding: '4px' }}>
                           {labour.discountPercent}%
-                        </td>
+                    </td>
                         <td style={{ border: '1px solid grey', textAlign: 'right', padding: '4px' }}>
                           {labour.finalAmount.toFixed(2)}
-                        </td>
-                      </tr>
+                    </td>
+                  </tr> 
                     ))}
                   </tbody>
-                </table>
-              </td>
-            </tr>
+              </table>
+            </td>
+          </tr>
 
-            <tr>
+          <tr>
               <td colSpan={2} style={{ padding: 0 }}>
                 <div style={{ display: 'flex', width: '100%' }}>
                   <div style={{ width: '60%', border: '1px solid #000', padding: '6px' }}>
@@ -658,9 +658,9 @@ const QuotationPDFGeneration: FC = () => {
                     </ol>
                   </div>
                   <div style={{ width: '40%', border: '1px solid #000', padding: '6px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <tbody>
-                        <tr>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  <tr>
                           <td style={{ padding: '4px 0', textAlign: 'left' }}>Parts Subtotal:</td>
                           <td style={{ padding: '4px 0', textAlign: 'right' }}>₹ {totals.partsSubtotal.toFixed(2)}</td>
                         </tr>
@@ -671,22 +671,22 @@ const QuotationPDFGeneration: FC = () => {
                         <tr>
                           <td style={{ padding: '4px 0', textAlign: 'left', fontWeight: 'bold' }}>Total Amount:</td>
                           <td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 'bold' }}>₹ {totals.totalAmount.toFixed(2)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  </tr>
+                </tbody>
+              </table>
                   </div>
                 </div>
-              </td>
-            </tr>
+            </td>
+          </tr>
 
-            <tr>
+          <tr>
               <td colSpan={2} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center' }}>
                 <p style={{ margin: '0 0 30px 0' }}>For AUTO CAR CARE POINT</p>
                 <p style={{ margin: 0 }}>Authorized Signatory</p>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
       </div>
 
       <Box display="flex" justifyContent="center" mt={4} className="no-print">

@@ -41,6 +41,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SortIcon from '@mui/icons-material/Sort';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useNavigate } from 'react-router-dom';
 import apiClient from 'utils/apiClient';
 
@@ -101,6 +102,7 @@ const UserPartList: React.FC = () => {
   const lastElementRef = useRef<HTMLDivElement>(null);
   const retryCountRef = useRef<number>(0);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Delete confirmation dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
@@ -110,6 +112,9 @@ const UserPartList: React.FC = () => {
 
   // Add state for sorting
   const [isSorted, setIsSorted] = useState<boolean>(false);
+
+  // Add state to track deleted IDs at the top with other state declarations
+  const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
 
   // Handle resize events for responsive layout
   useEffect(() => {
@@ -135,6 +140,9 @@ const UserPartList: React.FC = () => {
     return () => {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
+      }
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
       }
       if (observerRef.current) {
         observerRef.current.disconnect();
@@ -162,6 +170,12 @@ const UserPartList: React.FC = () => {
       return;
     }
     
+    // Clear any pending fetch timeouts
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+      fetchTimeoutRef.current = null;
+    }
+    
     // Set loading state
     setLoading(true);
     
@@ -171,9 +185,18 @@ const UserPartList: React.FC = () => {
     try {
       console.log(`Fetching page ${pageNumber} with size ${PAGE_SIZE}`);
       
-      // Make API call
+      // Make API call with cache busting
       const response = await apiClient.get<PaginatedResponse<UserPart>>('/userParts/getAll', {
-        params: { page: pageNumber, size: PAGE_SIZE },
+        params: { 
+          page: pageNumber, 
+          size: PAGE_SIZE,
+          _t: Date.now() // Add timestamp to force fresh data
+        },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
         timeout: 30000,
       });
       
@@ -185,17 +208,22 @@ const UserPartList: React.FC = () => {
       // Format received data
       const formattedRows = content.map(formatPartData);
       
+      // Filter out any previously deleted items
+      const filteredRows = formattedRows.filter(row => !deletedIds.has(row.id));
+      
+      console.log(`Filtered out ${formattedRows.length - filteredRows.length} deleted items`);
+      
       // Update pagination info
-      setTotalElements(totalElements);
+      setTotalElements(totalElements - (formattedRows.length - filteredRows.length));
       setTotalPages(totalPages);
       setPage(currentPage);
       
-      // Always replace all rows
-      setRows(formattedRows);
+      // Always replace all rows with filtered list
+      setRows(filteredRows);
       
       // Calculate low stock items
-      const lowStock = formattedRows.filter(item => Number(item.quantity) < LOW_STOCK_THRESHOLD).length;
-        setLowStockCount(lowStock);
+      const lowStock = filteredRows.filter(item => Number(item.quantity) < LOW_STOCK_THRESHOLD).length;
+      setLowStockCount(lowStock);
       
       // Clear error state
       setError(null);
@@ -216,7 +244,7 @@ const UserPartList: React.FC = () => {
       loadingRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [deletedIds]);
 
   // Add a new function to handle page changes
   const handlePageChange = useCallback((event: React.ChangeEvent<unknown>, value: number) => {
@@ -224,10 +252,28 @@ const UserPartList: React.FC = () => {
     fetchUserPartsPage(value - 1);
   }, [fetchUserPartsPage]);
 
-  // Initial load - page 0
+  // Fix the initial load effect to prevent recursive updates
   useEffect(() => {
+    if (!initialLoad) return;
+
+    // Load any previously deleted IDs from localStorage
+    try {
+      const storedDeletedIds = localStorage.getItem('deletedPartIds');
+      if (storedDeletedIds) {
+        const parsedIds = JSON.parse(storedDeletedIds);
+        if (Array.isArray(parsedIds) && parsedIds.length > 0) {
+          setDeletedIds(new Set(parsedIds));
+          console.log(`Loaded ${parsedIds.length} previously deleted IDs from localStorage`);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load deleted IDs from localStorage:', e);
+    }
+
+    // Only fetch on initial mount
     fetchUserPartsPage(0);
-  }, [fetchUserPartsPage]);
+    setInitialLoad(false);
+  }, [initialLoad, fetchUserPartsPage]);
 
   // Handle search functionality
   const handleSearch = useCallback(async (searchTerm: string) => {
@@ -342,9 +388,25 @@ const UserPartList: React.FC = () => {
     setDeleteLoading(true);
     
     try {
-      await apiClient.delete(`/sparePartManagement/delete/${deleteItemId}`);
+      await apiClient.delete(`/userParts/delete/${deleteItemId}`);
       
-      // Remove the item from the list
+      // Add to deleted IDs set to prevent reappearing
+      setDeletedIds(prev => {
+        const newSet = new Set(prev);
+        newSet.add(deleteItemId);
+        return newSet;
+      });
+      
+      // Store in localStorage to persist across page refreshes
+      try {
+        const existingDeletedIds = JSON.parse(localStorage.getItem('deletedPartIds') || '[]');
+        existingDeletedIds.push(deleteItemId);
+        localStorage.setItem('deletedPartIds', JSON.stringify([...new Set(existingDeletedIds)]));
+      } catch (e) {
+        console.error('Failed to store deleted IDs in localStorage:', e);
+      }
+      
+      // Remove the item from the list without refetching
       setRows(rows.filter(row => row.id !== deleteItemId));
       
       // Show success message
@@ -360,6 +422,17 @@ const UserPartList: React.FC = () => {
       
       setLowStockCount(updatedLowStock);
       
+      // Clear any pending fetch timeouts
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+      
+      // Schedule a refresh with a delay, storing the timeout reference
+      fetchTimeoutRef.current = setTimeout(() => {
+        fetchUserPartsPage(page);
+        fetchTimeoutRef.current = null;
+      }, 1000);
+      
     } catch (err: any) {
       console.error("Error deleting part:", err);
       
@@ -372,6 +445,12 @@ const UserPartList: React.FC = () => {
             break;
           case 404:
             errorMessage = 'Part not found. It may have been already deleted.';
+            // Add to deleted IDs to prevent showing in UI
+            setDeletedIds(prev => {
+              const newSet = new Set(prev);
+              newSet.add(deleteItemId);
+              return newSet;
+            });
             break;
           case 500:
             errorMessage = 'Server error. Please try again later.';
@@ -766,6 +845,20 @@ const UserPartList: React.FC = () => {
     return errorMessage;
   };
 
+  // Add a manual refresh function
+  const handleRefresh = () => {
+    setLoading(true);
+    fetchUserPartsPage(page);
+  };
+
+  // Add function to clear deleted IDs
+  const clearDeletedItemsFilter = () => {
+    setDeletedIds(new Set());
+    localStorage.removeItem('deletedPartIds');
+    setDeleteSuccess("Filter cleared. Refreshing data...");
+    fetchUserPartsPage(page);
+  };
+
   return (
     <Box
       sx={{
@@ -877,6 +970,31 @@ const UserPartList: React.FC = () => {
                     <Box sx={{ display: 'flex', gap: 1 }}>
                       <Button 
                         variant="outlined" 
+                        color="primary"
+                        size={isMobile ? "small" : "medium"}
+                        startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                        onClick={handleRefresh}
+                        disabled={loading}
+                        sx={{ borderRadius: 1.5 }}
+                      >
+                        {loading ? "Refreshing..." : "Refresh"}
+                      </Button>
+                      
+                      {deletedIds.size > 0 && (
+                        <Button 
+                          variant="outlined" 
+                          color="secondary"
+                          size={isMobile ? "small" : "medium"}
+                          onClick={clearDeletedItemsFilter}
+                          disabled={loading}
+                          sx={{ borderRadius: 1.5 }}
+                        >
+                          Clear Filter ({deletedIds.size})
+                        </Button>
+                      )}
+                      
+                      <Button 
+                        variant="outlined" 
                         size={isMobile ? "small" : "medium"}
                         startIcon={<SortIcon />}
                         onClick={handleSortByQuantity}
@@ -963,9 +1081,22 @@ const UserPartList: React.FC = () => {
           >
             {/* Error message */}
             {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
-              </Alert>
+              <Box
+                sx={{
+                  width: '100%',
+                  mb: 2,
+                  p: 1.5,
+                  borderRadius: 1,
+                  backgroundColor: alpha(theme.palette.error.main, 0.1),
+                  border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+                  {error}
+                </Typography>
+              </Box>
             )}
             
             <Box
@@ -1081,6 +1212,7 @@ const UserPartList: React.FC = () => {
                   }}
                 />
               </div>
+            </Box>
           </Box>
           
           {/* Load More / Info Footer */}
@@ -1096,31 +1228,60 @@ const UserPartList: React.FC = () => {
               gap: 2
             }}
           >
+            {deletedIds.size > 0 && (
+              <Box
+                sx={{ 
+                  width: '100%', 
+                  maxWidth: '500px',
+                  mb: 1,
+                  p: 1.5,
+                  border: `1px solid ${alpha(theme.palette.info.main, 0.5)}`,
+                  borderRadius: 1,
+                  backgroundColor: alpha(theme.palette.info.main, 0.1),
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <Typography variant="body2" color="info.main">
+                  {deletedIds.size} deleted item(s) are hidden from view
+                </Typography>
+                <Button 
+                  size="small" 
+                  color="primary" 
+                  onClick={clearDeletedItemsFilter} 
+                  sx={{ ml: 2 }}
+                >
+                  Show All
+                </Button>
+              </Box>
+            )}
+            
             <Typography variant="body2" color="text.secondary">
               {isSearchMode 
                   ? `Showing ${rows.length} search results` 
                   : `Showing ${rows.length} items • Page ${page + 1} of ${totalPages}`}
             </Typography>
             
-              {!isSearchMode && totalPages > 1 && (
-                <Pagination 
-                  count={totalPages} 
-                  page={page + 1} 
-                  onChange={handlePageChange}
+            {!isSearchMode && totalPages > 1 && (
+              <Pagination 
+                count={totalPages} 
+                page={page + 1} 
+                onChange={handlePageChange}
                 color="primary"
                 size={isMobile ? "small" : "medium"}
-                  showFirstButton
-                  showLastButton
-                  siblingCount={isMobile ? 0 : 1}
-                  sx={{
-                    '& .MuiPaginationItem-root': {
-                      fontWeight: 500,
-                    },
-                    '& .Mui-selected': {
-                      fontWeight: 700,
-                    }
-                  }}
-                />
+                showFirstButton
+                showLastButton
+                siblingCount={isMobile ? 0 : 1}
+                sx={{
+                  '& .MuiPaginationItem-root': {
+                    fontWeight: 500,
+                  },
+                  '& .Mui-selected': {
+                    fontWeight: 700,
+                  }
+                }}
+              />
             )}
             
             {/* Reset View - only in search mode */}
@@ -1135,7 +1296,6 @@ const UserPartList: React.FC = () => {
                 View All Parts
               </Button>
             )}
-            </Box>
           </Box>
           
           {isMobile && (
@@ -1204,13 +1364,23 @@ const UserPartList: React.FC = () => {
         onClose={() => setError(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-          <Alert 
-          onClose={() => setError(null)} 
-          severity="error" 
-            sx={{ width: '100%', borderRadius: 2 }}
-          >
-          {error}
-          </Alert>
+        <Paper
+          elevation={3} 
+          sx={{ 
+            width: '100%', 
+            borderRadius: 2,
+            p: 1.5,
+            backgroundColor: theme.palette.error.main,
+            color: 'white'
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="body2">{error}</Typography>
+            <IconButton size="small" color="inherit" onClick={() => setError(null)}>
+              <span>×</span>
+            </IconButton>
+          </Box>
+        </Paper>
       </Snackbar>
 
       {/* Success Snackbar */}
@@ -1220,13 +1390,23 @@ const UserPartList: React.FC = () => {
         onClose={() => setDeleteSuccess(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert 
-          onClose={() => setDeleteSuccess(null)} 
-          severity="success" 
-          sx={{ width: '100%', borderRadius: 2 }}
+        <Paper
+          elevation={3}
+          sx={{ 
+            width: '100%',
+            borderRadius: 2,
+            p: 1.5,
+            backgroundColor: theme.palette.success.main,
+            color: 'white'
+          }}
         >
-          {deleteSuccess}
-        </Alert>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="body2">{deleteSuccess}</Typography>
+            <IconButton size="small" color="inherit" onClick={() => setDeleteSuccess(null)}>
+              <span>×</span>
+            </IconButton>
+          </Box>
+        </Paper>
       </Snackbar>
     </Box>
   );

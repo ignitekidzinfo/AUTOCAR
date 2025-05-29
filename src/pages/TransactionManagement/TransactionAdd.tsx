@@ -1496,68 +1496,153 @@ const TransactionAdd: React.FC = () => {
   const handleNewPartSubmit = async () => {
     setIsCreatingPart(true);
     
+    // Cache form data to local variables before API call
+    const partData = { ...newPartData };
+    
+    // Validate required fields
+    if (!partData.partName || !partData.partNumber || !partData.manufacturer) {
+      setFeedback({
+        message: "Please fill all required fields",
+        severity: "error"
+      });
+      setIsCreatingPart(false);
+      return;
+    }
+    
+    // Generate a temporary ID for optimistic update
+    const tempId = Date.now();
+    
+    // Create the part object for optimistic update
+    const optimisticPart: SparePartDto = {
+      partName: partData.partName,
+      partNumber: partData.partNumber,
+      manufacturer: partData.manufacturer,
+      description: partData.description,
+      buyingPrice: partData.buyingPrice,
+      price: partData.price,
+      sparePartId: tempId // Temporary ID
+    };
+    
+    // Create table item for optimistic update
+    const optimisticItem: SparePartItem = {
+      id: sparePartItems.length + 1,
+      sparePartId: tempId,
+      partName: partData.partName,
+      partNumber: partData.partNumber,
+      manufacturer: partData.manufacturer,
+      price: partData.price || 0,
+      quantity: 1,
+      rate: partData.price || 0,
+      gstPercentage: partData.totalGST,
+      taxableAmount: partData.price || 0,
+      cgst: partData.totalGST > 0 ? ((partData.price || 0) * partData.totalGST / 100) / 2 : 0,
+      sgst: partData.totalGST > 0 ? ((partData.price || 0) * partData.totalGST / 100) / 2 : 0,
+      total: (partData.price || 0) * (1 + partData.totalGST / 100)
+    };
+    
+    // Close the dialog immediately
+    setIsNewPartDialogOpen(false);
+    
+    // Reset form data immediately
+    setNewPartData({
+      partName: "",
+      description: "",
+      manufacturer: "",
+      price: 0,
+      partNumber: "",
+      sGST: 0,
+      cGST: 0,
+      totalGST: 0,
+      quantity: 1,
+      buyingPrice: 0
+    });
+    
+    // Add to table immediately (optimistic update)
+    setSparePartItems(prev => [...prev, optimisticItem]);
+    calculateTotals([...sparePartItems, optimisticItem]);
+    
+    // Show loading feedback
+    setFeedback({
+      message: "Adding part to table and saving to database...",
+      severity: "info"
+    });
+    
+    // Prepare form data for API call
+    const formData = new FormData();
+    formData.append("partName", partData.partName);
+    formData.append("description", partData.description || "");
+    formData.append("manufacturer", partData.manufacturer);
+    formData.append("price", partData.price.toString());
+    formData.append("partNumber", partData.partNumber);
+    formData.append("sGST", partData.sGST.toString());
+    formData.append("cGST", partData.cGST.toString());
+    formData.append("totalGST", partData.totalGST.toString());
+    formData.append("quantity", partData.quantity.toString());
+    formData.append("buyingPrice", partData.buyingPrice.toString());
+    
+    // Add empty photo since the API requires it
+    const emptyBlob = new Blob([""], { type: "application/octet-stream" });
+    formData.append("photos", new File([emptyBlob], "placeholder.jpg"));
+    
     try {
-      // Prepare form data for API call
-      const formData = new FormData();
-      formData.append("partName", newPartData.partName);
-      formData.append("description", newPartData.description || "");
-      formData.append("manufacturer", newPartData.manufacturer);
-      formData.append("price", newPartData.price.toString());
-      formData.append("partNumber", newPartData.partNumber);
-      formData.append("sGST", newPartData.sGST.toString());
-      formData.append("cGST", newPartData.cGST.toString());
-      formData.append("totalGST", newPartData.totalGST.toString());
-      formData.append("quantity", newPartData.quantity.toString());
-      formData.append("buyingPrice", newPartData.buyingPrice.toString());
-      
-      // Add empty photo since the API requires it
-      const emptyBlob = new Blob([""], { type: "application/octet-stream" });
-      formData.append("photos", new File([emptyBlob], "placeholder.jpg"));
-      
-      console.log("Creating new part:", newPartData);
-      
-      // Call the API to create the part
+      // Call the API to create the part with a shorter timeout
       const response = await apiClient.post("/sparePartManagement/addPart", formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
-        }
+        },
+        timeout: 8000 // Set timeout to 8 seconds
       });
       
-      console.log("Part created successfully:", response.data);
+      // If successful, update the temporary ID with the real one
+      const realId = response.data.sparePartId || tempId;
       
-      // Create the new part object and select it
-      const createdPart: SparePartDto = {
-        partName: newPartData.partName,
-        partNumber: newPartData.partNumber,
-        manufacturer: newPartData.manufacturer,
-        description: newPartData.description,
-        buyingPrice: newPartData.buyingPrice,
-        price: newPartData.price,
-        sparePartId: response.data.sparePartId || Date.now() // Fallback if API doesn't return ID
-      };
+      // Update the item in the table with the real ID
+      setSparePartItems(prev => 
+        prev.map(item => 
+          item.sparePartId === tempId 
+            ? { ...item, sparePartId: realId } 
+            : item
+        )
+      );
       
-      // Select the newly created part
-      handlePartSelect(createdPart);
-      
-      // Set the GST percentage from the new part data
-      setCurrentItem(prev => ({
-      ...prev,
-        gstPercentage: newPartData.totalGST
-      }));
-      
+      // Show success message
       setFeedback({
-        message: "New spare part created successfully",
+        message: "Part added successfully",
         severity: "success"
       });
       
-      // Close the dialog
-      setIsNewPartDialogOpen(false);
     } catch (error: any) {
       console.error("Error creating new part:", error);
-      setFeedback({
-        message: error.response?.data?.message || "Failed to create new part",
-        severity: "error"
-      });
+      
+      // Check if the error is due to timeout
+      const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+      
+      if (isTimeout) {
+        // For timeouts, assume the part might have been created
+        setFeedback({
+          message: "Part may have been created but response timed out. Part added to table.",
+          severity: "warning"
+        });
+      } else {
+        // For other errors, check if it's actually a duplicate (which means the part was created)
+        const errorMessage = error.response?.data?.message || "Unknown error";
+        const isDuplicate = errorMessage.toLowerCase().includes('duplicate') || 
+                          errorMessage.toLowerCase().includes('already exists');
+        
+        if (isDuplicate) {
+          // If it's a duplicate, the part probably exists, so keep it in the table
+          setFeedback({
+            message: "Part may already exist in database. Part added to table.",
+            severity: "warning"
+          });
+        } else {
+          // For other errors, show the error but keep the part in the table
+          setFeedback({
+            message: `API error: ${errorMessage}. Part still added to table.`,
+            severity: "warning"
+          });
+        }
+      }
     } finally {
       setIsCreatingPart(false);
     }
@@ -1574,7 +1659,7 @@ const TransactionAdd: React.FC = () => {
       const halfGST = totalGST > 0 ? totalGST / 2 : 0;
       
       setNewPartData(prev => ({
-        ...prev,
+      ...prev,
         [name]: totalGST,
         sGST: halfGST,
         cGST: halfGST
