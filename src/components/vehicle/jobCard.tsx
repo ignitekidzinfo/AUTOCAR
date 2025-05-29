@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Paper,
@@ -27,10 +27,13 @@ import {
   Snackbar,
   Alert,
   CircularProgress,
+  Divider,
+  Skeleton,
 } from "@mui/material";
-import { Task, NoteAdd, Delete, Save, RemoveCircleOutline, Description } from "@mui/icons-material";
+import { Task, NoteAdd, Delete, Save, RemoveCircleOutline, Description, DirectionsCar, Person } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "Services/apiService";
+import { VehicleDataByID } from "Services/vehicleService";
 
 const StyledTextArea = styled(TextareaAutosize)(({ theme }) => ({
   width: "100%",
@@ -87,6 +90,16 @@ interface JobCardData {
   jobCardId: number;
 }
 
+interface VehicleDetails {
+  vehicleRegId?: string;
+  vehicleNumber: string;
+  vehicleBrand: string;
+  vehicleModelName: string;
+  vehicleVariant: string;
+  customerName: string;
+  customerMobileNumber: string;
+}
+
 const JobCard: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const vehicleId = id ? Number(id) : 0;
@@ -103,6 +116,9 @@ const JobCard: React.FC = () => {
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
   const [jobCards, setJobCards] = useState<JobCardData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [vehicleDetails, setVehicleDetails] = useState<VehicleDetails | null>(null);
+  const [vehicleDetailsLoading, setVehicleDetailsLoading] = useState<boolean>(true);
+  const [vehicleDetailsError, setVehicleDetailsError] = useState<string | null>(null);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -123,21 +139,192 @@ const JobCard: React.FC = () => {
     }
   }, [vehicleId]);
 
-  const fetchVehicleData = useCallback(async () => {
+  const fetchVehicleDetails = useCallback(async () => {
+    if (!vehicleId) return;
+    
+    setVehicleDetailsLoading(true);
+    setVehicleDetailsError(null);
+    
     try {
-      await apiClient.get(`https://carauto01-production-8b0b.up.railway.app/vehicle-reg/getById?vehicleRegId=${vehicleId}`);
+      const response = await VehicleDataByID(vehicleId);
+      if (response) {
+        setVehicleDetails({
+          vehicleRegId: response.vehicleRegId,
+          vehicleNumber: response.vehicleNumber || "",
+          vehicleBrand: response.vehicleBrand || "",
+          vehicleModelName: response.vehicleModelName || "",
+          vehicleVariant: response.vehicleVariant || "",
+          customerName: response.customerName || "",
+          customerMobileNumber: response.customerMobileNumber || "",
+        });
+      }
     } catch (error) {
-      console.error("Error fetching vehicle data:", error);
-      setMessage("Error fetching vehicle data.");
+      console.error("Failed to load vehicle details:", error);
+      setVehicleDetailsError("Failed to load vehicle details. Please try refreshing the page.");
+    } finally {
+      setVehicleDetailsLoading(false);
     }
   }, [vehicleId]);
+
+  const renderVehicleCustomerDetails = useMemo(() => {
+    if (vehicleDetailsLoading) {
+      return (
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            p: 2, 
+            mb: 3, 
+            borderRadius: 3, 
+            width: "100%",
+            backgroundColor: "#f8f9fa"
+          }}
+        >
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <DirectionsCar color="primary" sx={{ mr: 1 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Vehicle Details
+                </Typography>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="subtitle2" color="textSecondary">Vehicle No:</Typography>
+                  <Skeleton animation="wave" height={28} width="70%" />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="subtitle2" color="textSecondary">Vehicle Name:</Typography>
+                  <Skeleton animation="wave" height={28} width="90%" />
+                </Grid>
+              </Grid>
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Person color="primary" sx={{ mr: 1 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Customer Details
+                </Typography>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="subtitle2" color="textSecondary">Cust Name:</Typography>
+                  <Skeleton animation="wave" height={28} width="80%" />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="subtitle2" color="textSecondary">Cust Contact:</Typography>
+                  <Skeleton animation="wave" height={28} width="60%" />
+                </Grid>
+              </Grid>
+            </Grid>
+          </Grid>
+        </Paper>
+      );
+    }
+    
+    if (vehicleDetailsError) {
+      return (
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            p: 2, 
+            mb: 3, 
+            borderRadius: 3, 
+            width: "100%",
+            backgroundColor: "#fff8f8",
+            border: "1px solid #ffcdd2"
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Typography variant="subtitle1" color="error" sx={{ fontWeight: 500 }}>
+              {vehicleDetailsError}
+            </Typography>
+          </Box>
+          <Button 
+            variant="outlined" 
+            color="primary" 
+            size="small" 
+            onClick={fetchVehicleDetails}
+            startIcon={vehicleDetailsLoading ? <CircularProgress size={16} /> : undefined}
+            disabled={vehicleDetailsLoading}
+          >
+            {vehicleDetailsLoading ? "Loading..." : "Retry"}
+          </Button>
+        </Paper>
+      );
+    }
+    
+    if (!vehicleDetails) {
+      return null;
+    }
+    
+    return (
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 2, 
+          mb: 3, 
+          borderRadius: 3, 
+          width: "100%",
+          backgroundColor: "#f8f9fa"
+        }}
+      >
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <DirectionsCar color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Vehicle Details
+              </Typography>
+            </Box>
+            <Divider sx={{ mb: 2 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Vehicle No:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.vehicleNumber}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Vehicle Name:</Typography>
+                <Typography variant="body1" fontWeight={500}>
+                  {vehicleDetails.vehicleBrand} - {vehicleDetails.vehicleModelName}
+                  {vehicleDetails.vehicleVariant && ` (${vehicleDetails.vehicleVariant})`}
+                </Typography>
+              </Grid>
+            </Grid>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Person color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Customer Details
+              </Typography>
+            </Box>
+            <Divider sx={{ mb: 2 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Cust Name:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.customerName}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Cust Contact:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.customerMobileNumber}</Typography>
+              </Grid>
+            </Grid>
+          </Grid>
+        </Grid>
+      </Paper>
+    );
+  }, [vehicleDetails, vehicleDetailsLoading, vehicleDetailsError, fetchVehicleDetails]);
 
   useEffect(() => {
     if (vehicleId !== 0) {
       fetchJobCards();
-      fetchVehicleData();
+      fetchVehicleDetails();
     }
-  }, [vehicleId, fetchJobCards, fetchVehicleData]);
+  }, [vehicleId, fetchJobCards, fetchVehicleDetails]);
 
   // Debounce
   useEffect(() => {
@@ -343,12 +530,13 @@ const JobCard: React.FC = () => {
   };
 
   return (
-    <Box sx={{ width: "100%", p: { xs: 1, sm: 2 } }}>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle1" color="textSecondary">
-          Vehicle Registration ID: {id}
-        </Typography>
-      </Box>
+    <Box sx={{ maxWidth: "1200px", margin: "0 auto", padding: 2 }}>
+      <Typography variant="h5" gutterBottom>
+        Add Job Card
+      </Typography>
+      
+      {/* Customer and Vehicle Details Section - Now with optimized rendering */}
+      {renderVehicleCustomerDetails}
       
       {renderHeaderCards()}
       

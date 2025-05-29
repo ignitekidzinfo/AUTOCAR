@@ -15,10 +15,12 @@ import {
   InputBase,
   useTheme,
   useMediaQuery,
-  CircularProgress
+  CircularProgress,
+  Divider
 } from '@mui/material';
-import { Task, Description, NoteAdd } from '@mui/icons-material';
+import { Task, Description, NoteAdd, DirectionsCar, Person } from '@mui/icons-material';
 import { useNotification } from '../common/Notification';
+import { VehicleDataByID } from "Services/vehicleService";
 
 const HeaderCard = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -123,6 +125,16 @@ interface InvoiceService extends Service {
   newService?: boolean;
 }
 
+interface VehicleDetails {
+  vehicleRegId?: string;
+  vehicleNumber: string;
+  vehicleBrand: string;
+  vehicleModelName: string;
+  vehicleVariant: string;
+  customerName: string;
+  customerMobileNumber: string;
+}
+
 const useDebounce = <T,>(value: T, delay: number): T => {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -145,8 +157,94 @@ const ServiceTab = () => {
   const [showModal, setShowModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [vehicleDetails, setVehicleDetails] = useState<VehicleDetails | null>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  const fetchVehicleDetails = async (id: string | number) => {
+    try {
+      const response = await VehicleDataByID(id);
+      if (response) {
+        setVehicleDetails({
+          vehicleRegId: response.vehicleRegId,
+          vehicleNumber: response.vehicleNumber || "",
+          vehicleBrand: response.vehicleBrand || "",
+          vehicleModelName: response.vehicleModelName || "",
+          vehicleVariant: response.vehicleVariant || "",
+          customerName: response.customerName || "",
+          customerMobileNumber: response.customerMobileNumber || "",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load vehicle details:", error);
+      showNotification({
+        message: "Failed to load vehicle details",
+        type: "error"
+      });
+    }
+  };
+
+  const renderVehicleCustomerDetails = () => {
+    if (!vehicleDetails) return null;
+    
+    return (
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 2, 
+          mb: 3, 
+          borderRadius: 3, 
+          width: "100%",
+          backgroundColor: "#f8f9fa"
+        }}
+      >
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <DirectionsCar color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Vehicle Details
+              </Typography>
+            </Box>
+            <Divider sx={{ mb: 2 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Vehicle No:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.vehicleNumber}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Vehicle Name:</Typography>
+                <Typography variant="body1" fontWeight={500}>
+                  {vehicleDetails.vehicleBrand} - {vehicleDetails.vehicleModelName}
+                  {vehicleDetails.vehicleVariant && ` (${vehicleDetails.vehicleVariant})`}
+                </Typography>
+              </Grid>
+            </Grid>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Person color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Customer Details
+              </Typography>
+            </Box>
+            <Divider sx={{ mb: 2 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Cust Name:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.customerName}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Cust Contact:</Typography>
+                <Typography variant="body1" fontWeight={500}>{vehicleDetails.customerMobileNumber}</Typography>
+              </Grid>
+            </Grid>
+          </Grid>
+        </Grid>
+      </Paper>
+    );
+  };
 
   const renderHeaderCards = () => {
     const headerCards = [
@@ -194,6 +292,12 @@ const ServiceTab = () => {
       </Box>
     );
   };
+
+  useEffect(() => {
+    if (vehicleId) {
+      fetchVehicleDetails(vehicleId);
+    }
+  }, [vehicleId]);
 
   useEffect(() => {
     if (debouncedSearchQuery) {
@@ -418,225 +522,237 @@ const ServiceTab = () => {
   };
 
   return (
-    <Box sx={{ width: "100%", p: { xs: 1, sm: 2 } }}>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle1" color="textSecondary">
-          Vehicle ID: {vehicleId}
+    <Box sx={{ p: 2, backgroundColor: "#f5f5f5", minHeight: "100vh" }}>
+      <Paper
+        elevation={1}
+        sx={{
+          p: 2,
+          maxWidth: "1200px",
+          mx: "auto",
+          borderRadius: 2,
+          backgroundColor: "#fff",
+        }}
+      >
+        <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+          Vehicle Services
         </Typography>
-      </Box>
 
-      {renderHeaderCards()}
+        {/* Added Vehicle and Customer Details */}
+        {renderVehicleCustomerDetails()}
+        
+        {renderHeaderCards()}
 
-      <Paper elevation={3} sx={{ p: { xs: 1.5, sm: 3 }, borderRadius: 2, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Manage Vehicle Services
-        </Typography>
+        <Paper elevation={3} sx={{ p: { xs: 1.5, sm: 3 }, borderRadius: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Manage Vehicle Services
+          </Typography>
 
-        <div ref={searchContainerRef}>
-          <SearchInputWrapper>
-            <StyledInputBase
-              placeholder="Search for services..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </SearchInputWrapper>
+          <div ref={searchContainerRef}>
+            <SearchInputWrapper>
+              <StyledInputBase
+                placeholder="Search for services..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </SearchInputWrapper>
 
-          {searchResults.length > 0 && (
-            <SearchResultsContainer>
-              {searchResults.map((result) => (
-                <SearchResultItem
-                  key={result.serviceId}
-                  onClick={() => addService(result)}
-                >
-                  <Typography variant="subtitle2">{result.serviceName}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Rate: ₹{result.serviceRate?.toFixed(2) || '0.00'}
-                  </Typography>
-                </SearchResultItem>
-              ))}
-            </SearchResultsContainer>
+            {searchResults.length > 0 && (
+              <SearchResultsContainer>
+                {searchResults.map((result) => (
+                  <SearchResultItem
+                    key={result.serviceId}
+                    onClick={() => addService(result)}
+                  >
+                    <Typography variant="subtitle2">{result.serviceName}</Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Rate: ₹{result.serviceRate?.toFixed(2) || '0.00'}
+                    </Typography>
+                  </SearchResultItem>
+                ))}
+              </SearchResultsContainer>
+            )}
+          </div>
+
+          {loading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+              <CircularProgress />
+            </Box>
           )}
-        </div>
 
-        {loading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-            <CircularProgress />
-          </Box>
-        )}
+          {!loading && (
+            <>
+              {newServices.length > 0 && (
+                <Box sx={{ mt: 4 }}>
+                  <Typography variant="h6" gutterBottom>
+                    New Services
+                  </Typography>
+                  <StyledTable>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{ width: isMobile ? '10%' : '5%', textAlign: 'center' }}>#</th>
+                          <th style={{ width: isMobile ? '40%' : '30%' }}>Service Name</th>
+                          <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'center' }}>Qty</th>
+                          <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'right' }}>Rate</th>
+                          {!isMobile && <th style={{ width: '10%', textAlign: 'right' }}>GST</th>}
+                          <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'right' }}>Total</th>
+                          <th style={{ width: isMobile ? '15%' : '10%', textAlign: 'center' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {newServices.map((service, index) => (
+                          <tr key={`new-${service.serviceId}`}>
+                            <td style={{ textAlign: 'center' }}>{index + 1}</td>
+                            <td>{service.serviceName}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => updateQuantity(service.serviceId, Math.max(1, service.quantity - 1))}
+                                  sx={{ minWidth: isMobile ? '24px' : '30px', p: 0, fontSize: isMobile ? '0.75rem' : '0.875rem' }}
+                                >
+                                  -
+                                </Button>
+                                <Box sx={{ mx: 1, display: 'flex', alignItems: 'center', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
+                                  {service.quantity}
+                                </Box>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => updateQuantity(service.serviceId, service.quantity + 1)}
+                                  sx={{ minWidth: isMobile ? '24px' : '30px', p: 0, fontSize: isMobile ? '0.75rem' : '0.875rem' }}
+                                >
+                                  +
+                                </Button>
+                              </Box>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>₹{(service.serviceRate ?? 0).toFixed(2)}</td>
+                            {!isMobile && <td style={{ textAlign: 'right' }}>0%</td>}
+                            <td style={{ textAlign: 'right' }}>₹{(service.total ?? 0).toFixed(2)}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <Button
+                                variant="contained"
+                                color="error"
+                                size="small"
+                                onClick={() => removeNewService(service.serviceId)}
+                                sx={{ fontSize: isMobile ? '0.7rem' : '0.8rem', py: 0.5, px: isMobile ? 1 : 2 }}
+                              >
+                                {isMobile ? 'Del' : 'Delete'}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </StyledTable>
+                </Box>
+              )}
 
-        {!loading && (
-          <>
-            {newServices.length > 0 && (
               <Box sx={{ mt: 4 }}>
                 <Typography variant="h6" gutterBottom>
-                  New Services
+                  Used Services
                 </Typography>
-                <StyledTable>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th style={{ width: isMobile ? '10%' : '5%', textAlign: 'center' }}>#</th>
-                        <th style={{ width: isMobile ? '40%' : '30%' }}>Service Name</th>
-                        <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'center' }}>Qty</th>
-                        <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'right' }}>Rate</th>
-                        {!isMobile && <th style={{ width: '10%', textAlign: 'right' }}>GST</th>}
-                        <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'right' }}>Total</th>
-                        <th style={{ width: isMobile ? '15%' : '10%', textAlign: 'center' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {newServices.map((service, index) => (
-                        <tr key={`new-${service.serviceId}`}>
-                          <td style={{ textAlign: 'center' }}>{index + 1}</td>
-                          <td>{service.serviceName}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => updateQuantity(service.serviceId, Math.max(1, service.quantity - 1))}
-                                sx={{ minWidth: isMobile ? '24px' : '30px', p: 0, fontSize: isMobile ? '0.75rem' : '0.875rem' }}
-                              >
-                                -
-                              </Button>
-                              <Box sx={{ mx: 1, display: 'flex', alignItems: 'center', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
-                                {service.quantity}
-                              </Box>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => updateQuantity(service.serviceId, service.quantity + 1)}
-                                sx={{ minWidth: isMobile ? '24px' : '30px', p: 0, fontSize: isMobile ? '0.75rem' : '0.875rem' }}
-                              >
-                                +
-                              </Button>
-                            </Box>
-                          </td>
-                          <td style={{ textAlign: 'right' }}>₹{(service.serviceRate ?? 0).toFixed(2)}</td>
-                          {!isMobile && <td style={{ textAlign: 'right' }}>0%</td>}
-                          <td style={{ textAlign: 'right' }}>₹{(service.total ?? 0).toFixed(2)}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <Button
-                              variant="contained"
-                              color="error"
-                              size="small"
-                              onClick={() => removeNewService(service.serviceId)}
-                              sx={{ fontSize: isMobile ? '0.7rem' : '0.8rem', py: 0.5, px: isMobile ? 1 : 2 }}
-                            >
-                              {isMobile ? 'Del' : 'Delete'}
-                            </Button>
-                          </td>
+                {usedServices.length > 0 ? (
+                  <StyledTable>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{ width: isMobile ? '10%' : '5%', textAlign: 'center' }}>#</th>
+                          {!isMobile && <th style={{ width: '10%', textAlign: 'center' }}>ID</th>}
+                          <th style={{ width: isMobile ? '40%' : '30%' }}>Service Name</th>
+                          <th style={{ width: isMobile ? '15%' : '10%', textAlign: 'center' }}>Qty</th>
+                          <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'right' }}>Rate</th>
+                          {!isMobile && <th style={{ width: '10%', textAlign: 'right' }}>GST</th>}
+                          <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'right' }}>Total</th>
+                          <th style={{ width: isMobile ? '15%' : '10%', textAlign: 'center' }}>Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </StyledTable>
-              </Box>
-            )}
-
-            <Box sx={{ mt: 4 }}>
-              <Typography variant="h6" gutterBottom>
-                Used Services
-              </Typography>
-              {usedServices.length > 0 ? (
-                <StyledTable>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th style={{ width: isMobile ? '10%' : '5%', textAlign: 'center' }}>#</th>
-                        {!isMobile && <th style={{ width: '10%', textAlign: 'center' }}>ID</th>}
-                        <th style={{ width: isMobile ? '40%' : '30%' }}>Service Name</th>
-                        <th style={{ width: isMobile ? '15%' : '10%', textAlign: 'center' }}>Qty</th>
-                        <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'right' }}>Rate</th>
-                        {!isMobile && <th style={{ width: '10%', textAlign: 'right' }}>GST</th>}
-                        <th style={{ width: isMobile ? '20%' : '15%', textAlign: 'right' }}>Total</th>
-                        <th style={{ width: isMobile ? '15%' : '10%', textAlign: 'center' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {usedServices.map((service, index) => (
-                        <tr key={`used-${service.vehicleServicesUsedId || service.serviceId}`}>
-                          <td style={{ textAlign: 'center' }}>{index + 1}</td>
-                          {!isMobile && (
+                      </thead>
+                      <tbody>
+                        {usedServices.map((service, index) => (
+                          <tr key={`used-${service.vehicleServicesUsedId || service.serviceId}`}>
+                            <td style={{ textAlign: 'center' }}>{index + 1}</td>
+                            {!isMobile && (
+                              <td style={{ textAlign: 'center' }}>
+                                {service.vehicleServicesUsedId || service.serviceId}
+                              </td>
+                            )}
+                            <td>{service.serviceName}</td>
+                            <td style={{ textAlign: 'center' }}>{service.quantity}</td>
+                            <td style={{ textAlign: 'right' }}>₹{(service.serviceRate ?? 0).toFixed(2)}</td>
+                            {!isMobile && <td style={{ textAlign: 'right' }}>0%</td>}
+                            <td style={{ textAlign: 'right' }}>₹{(service.total ?? 0).toFixed(2)}</td>
                             <td style={{ textAlign: 'center' }}>
-                              {service.vehicleServicesUsedId || service.serviceId}
+                              <Button
+                                variant="contained"
+                                color="error"
+                                size="small"
+                                onClick={() => deleteUsedService(service.vehicleServicesUsedId)}
+                                sx={{ fontSize: isMobile ? '0.7rem' : '0.8rem', py: 0.5, px: isMobile ? 1 : 2 }}
+                              >
+                                {isMobile ? 'Del' : 'Delete'}
+                              </Button>
                             </td>
-                          )}
-                          <td>{service.serviceName}</td>
-                          <td style={{ textAlign: 'center' }}>{service.quantity}</td>
-                          <td style={{ textAlign: 'right' }}>₹{(service.serviceRate ?? 0).toFixed(2)}</td>
-                          {!isMobile && <td style={{ textAlign: 'right' }}>0%</td>}
-                          <td style={{ textAlign: 'right' }}>₹{(service.total ?? 0).toFixed(2)}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <Button
-                              variant="contained"
-                              color="error"
-                              size="small"
-                              onClick={() => deleteUsedService(service.vehicleServicesUsedId)}
-                              sx={{ fontSize: isMobile ? '0.7rem' : '0.8rem', py: 0.5, px: isMobile ? 1 : 2 }}
-                            >
-                              {isMobile ? 'Del' : 'Delete'}
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </StyledTable>
-              ) : (
-                <Paper sx={{ p: 2, textAlign: 'center' }}>
-                  <Typography variant="body1" color="textSecondary">
-                    No used services found.
-                  </Typography>
-                </Paper>
-              )}
-            </Box>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </StyledTable>
+                ) : (
+                  <Paper sx={{ p: 2, textAlign: 'center' }}>
+                    <Typography variant="body1" color="textSecondary">
+                      No used services found.
+                    </Typography>
+                  </Paper>
+                )}
+              </Box>
 
-            <Box sx={{ mt: 4, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between' }}>
-              <Typography variant="h6">
-                Total Amount: ₹{grandTotal.toFixed(2)}
-              </Typography>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={saveInvoice}
-                disabled={newServices.length === 0}
-                sx={{ mt: isMobile ? 2 : 0, py: 1 }}
-              >
-                Save Service Invoice
-              </Button>
-            </Box>
-          </>
-        )}
+              <Box sx={{ mt: 4, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between' }}>
+                <Typography variant="h6">
+                  Total Amount: ₹{grandTotal.toFixed(2)}
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={saveInvoice}
+                  disabled={newServices.length === 0}
+                  sx={{ mt: isMobile ? 2 : 0, py: 1 }}
+                >
+                  Save Service Invoice
+                </Button>
+              </Box>
+            </>
+          )}
+        </Paper>
+
+        <Dialog open={showModal} onClose={() => setShowModal(false)}>
+          <DialogTitle>Service Already Added</DialogTitle>
+          <DialogContent>
+            <Typography>
+              This service is already in your list. You can adjust the quantity if needed.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowModal(false)} color="primary">
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={showSuccessModal} onClose={() => setShowSuccessModal(false)}>
+          <DialogTitle>Success</DialogTitle>
+          <DialogContent>
+            <Typography>
+              All services have been saved successfully.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowSuccessModal(false)} color="primary">
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Paper>
-
-      <Dialog open={showModal} onClose={() => setShowModal(false)}>
-        <DialogTitle>Service Already Added</DialogTitle>
-        <DialogContent>
-          <Typography>
-            This service is already in your list. You can adjust the quantity if needed.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowModal(false)} color="primary">
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={showSuccessModal} onClose={() => setShowSuccessModal(false)}>
-        <DialogTitle>Success</DialogTitle>
-        <DialogContent>
-          <Typography>
-            All services have been saved successfully.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowSuccessModal(false)} color="primary">
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
