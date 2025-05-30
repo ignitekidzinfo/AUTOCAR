@@ -699,14 +699,22 @@ const TransactionAdd: React.FC = () => {
       return updated;
     });
     
-    // First clear the selectedSearchPart state
-    setSelectedSearchPart(null);
+    // Calculate totals with the new item
+    calculateTotals([...sparePartItems, newItem]);
     
-    // Then reset current item state
+    // Important: First store the part name for the success message
+    const addedPartName = newItem.partName;
+    
+    // Reset search state first - this is critical to clear the PartSearch component
+    setSelectedSearchPart(null);
+    setSearchTerm("");
+    
+    // Reset current item state with default values
     setCurrentItem({
       id: 0,
       barcode: "",
       partName: "",
+      partNumber: "",
       quantity: 1,
       price: 0,
       rate: undefined,
@@ -717,21 +725,9 @@ const TransactionAdd: React.FC = () => {
       total: 0
     });
     
-    // Force clear the search input field using DOM manipulation
-    setTimeout(() => {
-      const searchInputs = document.querySelectorAll('input[aria-autocomplete="list"]');
-      searchInputs.forEach(input => {
-        const htmlInput = input as HTMLInputElement;
-        htmlInput.value = '';
-      });
-    }, 10);
-    
-    // Update totals
-    calculateTotals([...sparePartItems, newItem]);
-    
     // Show success feedback
     setFeedback({
-      message: `Added ${newItem.partName} to the list`,
+      message: `Added ${addedPartName} to the list`,
       severity: "success"
     });
   };
@@ -2763,9 +2759,16 @@ const TransactionAdd: React.FC = () => {
         </SquareButton>
         
         <SquareButton 
-          type="reset" 
+          type="button" 
           variant="contained" 
           color="info"
+          onClick={() => {
+            resetForm();
+            setFeedback({
+              message: "Form has been reset",
+              severity: "info"
+            });
+          }}
           sx={{ 
             py: { xs: 1, sm: 'auto' },
             fontSize: { xs: '0.875rem', sm: '0.875rem' },
