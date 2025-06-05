@@ -378,36 +378,37 @@ const UserPartList: React.FC = () => {
 
   // Handle delete part
   const handleDeleteClick = (id: number) => {
-    setDeleteItemId(id);
-    setDeleteDialogOpen(true);
+    // Instead of opening a dialog, directly call delete API
+    deleteItem(id);
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteItemId) return;
+  // New function to handle the actual delete operation
+  const deleteItem = async (id: number) => {
+    if (!id) return;
     
     setDeleteLoading(true);
     
     try {
-      await apiClient.delete(`/userParts/delete/${deleteItemId}`);
+      await apiClient.delete(`/userParts/delete/${id}`);
       
       // Add to deleted IDs set to prevent reappearing
       setDeletedIds(prev => {
         const newSet = new Set(prev);
-        newSet.add(deleteItemId);
+        newSet.add(id);
         return newSet;
       });
       
       // Store in localStorage to persist across page refreshes
       try {
         const existingDeletedIds = JSON.parse(localStorage.getItem('deletedPartIds') || '[]');
-        existingDeletedIds.push(deleteItemId);
+        existingDeletedIds.push(id);
         localStorage.setItem('deletedPartIds', JSON.stringify([...new Set(existingDeletedIds)]));
       } catch (e) {
         console.error('Failed to store deleted IDs in localStorage:', e);
       }
       
       // Remove the item from the list without refetching
-      setRows(rows.filter(row => row.id !== deleteItemId));
+      setRows(rows.filter(row => row.id !== id));
       
       // Show success message
       setDeleteSuccess("Part deleted successfully");
@@ -417,7 +418,7 @@ const UserPartList: React.FC = () => {
       
       // Recalculate low stock count
       const updatedLowStock = rows
-        .filter(item => item.id !== deleteItemId && Number(item.quantity) < LOW_STOCK_THRESHOLD)
+        .filter(item => item.id !== id && Number(item.quantity) < LOW_STOCK_THRESHOLD)
         .length;
       
       setLowStockCount(updatedLowStock);
@@ -448,7 +449,7 @@ const UserPartList: React.FC = () => {
             // Add to deleted IDs to prevent showing in UI
             setDeletedIds(prev => {
               const newSet = new Set(prev);
-              newSet.add(deleteItemId);
+              newSet.add(id);
               return newSet;
             });
             break;
@@ -461,7 +462,6 @@ const UserPartList: React.FC = () => {
       setError(errorMessage);
     } finally {
       setDeleteLoading(false);
-      setDeleteDialogOpen(false);
       setDeleteItemId(null);
       
       // Auto-hide success message after 3 seconds
@@ -471,11 +471,6 @@ const UserPartList: React.FC = () => {
         }, 3000);
       }
     }
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteDialogOpen(false);
-    setDeleteItemId(null);
   };
 
   // Add function to sort rows by quantity (ascending)
@@ -1328,35 +1323,6 @@ const UserPartList: React.FC = () => {
           )}
         </CardContent>
       </Card>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-        aria-labelledby="delete-dialog-title"
-        aria-describedby="delete-dialog-description"
-      >
-        <DialogTitle id="delete-dialog-title">Confirm Delete</DialogTitle>
-        <DialogContent>
-          <DialogContentText id="delete-dialog-description">
-            Are you sure you want to delete this part? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDeleteCancel} color="primary" disabled={deleteLoading}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleDeleteConfirm} 
-            color="error" 
-            variant="contained"
-            disabled={deleteLoading}
-            startIcon={deleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
-          >
-            {deleteLoading ? "Deleting..." : "Delete"}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Snackbar
         open={!!error}
