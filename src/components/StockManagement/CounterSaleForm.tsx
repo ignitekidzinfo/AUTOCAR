@@ -57,6 +57,10 @@ interface InvoiceData {
   items: BillRow[];
 }
 
+// Add a cache for manufacturer discounts to improve performance
+const discountCache: Record<string, { discount: number, timestamp: number }> = {};
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+
 function computeSpareRowTotals(row: SpareRow): SpareRow {
   const rate = row.rate === '' ? 0 : Number(row.rate);
   const qty = row.qty === '' ? 0 : Number(row.qty);
@@ -300,7 +304,68 @@ const CounterSaleForm: FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSuggestionSelect = (item: any) => {
+  // New function to fetch discount by manufacturer
+  const fetchDiscountForManufacturer = async (manufacturer: string): Promise<number | null> => {
+    if (!manufacturer) return null;
+
+    // Check cache first
+    const cached = discountCache[manufacturer];
+    const now = Date.now();
+    
+    if (cached && (now - cached.timestamp) < CACHE_EXPIRY) {
+      console.log(`Using cached discount for ${manufacturer}: ${cached.discount}%`);
+      return cached.discount;
+    }
+    
+    // If not in cache or expired, fetch from API
+    try {
+      console.log(`Fetching discount for manufacturer: ${manufacturer}`);
+      const response = await apiClient.get(`/discounts/by-manufacturer/${manufacturer}`);
+      if (response.status === 200 && response.data) {
+        const discount = response.data.discount;
+        
+        // Update cache
+        discountCache[manufacturer] = {
+          discount,
+          timestamp: now
+        };
+        
+        console.log(`Found discount for ${manufacturer}: ${discount}%`);
+        return discount;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching discount for ${manufacturer}:`, error);
+      return null;
+    }
+  };
+
+  // Prefetch discounts for all manufacturers on component mount
+  useEffect(() => {
+    const prefetchDiscounts = async () => {
+      try {
+        const response = await apiClient.get('/discounts/all');
+        if (response.status === 200 && Array.isArray(response.data)) {
+          // Update cache with all discounts
+          response.data.forEach(discountStructure => {
+            if (discountStructure.manufacturer && discountStructure.discount) {
+              discountCache[discountStructure.manufacturer] = {
+                discount: discountStructure.discount,
+                timestamp: Date.now()
+              };
+            }
+          });
+          console.log('Prefetched discounts for manufacturers:', Object.keys(discountCache).join(', '));
+        }
+      } catch (error) {
+        console.error('Error prefetching discounts:', error);
+      }
+    };
+    
+    prefetchDiscounts();
+  }, []);
+
+  const handleSuggestionSelect = async (item: any) => {
     // Handle different possible property names in the API response
     const partName = item.partName || item.spareName || '';
     const partNumber = item.partNumber || item.spareNo || '';
@@ -311,13 +376,23 @@ const CounterSaleForm: FC = () => {
     
     console.log('Selected item:', item);
     
+    // Fetch discount for this manufacturer
+    let discountPercent = spareRow.discountPercent;
+    if (manufacturerName) {
+      const discount = await fetchDiscountForManufacturer(manufacturerName);
+      if (discount !== null) {
+        discountPercent = discount.toString();
+        console.log(`Applied ${discount}% discount for ${manufacturerName}`);
+      }
+    }
+    
     const updatedSpareRow: SpareRow = computeSpareRowTotals({
       spareName: partName,
       spareNo: partNumber,
       manufacturer: manufacturerName,
       rate: priceValue,
       qty: '1',
-      discountPercent: spareRow.discountPercent,
+      discountPercent: discountPercent,
       discountAmt: 0,
       taxableValue: 0,
       total: 0,

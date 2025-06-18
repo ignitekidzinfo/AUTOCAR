@@ -3,7 +3,6 @@ import { useState, useEffect, FormEvent, useMemo } from "react";
 import apiClient from "Services/apiService";
 import storageUtils from '../../utils/storageUtils';
 import PartSearch from '../../components/common/PartSearch';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
 
@@ -39,7 +38,6 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { useNavigate } from 'react-router-dom';
-import DeleteIcon from '@mui/icons-material/Delete';
 
 // Custom styled components for square inputs
 const SquareTextField = styled(TextField)({
@@ -2086,6 +2084,11 @@ const TransactionAdd: React.FC = () => {
   // Replace the TestingDialogComponent with an empty component
   const TestingDialogComponent = () => null;
 
+  // Function to navigate to discount management page
+  const handleManageDiscount = () => {
+    navigate('/admin/manage-discounts');
+  };
+
   return (
     <Box
       component="form"
@@ -2140,6 +2143,25 @@ const TransactionAdd: React.FC = () => {
           }}
         >
           Manage Purchase
+        </SquareButton>
+        <SquareButton 
+          variant="contained" 
+          color="secondary" 
+          onClick={handleManageDiscount}
+          sx={{ 
+            fontSize: { xs: '0.75rem', sm: '0.875rem' },
+            width: { xs: '100%', sm: 'auto' },
+            height: '40px',
+            ml: { xs: 0, sm: 1 },
+            mt: { xs: 1, sm: 0 },
+            background: (theme) => theme.palette.secondary.main,
+            '&:hover': {
+              background: (theme) => theme.palette.secondary.dark,
+            },
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          Manage Discount
         </SquareButton>
       </Stack>
 

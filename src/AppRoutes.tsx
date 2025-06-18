@@ -102,6 +102,9 @@ const SpareSuppliersView = lazy(() => import("components/Vendor/SpareSuppliersVi
 const BankDepositList = lazy(() => import("pages/BankDepositList"));
 const AddBankDeposit = lazy(() => import("pages/AddBankDeposit"));
 
+// Import ManageDiscounts page
+const ManageDiscounts = lazy(() => import("./pages/ManageDiscounts"));
+
 const AppRoutes = () => {
     return(
         <>
@@ -228,6 +231,9 @@ const AppRoutes = () => {
                 <Route path="edit-bank-deposit/:id" element={<AddBankDeposit />} />
 
                 <Route path="purchase-list" element={<PurchaseList />} />
+
+                {/* Add the new route for manage discounts */}
+                <Route path="manage-discounts" element={<ManageDiscounts />} />
             </Route>
         </Routes>
         </Suspense>

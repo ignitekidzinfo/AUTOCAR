@@ -40,13 +40,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonIcon from '@mui/icons-material/Person';
-import WorkIcon from '@mui/icons-material/Work';
 import PhoneIcon from '@mui/icons-material/Phone';
 import EmailIcon from '@mui/icons-material/Email';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
 import LockIcon from '@mui/icons-material/Lock';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '../../utils/apiClient';
@@ -67,17 +64,14 @@ interface EmployeeDTO {
   componentNames: string[];
 }
 
-// Cache configuration
 const CACHE_KEY = 'employees_data';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+const CACHE_DURATION = 5 * 60 * 1000; 
 
-// In-memory cache to avoid localStorage overhead for frequent accesses
 let employeesCache = {
   data: null as EmployeeDTO[] | null,
   timestamp: 0
 };
 
-// Add a function to clear cache that can be exported
 export const clearEmployeeCache = () => {
   console.log('Clearing employee cache');
   employeesCache = {
@@ -109,29 +103,22 @@ const EmployeeList: FC = () => {
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const { sidebarOpen } = useSidebar();
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Use effect to force re-render when sidebar state changes
   useEffect(() => {
-    // Trigger a resize event to make the DataGrid recalculate its width
     window.dispatchEvent(new Event('resize'));
   }, [sidebarOpen]);
 
-  // Use a memoized fetch function to avoid unnecessary re-creation on renders
   const fetchEmployees = useCallback(async (showLoadingState = true) => {
     try {
-      // First check if we have data in memory cache
       if (employeesCache.data && (Date.now() - employeesCache.timestamp < CACHE_DURATION)) {
         console.log('Using in-memory cached employee data');
         setEmployees(employeesCache.data);
         setLoading(false);
         if (showLoadingState) {
-          // Refresh data in background even when using cache
           setTimeout(() => refreshDataInBackground(), 100);
         }
         return;
       }
       
-      // If no memory cache, try localStorage
       const cachedData = localStorage.getItem(CACHE_KEY);
       if (cachedData) {
         try {
@@ -140,7 +127,6 @@ const EmployeeList: FC = () => {
             console.log('Using localStorage cached employee data');
             setEmployees(data);
             
-            // Update memory cache
             employeesCache = {
               data,
               timestamp
@@ -148,7 +134,6 @@ const EmployeeList: FC = () => {
             
             setLoading(false);
             if (showLoadingState) {
-              // Refresh data in background even when using cache
               setTimeout(() => refreshDataInBackground(), 100);
             }
             return;
@@ -158,7 +143,6 @@ const EmployeeList: FC = () => {
         }
       }
       
-      // If we got here, we need to fetch fresh data
       if (showLoadingState) {
         setLoading(true);
       } else {
@@ -169,10 +153,8 @@ const EmployeeList: FC = () => {
       const response = await apiClient.get<EmployeeDTO[]>('/api/employees/getAll');
       console.log('Employees data received:', response.data.length);
       
-      // Update state
       setEmployees(response.data);
       
-      // Update caches
       employeesCache = {
         data: response.data,
         timestamp: Date.now()
@@ -198,16 +180,13 @@ const EmployeeList: FC = () => {
     }
   }, [showNotification]);
 
-  // Helper function to refresh data in background without showing loading state
   const refreshDataInBackground = useCallback(async () => {
     try {
       console.log('Background refresh of employee data...');
       const response = await apiClient.get<EmployeeDTO[]>('/api/employees/getAll');
       
-      // Update state without loading indicators
       setEmployees(response.data);
       
-      // Update caches
       employeesCache = {
         data: response.data,
         timestamp: Date.now()
@@ -223,25 +202,19 @@ const EmployeeList: FC = () => {
       }
     } catch (error) {
       console.error('Error in background refresh:', error);
-      // Don't show error notification for background refresh
     }
   }, []);
 
-  // Fetch employees on initial load with optimized loading strategy
   useEffect(() => {
     fetchEmployees();
     
-    // Cleanup function to handle component unmount
     return () => {
-      // Nothing to clean up for now
     };
   }, [fetchEmployees]);
 
-  // Update the useEffect for location changes to force a fresh load
   useEffect(() => {
     if (location.pathname === '/admin/employeelist') {
       console.log('Back at employee list, refreshing data');
-      // Check for a state flag indicating we should perform a fresh reload
       const needsFreshData = location.state && (location.state as any).refresh;
       
       if (needsFreshData) {
@@ -249,16 +222,15 @@ const EmployeeList: FC = () => {
         clearEmployeeCache();
       }
       
-      fetchEmployees(!needsFreshData); // Show loading state when we need fresh data
+      fetchEmployees(!needsFreshData); 
     }
   }, [location, fetchEmployees]);
 
-  // Optimized visibility change handler - keep this to refresh when tab becomes active
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         console.log('Page became visible, refreshing employee data');
-        fetchEmployees(false); // Don't show loading state for visibility change
+        fetchEmployees(false); 
       }
     };
 
@@ -269,7 +241,6 @@ const EmployeeList: FC = () => {
     };
   }, [fetchEmployees]);
 
-  // Use effect to listen for storage events (for multi-tab synchronization)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'employee_data_updated') {
@@ -306,17 +277,14 @@ const EmployeeList: FC = () => {
     }
   };
 
-  // Optimize the delete handler to update cache
   const handleDeleteConfirm = async () => {
     if (!employeeToDelete) return;
     
     try {
       setDeleteInProgress(true);
       
-      // Optimistic update - remove from UI immediately
       setEmployees(prev => prev.filter(emp => emp.id !== employeeToDelete));
       
-      // Update cache to match UI state
       if (employeesCache.data) {
         employeesCache.data = employeesCache.data.filter(emp => emp.id !== employeeToDelete);
         employeesCache.timestamp = Date.now();
@@ -331,7 +299,6 @@ const EmployeeList: FC = () => {
         }
       }
       
-      // Then send the delete request
       await apiClient.delete(`/api/employees/delete/${employeeToDelete}`);
       
         showNotification({
@@ -346,7 +313,6 @@ const EmployeeList: FC = () => {
           type: 'error',
         });
       
-      // Revert the optimistic update if the API call fails
       fetchEmployees(false);
     } finally {
       setDeleteConfirmOpen(false);
@@ -364,7 +330,6 @@ const EmployeeList: FC = () => {
     navigate('/admin/employeeManagement');
   };
 
-  // Update handleRefresh to properly clear cache
   const handleRefresh = () => {
     clearEmployeeCache();
     fetchEmployees(true);
@@ -374,15 +339,13 @@ const EmployeeList: FC = () => {
     setFilterPosition(newValue);
   };
 
-  // Optimize filtering with memoization to avoid recalculation on every render
   const filteredEmployees = useMemo(() => {
     return employees.filter((employee: EmployeeDTO) => {
-    // First apply position filter
+   
     if (filterPosition !== 'all' && employee.position.toLowerCase() !== filterPosition.toLowerCase()) {
       return false;
     }
     
-    // Then apply search filter
     if (!searchTerm) return true;
     
     const searchLower = searchTerm.toLowerCase();
@@ -401,7 +364,6 @@ const EmployeeList: FC = () => {
   });
   }, [employees, filterPosition, searchTerm]);
 
-  // Memoize the employees with index to avoid recalculation on every render
   const employeesWithIndex = useMemo(() => {
     return filteredEmployees.map((employee, index) => ({
     ...employee,
@@ -409,11 +371,9 @@ const EmployeeList: FC = () => {
   }));
   }, [filteredEmployees]);
 
-  // Custom header renderer to handle mobile view with line breaks
   const renderHeaderWithTooltip = (params: any) => {
     const headerName = params.colDef.headerName || '';
     
-    // For mobile view, add break for multi-word headers
     if (isMobile && headerName.includes(' ')) {
       const words = headerName.split(' ');
       
@@ -438,7 +398,6 @@ const EmployeeList: FC = () => {
     );
   };
 
-  // Define all columns with flexible widths
   const columns: GridColDef[] = [
     { 
       field: 'srNo', 
@@ -737,16 +696,13 @@ const EmployeeList: FC = () => {
     );
   };
 
-  // Optimize polling to avoid excessive API calls
   useEffect(() => {
-    // Set up polling every 60 seconds (increased from 30) to refresh data
     const pollInterval = setInterval(() => {
-      // Only poll if the page is visible
       if (document.visibilityState === 'visible') {
       console.log('Polling for employee data updates');
-        refreshDataInBackground(); // Use background refresh instead of fetchEmployees
+        refreshDataInBackground(); 
       }
-    }, 60000); // 60 seconds
+    }, 60000); 
     
     return () => {
       clearInterval(pollInterval);
@@ -947,7 +903,6 @@ const EmployeeList: FC = () => {
               </Tabs>
         </Box>
 
-            {/* For tablets and desktop: Table view */}
             {!isMobile && (
               <Box
                 sx={{
@@ -969,7 +924,7 @@ const EmployeeList: FC = () => {
                 <DataGrid
                   rows={employeesWithIndex}
                   columns={columns}
-                  getRowId={(row) => row.id || Math.random()} // Fallback for missing IDs
+                  getRowId={(row) => row.id || Math.random()} 
           autoHeight
                   hideFooter={employeesWithIndex.length <= 25}
           loading={loading}
@@ -1036,7 +991,6 @@ const EmployeeList: FC = () => {
                   }}
                 />
 
-                {/* Mobile scroll indicator for tablets */}
                 {isTablet && !isMobile && (
                   <Box
                     sx={{
@@ -1054,7 +1008,6 @@ const EmployeeList: FC = () => {
                   />
                 )}
 
-                {/* Mobile scroll helper text for tablets */}
                 {isTablet && !isMobile && (
                   <Box
                     sx={{
@@ -1072,7 +1025,6 @@ const EmployeeList: FC = () => {
               </Box>
             )}
 
-            {/* For mobile: Card view */}
             {isMobile && (
               <Box sx={{ mt: 1 }}>
                 {loading ? (
@@ -1092,7 +1044,6 @@ const EmployeeList: FC = () => {
         </Card>
       </Box>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteConfirmOpen}
         onClose={handleDeleteCancel}

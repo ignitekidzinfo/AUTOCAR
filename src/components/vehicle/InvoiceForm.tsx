@@ -32,6 +32,21 @@ import AddIcon from '@mui/icons-material/Add';
 import apiClient from 'Services/apiService';
 import { useParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
+
+// Add discount cache to improve performance
+const discountCache: Record<string, { discount: number, timestamp: number }> = {};
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+
+// Interface for parts data with manufacturer field
+interface PartWithManufacturer {
+  partName: string;
+  manufacturer?: string;
+  quantity?: number | string;
+  price?: number | string;
+  discountPercent?: number | string;
+  [key: string]: any;
+}
+
 export interface InvoiceFormData {
   vehicleRegId: string;
   customerName: string;
@@ -57,7 +72,9 @@ export interface InvoiceFormData {
     igstPercent: string;
     cgst: string;
     sgst: string;
-    igst: string; }[];
+    igst: string;
+    manufacturer?: string; // Add manufacturer field
+  }[];
   labours: {
     description: string;
     quantity: string;
@@ -77,6 +94,7 @@ export interface InvoiceFormData {
   totalAmount: number;
   advanceAmount: string;
   totalInWords: string; }
+
 const defaultInvoiceData: InvoiceFormData = {
   vehicleRegId: '',
   customerName: '',
@@ -111,6 +129,63 @@ const defaultInvoiceData: InvoiceFormData = {
   totalAmount: 0,
   advanceAmount: '',
   totalInWords: '' };
+
+// Function to fetch discount for a specific manufacturer
+const fetchDiscountForManufacturer = async (manufacturer: string): Promise<number | null> => {
+  if (!manufacturer) return null;
+
+  // Check cache first
+  const cached = discountCache[manufacturer];
+  const now = Date.now();
+  
+  if (cached && (now - cached.timestamp) < CACHE_EXPIRY) {
+    console.log(`Using cached discount for ${manufacturer}: ${cached.discount}%`);
+    return cached.discount;
+  }
+  
+  // If not in cache or expired, fetch from API
+  try {
+    console.log(`Fetching discount for manufacturer: ${manufacturer}`);
+    const response = await apiClient.get(`/discounts/by-manufacturer/${manufacturer}`);
+    if (response.status === 200 && response.data) {
+      const discount = response.data.discount;
+      
+      // Update cache
+      discountCache[manufacturer] = {
+        discount,
+        timestamp: now
+      };
+      
+      console.log(`Found discount for ${manufacturer}: ${discount}%`);
+      return discount;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching discount for ${manufacturer}:`, error);
+    return null;
+  }
+};
+
+// Function to prefetch all discounts
+const prefetchAllDiscounts = async () => {
+  try {
+    const response = await apiClient.get('/discounts/all');
+    if (response.status === 200 && Array.isArray(response.data)) {
+      // Update cache with all discounts
+      response.data.forEach(discountStructure => {
+        if (discountStructure.manufacturer && discountStructure.discount) {
+          discountCache[discountStructure.manufacturer] = {
+            discount: discountStructure.discount,
+            timestamp: Date.now()
+          };
+        }
+      });
+      console.log('Prefetched discounts for manufacturers:', Object.keys(discountCache).join(', '));
+    }
+  } catch (error) {
+    console.error('Error prefetching discounts:', error);
+  }
+};
 
 const DiscountSelector: React.FC<{
   value: string;
@@ -224,6 +299,12 @@ export default function InvoiceForm() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTitle, setDialogTitle] = useState("");
   const [dialogMessage, setDialogMessage] = useState("");
+
+  // Prefetch all discounts when component mounts
+  useEffect(() => {
+    prefetchAllDiscounts();
+  }, []);
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     if (name === 'advanceAmount') {
@@ -325,7 +406,7 @@ export default function InvoiceForm() {
         setDialogOpen(true); }
       const partsResponse = await apiClient.get('/sparePartTransactions/vehicleRegId', {
         params: { vehicleRegId: id } });
-      let partsArray: any[] = [];
+      let partsArray: PartWithManufacturer[] = [];
       let invoiceNumber = '';
       let jobCardNumber = '';
       let transactionDate = '';
@@ -356,13 +437,25 @@ export default function InvoiceForm() {
         invoiceNumber,
         jobCardNumber,
         date: transactionDate ? new Date(transactionDate).toISOString().split('T')[0] : '' }));
-      const parts = partsArray.map((p: any) => {
-        const baseAmount = parseFloat(p.quantity) * parseFloat(p.price);
-        const discountAmount = (baseAmount * parseFloat(p.discountPercent)) / 100;
+
+      // Apply discounts based on manufacturer for each part
+      await Promise.all(partsArray.map(async (part: PartWithManufacturer) => {
+        if (part.manufacturer) {
+          const discount = await fetchDiscountForManufacturer(part.manufacturer);
+          if (discount !== null) {
+            part.discountPercent = discount;
+            console.log(`Applied ${discount}% discount for ${part.partName} (${part.manufacturer})`);
+          }
+        }
+      }));
+
+      const parts = partsArray.map((p: PartWithManufacturer) => {
+        const baseAmount = parseFloat(String(p.quantity || 0)) * parseFloat(String(p.price || 0));
+        const discountAmount = (baseAmount * parseFloat(String(p.discountPercent || 0))) / 100;
         const taxableAmount = baseAmount - discountAmount;
-        const cgst = (taxableAmount * parseFloat(p.cgst || 0)) / 100;
-        const sgst = (taxableAmount * parseFloat(p.sgst || 0)) / 100;
-        const igst = (taxableAmount * parseFloat(p.igst || 0)) / 100;
+        const cgst = (taxableAmount * parseFloat(String(p.cgst || 0))) / 100;
+        const sgst = (taxableAmount * parseFloat(String(p.sgst || 0))) / 100;
+        const igst = (taxableAmount * parseFloat(String(p.igst || 0))) / 100;
         return {
           partName: p.partName,
           quantity: p.quantity ? String(p.quantity) : "1",
@@ -374,7 +467,9 @@ export default function InvoiceForm() {
           taxableAmount: taxableAmount.toFixed(2),
           cgst: cgst.toFixed(2),
           sgst: sgst.toFixed(2),
-          igst: igst.toFixed(2)}; });
+          igst: igst.toFixed(2),
+          manufacturer: p.manufacturer // Store manufacturer for reference
+        }; });
       setFormData(prev => ({ ...prev, parts }));
     } catch (error: any) {
       setDialogTitle("Error");

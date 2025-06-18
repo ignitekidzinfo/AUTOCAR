@@ -45,7 +45,6 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { useNavigate } from 'react-router-dom';
 import apiClient from 'utils/apiClient';
 
-// Interfaces and types
 interface UserPart {
   userPartId: number;
   partNumber: string;
@@ -65,28 +64,23 @@ interface PaginatedResponse<T> {
   currentPage: number;
 }
 
-// Constants for configuration
 const PAGE_SIZE = 50;
 const MAX_SEARCH_PAGES = 3;
 const LOW_STOCK_THRESHOLD = 2;
-const SCROLL_THRESHOLD = 200; // px from bottom to trigger loading
-const RETRY_DELAY = 3000; // ms to wait before retrying a failed request
-const MAX_RETRIES = 3; // maximum number of retries for a failed request
-const ERROR_DISPLAY_DURATION = 5000; // ms to display error messages
+const SCROLL_THRESHOLD = 200; 
+const RETRY_DELAY = 3000; 
+const MAX_RETRIES = 3; 
+const ERROR_DISPLAY_DURATION = 5000; 
 
 const UserPartList: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
-
-  // Core state variables
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState<string>("");
-  
-  // Pagination and data stats
   const [page, setPage] = useState<number>(0);
   const [totalElements, setTotalElements] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(0);
@@ -95,7 +89,6 @@ const UserPartList: React.FC = () => {
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [initialLoad, setInitialLoad] = useState<boolean>(true);
 
-  // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef<boolean>(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -103,20 +96,15 @@ const UserPartList: React.FC = () => {
   const retryCountRef = useRef<number>(0);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Delete confirmation dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
 
-  // Add state for sorting
   const [isSorted, setIsSorted] = useState<boolean>(false);
 
-  // Add state to track deleted IDs at the top with other state declarations
   const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
 
-  // Handle resize events for responsive layout
   useEffect(() => {
     const handleResize = () => {
       if (containerRef.current) {
@@ -135,7 +123,6 @@ const UserPartList: React.FC = () => {
     };
   }, []);
 
-  // Clean up any timeouts on unmount
   useEffect(() => {
     return () => {
       if (retryTimeoutRef.current) {
@@ -150,7 +137,6 @@ const UserPartList: React.FC = () => {
     };
   }, []);
 
-  // Format part data with quantity properly converted to a number
   const formatPartData = (part: UserPart) => ({
     id: part.userPartId,
     partNumber: part.partNumber || "",
@@ -163,34 +149,28 @@ const UserPartList: React.FC = () => {
     gst: part.gst || 18,
   });
 
-  // Fetch a single page of user parts with error handling
   const fetchUserPartsPage = useCallback(async (pageNumber: number) => {
-    // Prevent duplicate fetches
     if (loadingRef.current) {
       return;
     }
     
-    // Clear any pending fetch timeouts
     if (fetchTimeoutRef.current) {
       clearTimeout(fetchTimeoutRef.current);
       fetchTimeoutRef.current = null;
     }
     
-    // Set loading state
     setLoading(true);
     
-    // Track loading state in ref
     loadingRef.current = true;
     
     try {
       console.log(`Fetching page ${pageNumber} with size ${PAGE_SIZE}`);
       
-      // Make API call with cache busting
       const response = await apiClient.get<PaginatedResponse<UserPart>>('/userParts/getAll', {
         params: { 
           page: pageNumber, 
           size: PAGE_SIZE,
-          _t: Date.now() // Add timestamp to force fresh data
+          _t: Date.now() 
         },
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -200,32 +180,25 @@ const UserPartList: React.FC = () => {
         timeout: 30000,
       });
       
-      // Process the response
       const { content, totalPages, totalElements, currentPage } = response.data;
       
       console.log(`Received ${content.length} items for page ${currentPage}, total pages: ${totalPages}`);
       
-      // Format received data
       const formattedRows = content.map(formatPartData);
       
-      // Filter out any previously deleted items
       const filteredRows = formattedRows.filter(row => !deletedIds.has(row.id));
       
       console.log(`Filtered out ${formattedRows.length - filteredRows.length} deleted items`);
       
-      // Update pagination info
       setTotalElements(totalElements - (formattedRows.length - filteredRows.length));
       setTotalPages(totalPages);
       setPage(currentPage);
       
-      // Always replace all rows with filtered list
       setRows(filteredRows);
       
-      // Calculate low stock items
       const lowStock = filteredRows.filter(item => Number(item.quantity) < LOW_STOCK_THRESHOLD).length;
       setLowStockCount(lowStock);
       
-      // Clear error state
       setError(null);
       
       return true;
@@ -240,23 +213,18 @@ const UserPartList: React.FC = () => {
       
       return false;
     } finally {
-      // Reset loading states
       loadingRef.current = false;
       setLoading(false);
     }
   }, [deletedIds]);
 
-  // Add a new function to handle page changes
   const handlePageChange = useCallback((event: React.ChangeEvent<unknown>, value: number) => {
-    // Pages are 0-indexed in the API but 1-indexed in the Pagination component
     fetchUserPartsPage(value - 1);
   }, [fetchUserPartsPage]);
 
-  // Fix the initial load effect to prevent recursive updates
   useEffect(() => {
     if (!initialLoad) return;
 
-    // Load any previously deleted IDs from localStorage
     try {
       const storedDeletedIds = localStorage.getItem('deletedPartIds');
       if (storedDeletedIds) {
@@ -270,12 +238,10 @@ const UserPartList: React.FC = () => {
       console.error('Failed to load deleted IDs from localStorage:', e);
     }
 
-    // Only fetch on initial mount
     fetchUserPartsPage(0);
     setInitialLoad(false);
   }, [initialLoad, fetchUserPartsPage]);
 
-  // Handle search functionality
   const handleSearch = useCallback(async (searchTerm: string) => {
     if (!searchText.trim()) {
       setIsSearchMode(false);
@@ -292,10 +258,8 @@ const UserPartList: React.FC = () => {
     try {
       console.log(`Searching for: ${searchTerm}`);
       
-      // For search, we'll download a limited set of data
       const searchResults: UserPart[] = [];
       
-      // Only search first few pages
       for (let i = 0; i < MAX_SEARCH_PAGES; i++) {
         try {
           const response = await apiClient.get<PaginatedResponse<UserPart>>('/userParts/getAll', {
@@ -305,26 +269,22 @@ const UserPartList: React.FC = () => {
           
           const { content, totalElements, totalPages } = response.data;
           
-          // Set pagination info from first page
           if (i === 0) {
             setTotalElements(totalElements);
             setTotalPages(totalPages);
           }
           
-          // Break if no content or at end
           if (!content.length) break;
           
           searchResults.push(...content);
           
-          // Break if we've fetched all pages or reached limit
           if (i >= totalPages - 1 || i >= MAX_SEARCH_PAGES - 1) break;
         } catch (err) {
           console.error(`Error fetching search page ${i}:`, err);
           break;
         }
       }
-      
-      // Filter results
+     
       const lowerSearchTerm = searchTerm.toLowerCase();
       const filteredResults = searchResults.filter(part => 
         (part.partNumber && part.partNumber.toLowerCase().includes(lowerSearchTerm)) ||
@@ -335,10 +295,8 @@ const UserPartList: React.FC = () => {
       
       const formattedResults = filteredResults.map(formatPartData);
       
-      // Update state with search results
       setRows(formattedResults);
       
-      // Count low stock in search results
       const lowStock = formattedResults.filter(item => Number(item.quantity) < LOW_STOCK_THRESHOLD).length;
       setLowStockCount(lowStock);
       
@@ -357,17 +315,14 @@ const UserPartList: React.FC = () => {
     }
   }, [fetchUserPartsPage, searchText]);
 
-  // Handle search button click
   const handleSearchClick = () => {
     handleSearch(searchText);
   };
 
-  // Handle search input changes
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchText(e.target.value);
   };
 
-  // Handle clearing search
   const handleClearSearch = () => {
     setSearchText("");
     setIsSearchMode(false);
@@ -376,13 +331,10 @@ const UserPartList: React.FC = () => {
     fetchUserPartsPage(0);
   };
 
-  // Handle delete part
   const handleDeleteClick = (id: number) => {
-    // Instead of opening a dialog, directly call delete API
     deleteItem(id);
   };
 
-  // New function to handle the actual delete operation
   const deleteItem = async (id: number) => {
     if (!id) return;
     
@@ -391,14 +343,12 @@ const UserPartList: React.FC = () => {
     try {
       await apiClient.delete(`/userParts/delete/${id}`);
       
-      // Add to deleted IDs set to prevent reappearing
       setDeletedIds(prev => {
         const newSet = new Set(prev);
         newSet.add(id);
         return newSet;
       });
       
-      // Store in localStorage to persist across page refreshes
       try {
         const existingDeletedIds = JSON.parse(localStorage.getItem('deletedPartIds') || '[]');
         existingDeletedIds.push(id);
@@ -407,28 +357,22 @@ const UserPartList: React.FC = () => {
         console.error('Failed to store deleted IDs in localStorage:', e);
       }
       
-      // Remove the item from the list without refetching
       setRows(rows.filter(row => row.id !== id));
       
-      // Show success message
       setDeleteSuccess("Part deleted successfully");
       
-      // Reset total elements count
       setTotalElements(prev => prev - 1);
       
-      // Recalculate low stock count
       const updatedLowStock = rows
         .filter(item => item.id !== id && Number(item.quantity) < LOW_STOCK_THRESHOLD)
         .length;
       
       setLowStockCount(updatedLowStock);
       
-      // Clear any pending fetch timeouts
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
       }
       
-      // Schedule a refresh with a delay, storing the timeout reference
       fetchTimeoutRef.current = setTimeout(() => {
         fetchUserPartsPage(page);
         fetchTimeoutRef.current = null;
@@ -446,7 +390,7 @@ const UserPartList: React.FC = () => {
             break;
           case 404:
             errorMessage = 'Part not found. It may have been already deleted.';
-            // Add to deleted IDs to prevent showing in UI
+        
             setDeletedIds(prev => {
               const newSet = new Set(prev);
               newSet.add(id);
@@ -464,7 +408,6 @@ const UserPartList: React.FC = () => {
       setDeleteLoading(false);
       setDeleteItemId(null);
       
-      // Auto-hide success message after 3 seconds
       if (deleteSuccess) {
         setTimeout(() => {
           setDeleteSuccess(null);
@@ -473,25 +416,21 @@ const UserPartList: React.FC = () => {
     }
   };
 
-  // Add function to sort rows by quantity (ascending)
   const handleSortByQuantity = () => {
     if (rows.length === 0) return;
 
     setIsSorted(!isSorted);
     
     if (!isSorted) {
-      // Sort by quantity in ascending order (low to high)
       const sortedRows = [...rows].sort((a, b) => {
         return Number(a.quantity) - Number(b.quantity);
       });
       setRows(sortedRows);
     } else {
-      // Restore original order by fetching from the server again
       fetchUserPartsPage(page);
     }
   };
 
-  // Improve the header renderer to prevent cut-offs
   const renderHeaderWithTooltip = (params: GridColumnHeaderParams) => {
     if (!params || !params.colDef) {
       return <span>Unknown</span>;
@@ -499,7 +438,6 @@ const UserPartList: React.FC = () => {
 
     const headerName = params.colDef.headerName || '';
     
-    // For mobile, split long headers into multiple lines
     if (isMobile && headerName.includes(' ')) {
       const words = headerName.split(' ');
       
@@ -529,7 +467,6 @@ const UserPartList: React.FC = () => {
       );
     }
     
-    // For desktop or single-word headers
     return (
       <Tooltip title={headerName}>
         <Box sx={{ 
@@ -552,9 +489,7 @@ const UserPartList: React.FC = () => {
     );
   };
 
-  // Define columns for the DataGrid
   const getColumns = (): GridColDef[] => {
-    // Adjust base column width for better mobile display
     const baseColumnWidth = isMobile ? 100 : 130;
     
     const columns: GridColDef[] = [
@@ -563,7 +498,7 @@ const UserPartList: React.FC = () => {
         headerName: 'Actions',
         width: isMobile ? 110 : 130,
         minWidth: 110,
-        flex: 0, // Use fixed width instead of flex
+        flex: 0, 
         sortable: false,
         filterable: false,
         renderCell: (params: GridCellParams) => (
@@ -663,14 +598,13 @@ const UserPartList: React.FC = () => {
     }
     ];
 
-    // Add the rest of the columns
     columns.push(
     {
         field: 'buyingPrice',
         headerName: 'Purchase Rate',
         width: isMobile ? 100 : 120,
         minWidth: 100,
-        flex: 0, // Use fixed width
+        flex: 0,
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -687,7 +621,7 @@ const UserPartList: React.FC = () => {
         headerName: 'Sale Rate',
         width: isMobile ? 90 : 110,
         minWidth: 90,
-        flex: 0, // Use fixed width
+        flex: 0, 
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -704,7 +638,7 @@ const UserPartList: React.FC = () => {
         headerName: 'GST%',
         width: isMobile ? 70 : 80,
         minWidth: 70,
-        flex: 0, // Use fixed width
+        flex: 0, 
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -721,7 +655,7 @@ const UserPartList: React.FC = () => {
         headerName: 'Stock Qty',
         width: isMobile ? 85 : 100,
         minWidth: 85,
-        flex: 0, // Use fixed width
+        flex: 0, 
         sortable: false,
         renderHeader: renderHeaderWithTooltip,
         renderCell: (params: GridCellParams) => {
@@ -749,7 +683,7 @@ const UserPartList: React.FC = () => {
         headerName: 'Spare Supplier',
         width: isMobile ? 130 : 170,
         minWidth: 130,
-        flex: 0, // Use fixed width
+        flex: 0, 
         sortable: false,
         filterable: false,
         renderCell: (params: GridCellParams) => (
@@ -802,7 +736,6 @@ const UserPartList: React.FC = () => {
     return columns;
   };
 
-  // Helper to handle error display
   const handleApiError = (err: any, customMessage?: string) => {
     console.error("API Error:", err);
     
@@ -811,7 +744,6 @@ const UserPartList: React.FC = () => {
     if (err.code === 'ECONNABORTED') {
       errorMessage = 'Request timed out. Loading will continue automatically.';
     } else if (err.response) {
-      // Handle specific HTTP error codes
       switch (err.response.status) {
         case 401:
           errorMessage = 'Your session has expired. Please refresh the page and login again.';
@@ -830,7 +762,6 @@ const UserPartList: React.FC = () => {
     
     setError(errorMessage);
     
-    // Auto-hide error after delay, but only for timeout errors
     if (err.code === 'ECONNABORTED') {
       setTimeout(() => {
         setError(null);
@@ -840,13 +771,11 @@ const UserPartList: React.FC = () => {
     return errorMessage;
   };
 
-  // Add a manual refresh function
   const handleRefresh = () => {
     setLoading(true);
     fetchUserPartsPage(page);
   };
 
-  // Add function to clear deleted IDs
   const clearDeletedItemsFilter = () => {
     setDeletedIds(new Set());
     localStorage.removeItem('deletedPartIds');
