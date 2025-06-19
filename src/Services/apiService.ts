@@ -191,7 +191,9 @@ class OptimizedCache {
 const apiCache = new OptimizedCache(200);
 
 // Environment check for API base URL
-const API_BASE_URL = 'https://carauto01-production-8b0b.up.railway.app';
+// const API_BASE_URL = 'https://carauto01-production-8b0b.up.railway.app';
+
+const API_BASE_URL = 'https://sp80.prodchunca.in.net';
 // const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
 
 // API request cache system
