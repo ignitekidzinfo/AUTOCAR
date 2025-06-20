@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import apiClient from '../../Services/apiService';
+import apiClient from '../../utils/apiClient';
 import {
   Box,
   Typography,
@@ -31,6 +31,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 // Types
 interface DiscountStructureDTO {
@@ -89,7 +90,6 @@ const StyledButton = styled(Button)(({ theme }) => ({
 }));
 
 const DiscountManagement: React.FC = () => {
-  // State
   const [manufacturers, setManufacturers] = useState<string[]>([]);
   const [discountStructures, setDiscountStructures] = useState<DiscountStructureDTO[]>([]);
   const [manufacturerDiscounts, setManufacturerDiscounts] = useState<ManufacturerDiscount[]>([]);
@@ -143,15 +143,15 @@ const DiscountManagement: React.FC = () => {
   const fetchManufacturers = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get('http://localhost:8080/Filter/manufacturers');
+      const response = await apiClient.get('/Filter/manufacturers');
       if (response.status === 200) {
         setManufacturers(response.data);
       }
     } catch (error) {
       console.error('Error fetching manufacturers:', error);
-      showSnackbar('Failed to fetch manufacturers', 'error');
-      // Use sample data if API fails
-      setManufacturers(['Toyota', 'Honda', 'Ford', 'BMW', 'Mercedes', 'Audi']);
+      showSnackbar('Failed to fetch manufacturers. Please check your connection and try again.', 'error');
+      // Remove default values
+      setManufacturers([]);
     } finally {
       setLoading(false);
     }
@@ -167,7 +167,8 @@ const DiscountManagement: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching discount structures:', error);
-      showSnackbar('Failed to fetch discount structures', 'error');
+      showSnackbar('Failed to fetch discount structures. Please check your connection and try again.', 'error');
+      setDiscountStructures([]);
     } finally {
       setLoading(false);
     }
@@ -353,7 +354,17 @@ const DiscountManagement: React.FC = () => {
             <CircularProgress />
           </Box>
         ) : manufacturers.length === 0 ? (
-          <Alert severity="info" sx={{ borderRadius: 1 }}>No manufacturers found.</Alert>
+          <Alert severity="info" sx={{ borderRadius: 1 }}>
+            No manufacturers found. Please check your connection to the server and try refreshing the page.
+            <Button 
+              startIcon={<RefreshIcon />} 
+              onClick={fetchManufacturers} 
+              sx={{ ml: 2 }}
+              color="primary"
+            >
+              Retry
+            </Button>
+          </Alert>
         ) : (
           <TableContainer sx={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)', borderRadius: 1 }}>
             <Table>
@@ -444,7 +455,17 @@ const DiscountManagement: React.FC = () => {
             <CircularProgress />
           </Box>
         ) : discountStructures.length === 0 ? (
-          <Alert severity="info" sx={{ borderRadius: 1 }}>No discount structures found. Add one above.</Alert>
+          <Alert severity="info" sx={{ borderRadius: 1 }}>
+            No discount structures found. Add discounts for manufacturers using the form above.
+            <Button 
+              startIcon={<RefreshIcon />} 
+              onClick={fetchDiscountStructures} 
+              sx={{ ml: 2 }}
+              color="primary"
+            >
+              Refresh
+            </Button>
+          </Alert>
         ) : (
           <TableContainer sx={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)', borderRadius: 1 }}>
             <Table>

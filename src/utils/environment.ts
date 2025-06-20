@@ -18,5 +18,5 @@ export const getEnvironment = (): string => {
 
 // API URL depending on environment
 export const getApiBaseUrl = (): string => {
-  return process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
+  return process.env.REACT_APP_API_BASE_URL || 'https://sp80.prodchunca.in.net';
 }; 
