@@ -196,7 +196,7 @@ const apiCache = new OptimizedCache(200);
 const API_BASE_URL = 'https://sp80.prodchunca.in.net';
 
 // API request cache system
-const CACHE_DURATION = 5 * 60 * 1000;
+const CACHE_DURATION = 5 * 60 * 1000; 
 
 // Create the advanced axios instance
 export const apiClient = axios.create({

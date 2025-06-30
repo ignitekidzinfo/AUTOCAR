@@ -258,44 +258,37 @@ const UserPartList: React.FC = () => {
     try {
       console.log(`Searching for: ${searchTerm}`);
       
-      const searchResults: UserPart[] = [];
+      const response = await apiClient.get(`/Filter/searchBarFilter?searchBarInput=${searchTerm}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+        timeout: 30000,
+      });
       
-      for (let i = 0; i < MAX_SEARCH_PAGES; i++) {
-        try {
-          const response = await apiClient.get<PaginatedResponse<UserPart>>('/userParts/getAll', {
-            params: { page: i, size: PAGE_SIZE },
-            timeout: 30000,
-          });
-          
-          const { content, totalElements, totalPages } = response.data;
-          
-          if (i === 0) {
-            setTotalElements(totalElements);
-            setTotalPages(totalPages);
-          }
-          
-          if (!content.length) break;
-          
-          searchResults.push(...content);
-          
-          if (i >= totalPages - 1 || i >= MAX_SEARCH_PAGES - 1) break;
-        } catch (err) {
-          console.error(`Error fetching search page ${i}:`, err);
-          break;
-        }
+      if (!Array.isArray(response.data)) {
+        console.warn("API response is not an array:", response.data);
+        setRows([]);
+        setError('Search returned an unexpected response. Please try again.');
+        return;
       }
-     
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      const filteredResults = searchResults.filter(part => 
-        (part.partNumber && part.partNumber.toLowerCase().includes(lowerSearchTerm)) ||
-        (part.partName && part.partName.toLowerCase().includes(lowerSearchTerm)) ||
-        (part.description && part.description.toLowerCase().includes(lowerSearchTerm)) ||
-        (part.manufacturer && part.manufacturer.toLowerCase().includes(lowerSearchTerm))
-      );
       
-      const formattedResults = filteredResults.map(formatPartData);
+      const formattedResults = response.data.map((part: any) => formatPartData({
+        userPartId: part.sparePartId || part.userPartId || 0,
+        partNumber: part.partNumber || '',
+        partName: part.partName || '',
+        manufacturer: part.manufacturer || '',
+        quantity: part.quantity || 0,
+        price: part.price || 0,
+        buyingPrice: part.buyingPrice || 0,
+        description: part.description || '',
+        gst: part.gst || 18
+      }));
       
       setRows(formattedResults);
+      setTotalElements(formattedResults.length);
+      setTotalPages(Math.ceil(formattedResults.length / PAGE_SIZE));
       
       const lowStock = formattedResults.filter(item => Number(item.quantity) < LOW_STOCK_THRESHOLD).length;
       setLowStockCount(lowStock);
