@@ -1,6 +1,4 @@
 import { useEffect } from 'react';
-import { isProduction } from './environment';
-import logger from './logger';
 
 // Extend Window interface to include our custom methods
 declare global {

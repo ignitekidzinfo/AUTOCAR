@@ -46,7 +46,12 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import { filter } from 'types/SparePart';
 import { apiClient } from 'utils/apiClient';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import { MemoryCache, cacheManager, PERFORMANCE_CONSTANTS } from 'utils/performance';
+import { 
+  MemoryCache, 
+  cacheManager, 
+  PERFORMANCE_CONSTANTS,
+  safePerformance 
+} from 'utils/performance';
 
 // Constants for improved performance
 const PAGE_SIZE = 25;
@@ -646,7 +651,9 @@ export default function VehicleList() {
   useEffect(() => {
     isComponentMountedRef.current = true;
     const perfMark = `vehicle-list-mount-${Date.now()}`;
-    performance.mark(perfMark);
+    
+    // Create the performance mark using the safe utility
+    safePerformance.mark(perfMark);
     
     // Check if we're returning from edit/add and need to refresh
     const needsRefresh = localStorage.getItem('needsRefreshOnReturn') === 'true';
@@ -703,18 +710,22 @@ export default function VehicleList() {
     
     // Measure initial render performance
     setTimeout(() => {
-      performance.measure('vehicle-list-initial-render', perfMark);
-      const measurements = performance.getEntriesByName('vehicle-list-initial-render');
-      if (measurements.length > 0) {
-        console.log(`Initial render time: ${measurements[0].duration.toFixed(2)}ms`);
+      // Safely measure the render time
+      const duration = safePerformance.measure('vehicle-list-initial-render', perfMark);
+      if (duration !== null) {
+        console.log(`Initial render time: ${duration.toFixed(2)}ms`);
       }
-      performance.clearMarks(perfMark);
-      performance.clearMeasures('vehicle-list-initial-render');
+      
+      // Clean up
+      safePerformance.clear(perfMark, 'vehicle-list-initial-render');
     }, 0);
     
     return () => {
       isComponentMountedRef.current = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      // Clean up any performance marks
+      safePerformance.clear(perfMark);
       
       // Save current state to cache when unmounting
       if (rawDataRef.current.length > 0) {

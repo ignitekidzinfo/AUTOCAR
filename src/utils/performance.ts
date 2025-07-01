@@ -300,4 +300,94 @@ export class ResourceManager {
   }
 }
 
-export const globalResourceManager = new ResourceManager(); 
+export const globalResourceManager = new ResourceManager();
+
+/**
+ * Safe performance measurement utilities
+ */
+export const safePerformance = {
+  /**
+   * Safely create a performance mark with error handling
+   * @param markName - Name of the mark to create
+   * @returns The name of the mark created, or null if failed
+   */
+  mark: (markName: string): string | null => {
+    try {
+      // Generate a unique mark name if none provided
+      const uniqueMarkName = markName || `mark-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      performance.mark(uniqueMarkName);
+      return uniqueMarkName;
+    } catch (error) {
+      console.error('Error creating performance mark:', error);
+      return null;
+    }
+  },
+  
+  /**
+   * Safely measure between two marks or from a mark to now
+   * @param measureName - Name for the measurement
+   * @param startMark - Starting mark name
+   * @param endMark - Optional ending mark name (if not provided, measures to now)
+   * @returns The duration of the measurement in ms, or null if failed
+   */
+  measure: (measureName: string, startMark: string, endMark?: string): number | null => {
+    try {
+      // Check if the start mark exists
+      const startMarks = performance.getEntriesByName(startMark, 'mark');
+      if (startMarks.length === 0) {
+        console.warn(`Start mark "${startMark}" not found for measurement "${measureName}"`);
+        return null;
+      }
+      
+      // If endMark provided, check if it exists
+      if (endMark) {
+        const endMarks = performance.getEntriesByName(endMark, 'mark');
+        if (endMarks.length === 0) {
+          console.warn(`End mark "${endMark}" not found for measurement "${measureName}"`);
+          return null;
+        }
+      }
+      
+      // Create the measurement
+      if (endMark) {
+        performance.measure(measureName, startMark, endMark);
+      } else {
+        performance.measure(measureName, startMark);
+      }
+      
+      // Get the measurement result
+      const measurements = performance.getEntriesByName(measureName, 'measure');
+      if (measurements.length > 0) {
+        return measurements[0].duration;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error creating performance measurement:', error);
+      return null;
+    }
+  },
+  
+  /**
+   * Safely clear performance marks and measures
+   * @param markName - Optional mark name to clear (if not provided, clears all)
+   * @param measureName - Optional measure name to clear (if not provided, clears all)
+   */
+  clear: (markName?: string, measureName?: string): void => {
+    try {
+      if (markName) {
+        performance.clearMarks(markName);
+      } else {
+        performance.clearMarks();
+      }
+      
+      if (measureName) {
+        performance.clearMeasures(measureName);
+      } else if (!markName) {
+        performance.clearMeasures();
+      }
+    } catch (error) {
+      console.error('Error clearing performance entries:', error);
+    }
+  }
+}; 
