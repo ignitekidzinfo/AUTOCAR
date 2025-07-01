@@ -26,6 +26,31 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>AutoCarCarePoint</title>
+    <!-- Early console suppression - prevents logs before React initializes -->
+    <script>
+      (function() {
+        // Store original console methods
+        window._originalConsole = {
+          log: console.log,
+          info: console.info,
+          warn: console.warn,
+          error: console.error,
+          debug: console.debug
+        };
+        
+        // Replace with empty functions
+        console.log = function() {};
+        console.info = function() {};
+        console.warn = function() {};
+        console.error = function() {};
+        console.debug = function() {};
+        
+        // This will be used by ConsoleSanitizer to get original methods
+        window._getOriginalConsole = function() {
+          return window._originalConsole;
+        };
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
