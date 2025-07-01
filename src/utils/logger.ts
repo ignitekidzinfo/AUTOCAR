@@ -7,6 +7,11 @@ const SENSITIVE_KEYS = [
   'ssn', 'social', 'creditCard', 'credit', 'cvv', 'cvc'
 ];
 
+// Global configuration object - can be modified to toggle logging
+export const logConfig = {
+  enabled: false // set to false by default to disable all logs
+};
+
 /**
  * Recursively sanitizes objects to mask sensitive data
  */
@@ -51,34 +56,44 @@ const sanitizeData = (data: any): any => {
  * Custom logger implementation that respects environment and sanitizes sensitive data
  */
 const logger = {
+  // Enable or disable logging
+  enable: () => {
+    logConfig.enabled = true;
+  },
+  
+  disable: () => {
+    logConfig.enabled = false;
+  },
+  
   log: (...args: any[]) => {
-    if (isProduction) return;
+    if (!logConfig.enabled || isProduction) return;
     console.log(...args.map(arg => sanitizeData(arg)));
   },
   
   info: (...args: any[]) => {
-    if (isProduction) return;
+    if (!logConfig.enabled || isProduction) return;
     console.info(...args.map(arg => sanitizeData(arg)));
   },
   
   warn: (...args: any[]) => {
     // We keep warnings in production, but sanitize them
+    if (!logConfig.enabled) return;
     console.warn(...args.map(arg => sanitizeData(arg)));
   },
   
   error: (...args: any[]) => {
-    // We keep errors in production, but sanitize them
+    // We always keep errors, but sanitize them
     console.error(...args.map(arg => sanitizeData(arg)));
   },
   
   debug: (...args: any[]) => {
-    if (isProduction) return;
+    if (!logConfig.enabled || isProduction) return;
     console.debug(...args.map(arg => sanitizeData(arg)));
   },
   
   // Special method for data that should never be logged in production
   sensitive: (...args: any[]) => {
-    if (isProduction) return;
+    if (!logConfig.enabled || isProduction) return;
     console.log(...args.map(arg => sanitizeData(arg)));
   }
 };

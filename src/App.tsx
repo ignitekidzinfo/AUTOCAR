@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { Box, Button, Snackbar, Alert } from '@mui/material';
 import NavigationMenu from './components/navigation/NavigationMenu';
-// import ConsoleSanitizer from './utils/ConsoleSanitizer';
+import ConsoleSanitizer from './utils/ConsoleSanitizer';
 import logger from './utils/logger';
 import TermsAndConditionsList from './components/Terms/TermsAndConditionsList';
 import AddTermsAndConditions from './components/Terms/AddTermsAndConditions';
@@ -204,7 +204,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
     <Router>
-      {/* <ConsoleSanitizer /> */}
+      <ConsoleSanitizer />
       
       {/* Add the session expiration handler if user is authenticated */}
       {user.isAuthenticated && <SessionExpirationHandler />}

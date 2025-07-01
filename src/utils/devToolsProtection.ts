@@ -6,7 +6,7 @@
  * provides configurable responses when DevTools are detected.
  */
 
-import logger from './logger';
+import logger, { logConfig } from './logger';
 import { isProduction } from './environment';
 
 // Options for detection and response
@@ -273,6 +273,28 @@ export const initDevToolsProtection = (userOptions: Partial<DevToolsProtectionOp
   logger.debug('DevTools protection initialized');
 };
 
+/**
+ * Enable debug mode temporarily
+ * This should only be used during development or troubleshooting
+ * 
+ * @param duration - Duration in milliseconds to enable logs (default: 60 seconds)
+ */
+export const enableDebugMode = (duration: number = 60000) => {
+  if (isProduction) {
+    console.warn('Debug mode cannot be enabled in production');
+    return;
+  }
+  
+  logConfig.enabled = true;
+  console.log('Debug mode enabled for', duration / 1000, 'seconds');
+  
+  setTimeout(() => {
+    logConfig.enabled = false;
+    console.log('Debug mode disabled');
+  }, duration);
+};
+
 export default {
-  initDevToolsProtection
+  initDevToolsProtection,
+  enableDebugMode
 }; 
