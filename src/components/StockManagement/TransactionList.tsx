@@ -264,16 +264,16 @@ const UserPartList: React.FC = () => {
           'Pragma': 'no-cache',
           'Expires': '0',
         },
-        timeout: 30000,
-      });
-      
+            timeout: 30000,
+          });
+          
       if (!Array.isArray(response.data)) {
         console.warn("API response is not an array:", response.data);
         setRows([]);
         setError('Search returned an unexpected response. Please try again.');
         return;
       }
-      
+     
       const formattedResults = response.data.map((part: any) => formatPartData({
         userPartId: part.sparePartId || part.userPartId || 0,
         partNumber: part.partNumber || '',

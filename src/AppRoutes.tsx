@@ -16,6 +16,9 @@ import AddEmployeeSalary from "components/Employee/AddEmployeeSalary";
 import AddEmployeeAdvancePayment from "components/Employee/AddEmployeeAdvancePayment";
 import EmployeeAdvancePaymentList from "components/Employee/EmployeeAdvancePaymentList";
 import PurchaseList from "pages/TransactionManagement/PurchaseList";
+import SpareSaleStockList from "components/StockManagement/SpareSaleStockList";
+import SupplierOrderPage from 'components/StockManagement/SupplierOrderPage';
+import PartSuppliersList from 'components/StockManagement/PartSuppliersList';
 const LoadingFallback = () => (
   <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
     <CircularProgress />
@@ -155,15 +158,12 @@ const AppRoutes = () => {
                 <Route path="insuranceList" element={<InsuranceList />} />
                 <Route path="manage-purchaseaccountreport" element={<PurchaseAccountReport />} />
                 <Route path="manage-Notes" element={<NotesList/>} />
-                
-                {/* Terms and Conditions Routes */}
                 <Route path="manage-Terms" element={<TermsAndConditionsList/>} />
                 
-                {/* Route for editing - matches /admin/terms/edit/:id */}
                 <Route path="terms/edit/:id" element={<AddTermsAndConditions />} />
                 
-                {/* Route for adding - matches /admin/terms/add */}
                 <Route path="terms/add" element={<AddTermsAndConditions />} />
+                <Route path="spareSale" element={<SpareSaleStockList />} />
 
                 <Route path="ServiceTable" element={<InvoiceTable />} />
                 <Route path="serviceManage" element={<AddService />} />
@@ -234,6 +234,9 @@ const AppRoutes = () => {
 
                 {/* Add the new route for manage discounts */}
                 <Route path="manage-discounts" element={<ManageDiscounts />} />
+
+                <Route path="supplier-order" element={<SupplierOrderPage />} />
+                <Route path="part-suppliers" element={<PartSuppliersList />} />
             </Route>
         </Routes>
         </Suspense>
