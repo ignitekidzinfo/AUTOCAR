@@ -190,7 +190,7 @@ class OptimizedCache {
 // Initialize the optimized cache
 const apiCache = new OptimizedCache(200);
 
-const API_BASE_URL = 'http://app.prodchunca.in.net';
+const API_BASE_URL = 'https://app.prodchunca.in.net';
 // const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
 
 // API request cache system
