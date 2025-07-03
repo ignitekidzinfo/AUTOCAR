@@ -27,10 +27,13 @@ import logger from '../utils/logger';
 import secureStorage from '../utils/secureStorage';
 import { InputAdornment, IconButton, Paper, useTheme, alpha, CircularProgress } from '@mui/material';
 import { forceCheckTokenValidity } from '../utils/tokenUtils';
+import { useAuth } from '../context/AuthContext';
 
 interface MyJwtPayload extends JwtPayload {
   authorities: string[];
   roles: string[];
+  firstname: string;
+  componentNames: string[];
 }
 
 const Card = styled(MuiCard)(({ theme }) => ({
@@ -110,6 +113,7 @@ const BackLink = styled(RouterLink)(({ theme }) => ({
 
 export default function SignInCard() {
   const theme = useTheme();
+  const { login } = useAuth();
   const [emailError, setEmailError] = useState(false);
   const [passwordError, setPasswordError] = useState(false);
   const [open, setOpen] = useState(false);
@@ -151,7 +155,10 @@ export default function SignInCard() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    console.log('Authentication: Login form submitted');
+
     if (!validateInputs()) {
+      console.log('Authentication: Input validation failed');
       return;
     }
 
@@ -163,73 +170,78 @@ export default function SignInCard() {
         password
       };
       
+      console.log('Authentication: Making login API request', { username: email });
       const response = await SignInUser(data);
       
       if (!response) {
+        console.log('Authentication: No response received from server');
         throw new Error("No response received from server");
       }
       
+      console.log('Authentication: Received token response from server');
+      
       try {
         const decodedToken = jwtDecode<MyJwtPayload>(response);
+        console.log('Authentication: Token decoded successfully', { 
+          user: decodedToken.firstname, 
+          role: decodedToken.roles?.[0],
+          authorities: decodedToken.authorities,
+          componentsCount: decodedToken.componentNames?.length || 0
+        });
         
         const expTime = decodedToken.exp ? Number(decodedToken.exp) * 1000 : 0;
         const currentTime = Date.now();
         
         if (!decodedToken.exp || expTime <= currentTime) {
+          console.log('Authentication: Token is expired', {
+            expTime: new Date(expTime).toISOString(),
+            currentTime: new Date(currentTime).toISOString()
+          });
           toast.error("Session token is expired. Please sign in again.");
           return;
         }
 
-        // Clear any existing auth data
-        storageUtils.clearAuthData(); 
+        // Use the login function from AuthContext
+        login(response);
         
-        // Reset 401 counter on successful login
-        sessionStorage.setItem('unauthorized401Count', '0');
-        
-        // Store new token and user data using Promise.all to handle both async operations
-        await Promise.all([
-          secureStorage.setItem("token", response),
-          secureStorage.setItem("userData", decodedToken)
-        ]);
-        
-        // Verify token is stored correctly
-        const storedToken = storageUtils.getAuthToken();
-        if (!storedToken) {
-          logger.warn("Token storage verification failed - trying again");
-          // Try one more time with a small delay
-          await new Promise(resolve => setTimeout(resolve, 300));
-          await secureStorage.setItem("token", response);
-        }
+        // Store token in localStorage for debugging purposes
+        localStorage.setItem('debug_token_stored', 'true');
+        localStorage.setItem('debug_login_time', new Date().toISOString());
         
         // Success message
-        toast.success("Signed in successfully! Redirecting to dashboard...");
-        
-        // Dispatch custom event to notify about authentication state change
-        window.dispatchEvent(new Event('auth-state-changed'));
+        toast.success("Signed in successfully!!!!");
         
         // Redirect to appropriate page after login
         setTimeout(() => {
-          // Default to /dashboard for authenticated users
+          console.log('Authentication: Redirecting to dashboard');
           navigate("/");
         }, 1000);
       } catch (decodeError) {
+        console.error("Authentication: Failed to decode token", decodeError);
         logger.error("Failed to decode token:", decodeError);
         toast.error("Invalid authentication token received from server");
       }
     } catch (error: any) {
+      console.error("Authentication: Sign-in failed", error);
       logger.error("Sign-in failed", error);
       
       if (error.response) {
         const errorMessage = error.response.data?.message || 
                              error.response.data?.error || 
                              "Invalid email or password";
+        console.log('Authentication: Server error response', { 
+          status: error.response.status, 
+          message: errorMessage 
+        });
         toast.error(errorMessage);
       } else if (error.request) {
+        console.log('Authentication: No response received from server');
         toast.error("Server is not responding. Please check if the server is running.");
       } else if (error.message && error.message.includes('ERR_CONNECTION_REFUSED')) {
-        
+        console.log('Authentication: Connection refused');
         toast.error("Unable to connect to the server. Please check if the server is running.");
       } else {
+        console.log('Authentication: Unknown error', { message: error.message });
         toast.error(error.message || "An unexpected error occurred. Please try again.");
       }
       
@@ -238,6 +250,7 @@ export default function SignInCard() {
       toast.error("Sign-in failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
+      console.log('Authentication: Login process completed');
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { ChevronDown, User, LogOut, Menu, X, Home, ShoppingBag, BarChart2, Car, Wrench, Plus } from "lucide-react";
 import storageUtils from "../utils/storageUtils";
+import { useAuth } from "../context/AuthContext";
 
 const WebHeader = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -9,15 +10,10 @@ const WebHeader = () => {
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  let isLogin = false;
-  let userRole = "";
+  const { isAuthenticated, userRole } = useAuth();
 
   const userData = storageUtils.getUserData();
-  if (userData) {
-    userRole = userData.authorities?.[0] || "";
-    isLogin = true;
-  }
-
+  
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 20) {
@@ -37,9 +33,26 @@ const WebHeader = () => {
 
   const handleLogout = () => {
     storageUtils.clearAuthData();
-    isLogin = false;
     navigate("/signIn");
   };
+
+  // Ensure we have proper role information
+  let role = userRole;
+  if (!role && userData && userData.authorities) {
+    role = userData.authorities[0] || "";
+  }
+  
+  // Check if user has admin role - check both from context and from userData
+  const isAdmin = role === "ADMIN" || 
+                 (userData && userData.authorities && 
+                  Array.isArray(userData.authorities) && 
+                  userData.authorities.includes("ADMIN"));
+                  
+  // Check if user has employee role
+  const isEmployee = role === "EMPLOYEE" || 
+                    (userData && userData.authorities && 
+                     Array.isArray(userData.authorities) && 
+                     userData.authorities.includes("EMPLOYEE"));
 
   return (
     <>
@@ -72,14 +85,14 @@ const WebHeader = () => {
           >
             <div className="flex flex-col lg:flex-row lg:items-center space-y-2 lg:space-y-0 px-4 lg:px-0">
               <NavItem to="/" label="Home" icon={<Home size={18} />} />
-              {userRole === "ADMIN" && (
+              {isAuthenticated && isAdmin && (
                 <NavItem to="/add-part" label="Add Parts" icon={<Wrench size={18} />} />
               )}
               <NavItem to="/getAll" label="Accessories" icon={<ShoppingBag size={18} />} />
-              {(userRole === "ADMIN" || userRole === "EMPLOYEE") && (
+              {isAuthenticated && (isAdmin || isEmployee) && (
                 <NavItem to="/admin/dashboard" label="Dashboard" icon={<BarChart2 size={18} />} />
               )}
-              {!isLogin && (
+              {!isAuthenticated && (
                 <div className="lg:ml-6 mt-4 lg:mt-0 border-t border-gray-700 lg:border-0 pt-4 lg:pt-0 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4 w-full lg:w-auto">
                   <Link
                     to="/signIn"
@@ -107,7 +120,7 @@ const WebHeader = () => {
             </div>
           </div>
 
-          {isLogin && (
+          {isAuthenticated && (
             <div className="relative">
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -129,7 +142,7 @@ const WebHeader = () => {
                 <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-xl z-50 overflow-hidden origin-top-right transform transition-all duration-200 scale-100">
                   <div className="px-4 py-3 border-b border-gray-700">
                     <p className="text-sm font-medium text-white">{userData?.sub || 'User'}</p>
-                    <p className="text-xs text-gray-400 mt-1">{userRole || 'User Role'}</p>
+                    <p className="text-xs text-gray-400 mt-1">{role || 'User Role'}</p>
                   </div>
                   <Link
                     to="/profile"

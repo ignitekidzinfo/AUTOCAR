@@ -45,6 +45,17 @@ class SecureStorage {
             }
           }
         }
+        
+        // Try direct unencrypted storage as last resort
+        const directData = localStorage.getItem(`direct_${key}`);
+        if (directData) {
+          try {
+            return JSON.parse(directData);
+          } catch {
+            return directData;
+          }
+        }
+        
         return null;
       }
       
@@ -71,11 +82,26 @@ class SecureStorage {
             }
           }
           
+          // Try direct unencrypted storage as last resort
+          const directData = localStorage.getItem(`direct_${key}`);
+          if (directData) {
+            try {
+              return JSON.parse(directData);
+            } catch {
+              return directData;
+            }
+          }
+          
           return null;
         }
         
         // Parse the JSON data
-        return JSON.parse(decryptedData);
+        try {
+          return JSON.parse(decryptedData);
+        } catch {
+          // If it's not valid JSON, return as is (might be a string token)
+          return decryptedData;
+        }
       } catch (decryptError) {
         logger.error(`Decryption error for key ${key}:`, decryptError);
         
@@ -89,6 +115,16 @@ class SecureStorage {
             } catch {
               return fallbackData;
             }
+          }
+        }
+        
+        // Try direct unencrypted storage as last resort
+        const directData = localStorage.getItem(`direct_${key}`);
+        if (directData) {
+          try {
+            return JSON.parse(directData);
+          } catch {
+            return directData;
           }
         }
         
@@ -109,8 +145,13 @@ class SecureStorage {
     // Implementation with retry mechanism
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        // Convert value to JSON string
-        const valueStr = JSON.stringify(value);
+        // Convert value to JSON string if it's not already a string
+        let valueStr;
+        if (typeof value === 'string') {
+          valueStr = value;
+        } else {
+          valueStr = JSON.stringify(value);
+        }
         
         // Encrypt the data
         const encryptedData = CryptoJS.AES.encrypt(valueStr, SECRET_KEY).toString();
@@ -122,6 +163,9 @@ class SecureStorage {
         if (isDevelopment) {
           localStorage.setItem(`unencrypted_${key}`, valueStr);
         }
+        
+        // Always store a direct unencrypted version as last resort fallback
+        localStorage.setItem(`direct_${key}`, valueStr);
         
         // Verify storage was successful by reading back
         const storedData = localStorage.getItem(key);
@@ -140,7 +184,11 @@ class SecureStorage {
         } else {
           // Last attempt, try unencrypted fallback
           try {
-            localStorage.setItem(key, JSON.stringify(value));
+            if (typeof value === 'string') {
+              localStorage.setItem(`direct_${key}`, value);
+            } else {
+              localStorage.setItem(`direct_${key}`, JSON.stringify(value));
+            }
             logger.warn(`Stored ${key} unencrypted as last resort`);
           } catch (e) {
             logger.error('All storage attempts failed', e);
@@ -157,10 +205,11 @@ class SecureStorage {
   removeItem(key: string): void {
     try {
       localStorage.removeItem(key);
-      // Also remove fallback if in development
+      // Also remove fallbacks
       if (isDevelopment) {
         localStorage.removeItem(`unencrypted_${key}`);
       }
+      localStorage.removeItem(`direct_${key}`);
     } catch (error) {
       logger.error(`Error removing item from secure storage: ${key}`, error);
     }
@@ -183,7 +232,10 @@ class SecureStorage {
    */
   keys(): string[] {
     try {
-      return Object.keys(localStorage).filter(key => !key.startsWith('unencrypted_'));
+      return Object.keys(localStorage).filter(key => 
+        !key.startsWith('unencrypted_') && 
+        !key.startsWith('direct_')
+      );
     } catch (error) {
       logger.error('Error getting keys from secure storage', error);
       return [];

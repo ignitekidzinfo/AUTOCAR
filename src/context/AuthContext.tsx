@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { jwtDecode } from 'jwt-decode';
 import storageUtils from '../utils/storageUtils';
 import secureStorage from '../utils/secureStorage';
+import logger from '../utils/logger';
 
 interface DecodedToken {
   sub: string;
@@ -41,25 +42,66 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [userRole, setUserRole] = useState('');
   const [userName, setUserName] = useState('');
 
+  // Check for token on mount and whenever localStorage changes
   useEffect(() => {
-    const token = storageUtils.getAuthToken();
-    if (token) {
-      try {
-        const decoded = jwtDecode<DecodedToken>(token);
+    const checkAuth = () => {
+      const token = storageUtils.getAuthToken();
+      if (token) {
+        try {
+          const decoded = jwtDecode<DecodedToken>(token);
+          
+          // Check if token is expired
+          const expTime = decoded.exp ? Number(decoded.exp) * 1000 : 0;
+          const currentTime = Date.now();
+          
+          if (expTime <= currentTime) {
+            console.log('Token expired, logging out');
+            storageUtils.clearAuthData();
+            setIsAuthenticated(false);
+            return;
+          }
+          
           setIsAuthenticated(true);
           setAuthorizedComponents(decoded.componentNames || []);
-          setUserRole(decoded.roles[0] || '');
+          
+          // Get role from either roles or authorities array
+          const role = decoded.roles?.[0] || decoded.authorities?.[0] || '';
+          setUserRole(role);
           setUserName(decoded.firstname || '');
-          console.log('Auth state:', {
+          
+          // Enhanced logging for authentication state
+          console.log('Auth state loaded from token:', {
             isAuthenticated: true,
-            role: decoded.roles[0],
-            components: decoded.componentNames
+            role: role,
+            user: decoded.firstname,
+            components: decoded.componentNames?.length || 0,
+            authorities: decoded.authorities,
           });
-      } catch (error) {
-        console.error('Invalid token:', error);
-        storageUtils.clearAuthData();
+        } catch (error) {
+          console.error('Invalid token:', error);
+          storageUtils.clearAuthData();
+          setIsAuthenticated(false);
+          console.log('Authentication failed: Invalid token cleared');
+        }
+      } else {
+        console.log('Authentication: No token found in storage');
+        setIsAuthenticated(false);
       }
-    }
+    };
+
+    // Check auth on mount
+    checkAuth();
+    
+    // Also set up a listener for storage changes (in case another tab logs out)
+    const handleStorageChange = () => {
+      checkAuth();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   const login = (token: string) => {
@@ -73,14 +115,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       setIsAuthenticated(true);
       setAuthorizedComponents(decoded.componentNames || []);
-      setUserRole(decoded.roles[0] || '');
+      
+      // Get role from either roles or authorities array
+      const role = decoded.roles?.[0] || decoded.authorities?.[0] || '';
+      setUserRole(role);
       setUserName(decoded.firstname || '');
-      console.log('Login successful:', {
-        role: decoded.roles[0],
-        components: decoded.componentNames
+      
+      // Store raw token in localStorage for debugging (remove in production)
+      localStorage.setItem('debug_raw_token', token.substring(0, 20) + '...');
+      
+      // Enhanced logging for login
+      console.log('Login successful - Authentication state updated:', {
+        isAuthenticated: true,
+        role: role,
+        user: decoded.firstname,
+        components: decoded.componentNames?.length || 0,
+        authorities: decoded.authorities,
       });
     } catch (error) {
       console.error('Login failed:', error);
+      setIsAuthenticated(false);
     }
   };
 
@@ -90,6 +144,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthorizedComponents([]);
     setUserRole('');
     setUserName('');
+    console.log('User logged out - Authentication state cleared');
+    
+    // Clear debug values
+    localStorage.removeItem('debug_token_stored');
+    localStorage.removeItem('debug_login_time');
+    localStorage.removeItem('debug_raw_token');
+    
     window.location.href = '/signIn';
   };
 
@@ -102,7 +163,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     logout,
   };
 
-  console.log('Current auth state:', value);
+  // Detailed authentication state log
+  console.log('Current auth state:', {
+    isAuthenticated,
+    role: userRole,
+    user: userName,
+    componentsCount: authorizedComponents.length
+  });
 
   return (
     <AuthContext.Provider value={value}>

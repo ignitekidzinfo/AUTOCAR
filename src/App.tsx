@@ -20,6 +20,8 @@ import {
   isTokenValid
 } from './utils/tokenUtils';
 import storageUtils from './utils/storageUtils';
+import { useAuth } from './context/AuthContext';
+import AppRoutes from './AppRoutes';
 
 // Import Borrow components
 import CustomerDetailsList from './components/Borrow/CustomerDetailsList';
@@ -145,150 +147,14 @@ const Dashboard: React.FC<{ user: User }> = ({ user }) => {
 };
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User>({
-    isAuthenticated: false,
-    name: '',
-    role: '',
-    components: []
-  });
-  
-  // Check authentication on mount and whenever authentication state might change
-  useEffect(() => {
-    const checkAuthentication = () => {
-      const token = storageUtils.getAuthToken();
-      if (token && isTokenValid()) {
-        const currentUser = getUserFromToken();
-        setUser(currentUser);
-        logger.info("User authenticated:", currentUser.name);
-      } else {
-        // If no valid token, ensure user is not authenticated
-        setUser({
-          isAuthenticated: false,
-          name: '',
-          role: '',
-          components: []
-        });
-      }
-    };
-
-    // Check auth state now
-    checkAuthentication();
-
-    // Set up listener for auth changes
-    window.addEventListener('storage', (event) => {
-      if (event.key === 'token') {
-        checkAuthentication();
-      }
-    });
-
-    // Set up a custom event for auth changes
-    const handleAuthChange = () => checkAuthentication();
-    window.addEventListener('auth-state-changed', handleAuthChange);
-
-    return () => {
-      window.removeEventListener('storage', checkAuthentication);
-      window.removeEventListener('auth-state-changed', handleAuthChange);
-    };
-  }, []);
-
-  const handleLogout = () => {
-    logout();
-    setUser({
-      isAuthenticated: false,
-      name: '',
-      role: '',
-      components: []
-    });
-  };
+  const { isAuthenticated } = useAuth();
 
   return (
     <ErrorBoundary>
-    <Router>
       <ConsoleSanitizer />
-      
-      {/* Add the session expiration handler if user is authenticated */}
-      {user.isAuthenticated && <SessionExpirationHandler />}
+      {isAuthenticated && <SessionExpirationHandler />}
       <TokenExpiryNotification />
-      
-      <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5' }}>
-        <Header user={user} onLogout={handleLogout} />
-        
-        <Routes>
-          <Route path="/dashboard" element={<Dashboard user={user} />} />
-          <Route path="/" element={
-            user.isAuthenticated 
-              ? <Navigate to="/dashboard" /> 
-              : <Box>Home Page - Please <Link to="/signIn">Sign In</Link> to continue</Box>
-          } />
-          <Route path="/buy-accessories" element={<Box>Buy Accessories Page</Box>} />
-          <Route path="/signIn" element={
-            user.isAuthenticated 
-              ? <Navigate to="/dashboard" /> 
-              : <SignInSide />
-          } />
-          
-          {/* Terms and Conditions Routes - Protected with AuthGuard */}
-          <Route 
-            path="/terms" 
-            element={
-              <AuthGuard user={user} requiredRoles={['ADMIN']}>
-                <TermsAndConditionsList />
-              </AuthGuard>
-            } 
-          />
-          <Route 
-            path="/terms/add" 
-            element={
-              <AuthGuard user={user} requiredRoles={['ADMIN']}>
-                <AddTermsAndConditions />
-              </AuthGuard>
-            } 
-          />
-          <Route 
-            path="/terms/edit/:id" 
-            element={
-              <AuthGuard user={user} requiredRoles={['ADMIN']}>
-                <AddTermsAndConditions />
-              </AuthGuard>
-            } 
-          />
-          
-          {/* Customer Borrow Routes - Protected with AuthGuard */}
-          <Route 
-            path="/admin/customer/list" 
-            element={
-              <AuthGuard user={user} requiredRoles={['ADMIN', 'EMPLOYEE']}>
-                <CustomerDetailsList />
-              </AuthGuard>
-            } 
-          />
-          <Route 
-            path="/admin/customer/add" 
-            element={
-              <AuthGuard user={user} requiredRoles={['ADMIN', 'EMPLOYEE']}>
-                <AddCustomer />
-              </AuthGuard>
-            } 
-          />
-          <Route 
-            path="/admin/customer/payment/add/:id" 
-            element={
-              <AuthGuard user={user} requiredRoles={['ADMIN', 'EMPLOYEE']}>
-                <AddCustomerPayment />
-              </AuthGuard>
-            } 
-          />
-          <Route 
-            path="/admin/customer/payment/view/:id" 
-            element={
-              <AuthGuard user={user} requiredRoles={['ADMIN', 'EMPLOYEE']}>
-                <ViewCustomerPayments />
-              </AuthGuard>
-            } 
-          />
-        </Routes>
-      </Box>
-    </Router>
+      <AppRoutes />
     </ErrorBoundary>
   );
 };

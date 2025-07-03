@@ -2,14 +2,19 @@ import { isProduction } from './environment';
 
 // Sensitive keywords to detect in objects being logged
 const SENSITIVE_KEYS = [
-  'password', 'token', 'authorization', 'auth', 
-  'secret', 'key', 'apiKey', 'pin', 'credential',
+  'password', 'authorization', 'pin', 'credential',
   'ssn', 'social', 'creditCard', 'credit', 'cvv', 'cvc'
+];
+
+// Authentication-related keywords (these will be allowed through but sanitized)
+const AUTH_RELATED_KEYS = [
+  'token', 'auth', 'authentication', 'login', 'secret', 'key', 'apiKey'
 ];
 
 // Global configuration object - can be modified to toggle logging
 export const logConfig = {
-  enabled: false // set to false by default to disable all logs
+  enabled: true, // enabled by default to allow authentication logs
+  authLogsEnabled: true // specifically enable auth logs
 };
 
 /**
@@ -34,6 +39,11 @@ const sanitizeData = (data: any): any => {
       key.toLowerCase().includes(pattern.toLowerCase())
     );
     
+    // Check if this is an auth-related key (which should be sanitized but allowed)
+    const isAuthKey = AUTH_RELATED_KEYS.some(pattern => 
+      key.toLowerCase().includes(pattern.toLowerCase())
+    );
+    
     if (isSensitive) {
       // Mask sensitive data with asterisks
       if (typeof sanitized[key] === 'string') {
@@ -43,6 +53,10 @@ const sanitizeData = (data: any): any => {
       } else {
         sanitized[key] = '[REDACTED]';
       }
+    } else if (isAuthKey && typeof sanitized[key] === 'string' && sanitized[key].length > 20) {
+      // For auth keys with long string values, only show first few and last few chars
+      sanitized[key] = sanitized[key].substring(0, 5) + '...' + 
+        sanitized[key].substring(sanitized[key].length - 5);
     } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
       // Recursively sanitize nested objects
       sanitized[key] = sanitizeData(sanitized[key]);
@@ -65,19 +79,27 @@ const logger = {
     logConfig.enabled = false;
   },
   
+  enableAuthLogs: () => {
+    logConfig.authLogsEnabled = true;
+  },
+  
+  disableAuthLogs: () => {
+    logConfig.authLogsEnabled = false;
+  },
+  
   log: (...args: any[]) => {
-    if (!logConfig.enabled || isProduction) return;
+    if (!logConfig.enabled && !logConfig.authLogsEnabled) return;
     console.log(...args.map(arg => sanitizeData(arg)));
   },
   
   info: (...args: any[]) => {
-    if (!logConfig.enabled || isProduction) return;
+    if (!logConfig.enabled && !logConfig.authLogsEnabled) return;
     console.info(...args.map(arg => sanitizeData(arg)));
   },
   
   warn: (...args: any[]) => {
     // We keep warnings in production, but sanitize them
-    if (!logConfig.enabled) return;
+    if (!logConfig.enabled && !logConfig.authLogsEnabled) return;
     console.warn(...args.map(arg => sanitizeData(arg)));
   },
   
@@ -87,15 +109,19 @@ const logger = {
   },
   
   debug: (...args: any[]) => {
-    if (!logConfig.enabled || isProduction) return;
+    if (!logConfig.enabled && !logConfig.authLogsEnabled) return;
     console.debug(...args.map(arg => sanitizeData(arg)));
   },
   
   // Special method for data that should never be logged in production
   sensitive: (...args: any[]) => {
-    if (!logConfig.enabled || isProduction) return;
+    if (isProduction) return;
+    if (!logConfig.enabled && !logConfig.authLogsEnabled) return;
     console.log(...args.map(arg => sanitizeData(arg)));
   }
 };
+
+// Enable auth logs on import
+logger.enableAuthLogs();
 
 export default logger; 

@@ -300,7 +300,7 @@ export class ResourceManager {
   }
 }
 
-export const globalResourceManager = new ResourceManager();
+export const globalResourceManager = new ResourceManager(); 
 
 /**
  * Safe performance measurement utilities

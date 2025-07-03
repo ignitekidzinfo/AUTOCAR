@@ -1,6 +1,8 @@
-import { jsx as _jsx, Fragment as _Fragment } from "react/jsx-runtime";
-import AppRoutes from "./AppRoutes";
+import React from 'react';
+import MainRoutes from './MainRoutes';
+
 function App() {
-    return (_jsx(_Fragment, { children: _jsx(AppRoutes, {}) }));
+    return <MainRoutes />;
 }
+
 export default App;

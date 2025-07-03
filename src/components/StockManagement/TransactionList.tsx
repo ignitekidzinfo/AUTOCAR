@@ -72,6 +72,48 @@ const RETRY_DELAY = 3000;
 const MAX_RETRIES = 3; 
 const ERROR_DISPLAY_DURATION = 5000; 
 
+/**
+ * Manages the search cache invalidation
+ */
+const searchCacheManager = {
+  // Set the last update time to invalidate search cache
+  updateLastModified: () => {
+    try {
+      localStorage.setItem('spareParts_lastModified', Date.now().toString());
+    } catch (e) {
+      console.error('Error setting cache invalidation timestamp:', e);
+    }
+  },
+  
+  // Check if the search cache should be invalidated
+  isSearchCacheValid: (maxAge = 60000) => { // Default: 1 minute
+    try {
+      const lastModified = localStorage.getItem('spareParts_lastModified');
+      if (!lastModified) return false;
+      
+      const timestamp = parseInt(lastModified, 10);
+      return Date.now() - timestamp < maxAge;
+    } catch (e) {
+      return false;
+    }
+  },
+  
+  // Clear search results from localStorage
+  clearSearchCache: () => {
+    try {
+      // Clear any items related to spare parts search
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('search_') || key.includes('spareParts'))
+        .forEach(key => localStorage.removeItem(key));
+        
+      // Update the last modified time
+      searchCacheManager.updateLastModified();
+    } catch (e) {
+      console.error('Error clearing search cache:', e);
+    }
+  }
+};
+
 const UserPartList: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -104,6 +146,16 @@ const UserPartList: React.FC = () => {
   const [isSorted, setIsSorted] = useState<boolean>(false);
 
   const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    // Clear search cache on component mount to ensure fresh data
+    searchCacheManager.clearSearchCache();
+    
+    return () => {
+      // Update last modified time when component unmounts
+      searchCacheManager.updateLastModified();
+    };
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -166,11 +218,14 @@ const UserPartList: React.FC = () => {
     try {
       console.log(`Fetching page ${pageNumber} with size ${PAGE_SIZE}`);
       
+      // Add a timestamp to prevent caching
+      const timestamp = Date.now();
+      
       const response = await apiClient.get<PaginatedResponse<UserPart>>('/userParts/getAll', {
         params: { 
           page: pageNumber, 
           size: PAGE_SIZE,
-          _t: Date.now() 
+          _t: timestamp  // Add timestamp to prevent caching
         },
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -258,14 +313,43 @@ const UserPartList: React.FC = () => {
     try {
       console.log(`Searching for: ${searchTerm}`);
       
-      const response = await apiClient.get(`/Filter/searchBarFilter?searchBarInput=${searchTerm}`, {
+      // Check if we should use cached results
+      const cacheKey = `search_results_${searchTerm.toLowerCase().trim()}`;
+      const shouldUseCache = searchCacheManager.isSearchCacheValid();
+      let cachedResults = null;
+      
+      // Try to get cached results if cache is valid
+      if (shouldUseCache) {
+        try {
+          const cachedData = localStorage.getItem(cacheKey);
+          if (cachedData) {
+            cachedResults = JSON.parse(cachedData);
+            console.log('Using cached search results');
+          }
+        } catch (e) {
+          console.error('Error reading cached search results:', e);
+        }
+      }
+     
+      // If we have valid cached results, use them
+      if (cachedResults && Array.isArray(cachedResults)) {
+        processSearchResults(cachedResults);
+        return;
+      }
+      
+      // Add a timestamp to prevent browser caching
+      const timestamp = Date.now();
+      const url = `/Filter/searchBarFilter?searchBarInput=${searchTerm}&_t=${timestamp}`;
+      
+      const response = await apiClient.get(url, {
         headers: {
+          // Add cache control headers to prevent caching
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0',
         },
-            timeout: 30000,
-          });
+        timeout: 30000,
+      });
           
       if (!Array.isArray(response.data)) {
         console.warn("API response is not an array:", response.data);
@@ -273,25 +357,16 @@ const UserPartList: React.FC = () => {
         setError('Search returned an unexpected response. Please try again.');
         return;
       }
-     
-      const formattedResults = response.data.map((part: any) => formatPartData({
-        userPartId: part.sparePartId || part.userPartId || 0,
-        partNumber: part.partNumber || '',
-        partName: part.partName || '',
-        manufacturer: part.manufacturer || '',
-        quantity: part.quantity || 0,
-        price: part.price || 0,
-        buyingPrice: part.buyingPrice || 0,
-        description: part.description || '',
-        gst: part.gst || 18
-      }));
       
-      setRows(formattedResults);
-      setTotalElements(formattedResults.length);
-      setTotalPages(Math.ceil(formattedResults.length / PAGE_SIZE));
+      // Cache the results for future searches
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(response.data));
+      } catch (e) {
+        console.error('Error caching search results:', e);
+      }
       
-      const lowStock = formattedResults.filter(item => Number(item.quantity) < LOW_STOCK_THRESHOLD).length;
-      setLowStockCount(lowStock);
+      // Process the search results
+      processSearchResults(response.data);
       
     } catch (err: any) {
       console.error("Error searching parts:", err);
@@ -306,7 +381,47 @@ const UserPartList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [fetchUserPartsPage, searchText]);
+  }, [fetchUserPartsPage, searchText, deletedIds]);
+
+  // Helper function to process search results
+  const processSearchResults = useCallback((data: any[]) => {
+    // Filter out any items that have been marked as deleted locally
+    const filteredResults = data.filter((part: any) => {
+      const partId = part.sparePartId || part.userPartId || 0;
+      return !deletedIds.has(partId);
+    });
+    
+    // Verify each part exists by checking quantity
+    const existingParts = filteredResults.filter((part: any) => {
+      // Consider a part as non-existent if it has userPartId/sparePartId = 0 or undefined
+      return (part.sparePartId && part.sparePartId !== 0) || 
+             (part.userPartId && part.userPartId !== 0);
+    });
+    
+    const formattedResults = existingParts.map((part: any) => formatPartData({
+      userPartId: part.sparePartId || part.userPartId || 0,
+      partNumber: part.partNumber || '',
+      partName: part.partName || '',
+      manufacturer: part.manufacturer || '',
+      quantity: part.quantity || 0,
+      price: part.price || 0,
+      buyingPrice: part.buyingPrice || 0,
+      description: part.description || '',
+      gst: part.gst || 18
+    }));
+    
+    setRows(formattedResults);
+    setTotalElements(formattedResults.length);
+    setTotalPages(Math.ceil(formattedResults.length / PAGE_SIZE));
+    
+    const lowStock = formattedResults.filter(item => Number(item.quantity) < LOW_STOCK_THRESHOLD).length;
+    setLowStockCount(lowStock);
+    
+    // If no results were found, show a helpful message
+    if (formattedResults.length === 0) {
+      setError(`No parts found matching "${searchText}". Try a different search term.`);
+    }
+  }, [deletedIds, searchText]);
 
   const handleSearchClick = () => {
     handleSearch(searchText);
@@ -328,6 +443,14 @@ const UserPartList: React.FC = () => {
     deleteItem(id);
   };
 
+  const invalidatePartsCaches = useCallback(() => {
+    // Update the last modified timestamp to invalidate search caches
+    searchCacheManager.updateLastModified();
+    
+    // Clear any search-related caches
+    searchCacheManager.clearSearchCache();
+  }, []);
+
   const deleteItem = async (id: number) => {
     if (!id) return;
     
@@ -336,12 +459,14 @@ const UserPartList: React.FC = () => {
     try {
       await apiClient.delete(`/userParts/delete/${id}`);
       
+      // Update local state
       setDeletedIds(prev => {
         const newSet = new Set(prev);
         newSet.add(id);
         return newSet;
       });
       
+      // Store deleted IDs
       try {
         const existingDeletedIds = JSON.parse(localStorage.getItem('deletedPartIds') || '[]');
         existingDeletedIds.push(id);
@@ -350,17 +475,19 @@ const UserPartList: React.FC = () => {
         console.error('Failed to store deleted IDs in localStorage:', e);
       }
       
+      // Update UI
       setRows(rows.filter(row => row.id !== id));
-      
       setDeleteSuccess("Part deleted successfully");
-      
       setTotalElements(prev => prev - 1);
       
+      // Update low stock count
       const updatedLowStock = rows
         .filter(item => item.id !== id && Number(item.quantity) < LOW_STOCK_THRESHOLD)
         .length;
-      
       setLowStockCount(updatedLowStock);
+      
+      // Invalidate caches to ensure fresh data on next search
+      invalidatePartsCaches();
       
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
@@ -766,14 +893,55 @@ const UserPartList: React.FC = () => {
 
   const handleRefresh = () => {
     setLoading(true);
-    fetchUserPartsPage(page);
+    
+    // Clear any potential browser cache for the API endpoints
+    const urls = [
+      '/userParts/getAll',
+      '/Filter/searchBarFilter'
+    ];
+    
+    // Try to clear browser cache for these URLs
+    try {
+      if ('caches' in window) {
+        caches.keys().then(cacheNames => {
+          cacheNames.forEach(cacheName => {
+            caches.open(cacheName).then(cache => {
+              urls.forEach(url => {
+                cache.delete(url).catch(() => {});
+              });
+            });
+          });
+        });
+      }
+    } catch (e) {
+      console.error('Error clearing cache:', e);
+    }
+    
+    // Clear search cache in localStorage
+    searchCacheManager.clearSearchCache();
+    
+    // If we're in search mode, reset the search
+    if (isSearchMode) {
+      setSearchText("");
+      setIsSearchMode(false);
+      setRows([]);
+    }
+    
+    // Force a fresh fetch with cache busting
+    fetchUserPartsPage(0);
   };
 
   const clearDeletedItemsFilter = () => {
     setDeletedIds(new Set());
     localStorage.removeItem('deletedPartIds');
+    
+    // Invalidate all caches to ensure fresh data
+    searchCacheManager.clearSearchCache();
+    
     setDeleteSuccess("Filter cleared. Refreshing data...");
-    fetchUserPartsPage(page);
+    
+    // Force a fresh fetch from the server
+    fetchUserPartsPage(0);
   };
 
   return (
