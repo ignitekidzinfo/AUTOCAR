@@ -106,12 +106,37 @@ export default function UserPartDetail() {
 
   useEffect(() => {
     const fetchUserPart = async () => {
+      if (!id) {
+        console.error("No ID provided");
+        setFeedback({
+          message: 'No part ID provided',
+          severity: 'error',
+        });
+        setLoading(false);
+        return;
+      }
+
       try {
-        const response = await apiClient.get<UserPart>(`/userParts/getById?userPartId=${id}`);
+        console.log("Fetching user part with ID:", id);
+        // Try to convert id to a number if it's a string
+        const userPartId = parseInt(id, 10);
+        
+        if (isNaN(userPartId)) {
+          throw new Error("Invalid part ID format");
+        }
+        
+        const response = await apiClient.get<UserPart>(`/userParts/getById?userPartId=${userPartId}`);
+        console.log("API response:", response.data);
+        
+        if (!response.data) {
+          throw new Error("No data returned from API");
+        }
+        
         setUserPart(response.data);
       } catch (error: any) {
+        console.error("Error fetching user part details:", error);
         setFeedback({
-          message: error.response?.data?.message || 'Failed to fetch user part details',
+          message: error.response?.data?.message || error.message || 'Failed to fetch user part details',
           severity: 'error',
         });
       } finally {

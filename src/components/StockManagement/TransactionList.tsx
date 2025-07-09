@@ -339,7 +339,7 @@ const UserPartList: React.FC = () => {
       
       // Add a timestamp to prevent browser caching
       const timestamp = Date.now();
-      const url = `/Filter/searchBarFilter?searchBarInput=${searchTerm}&_t=${timestamp}`;
+      const url = `/Filter/userPartSearchBarFilter?searchBarInput=${searchTerm}&_t=${timestamp}`;
       
       const response = await apiClient.get(url, {
         headers: {
@@ -398,17 +398,24 @@ const UserPartList: React.FC = () => {
              (part.userPartId && part.userPartId !== 0);
     });
     
-    const formattedResults = existingParts.map((part: any) => formatPartData({
-      userPartId: part.sparePartId || part.userPartId || 0,
-      partNumber: part.partNumber || '',
-      partName: part.partName || '',
-      manufacturer: part.manufacturer || '',
-      quantity: part.quantity || 0,
-      price: part.price || 0,
-      buyingPrice: part.buyingPrice || 0,
-      description: part.description || '',
-      gst: part.gst || 18
-    }));
+    const formattedResults = existingParts.map((part: any) => {
+      // Make sure we use userPartId as the primary ID, not sparePartId
+      return {
+        id: part.userPartId || 0, // Use userPartId as the primary ID
+        partNumber: part.partNumber || '',
+        partName: part.partName || '',
+        description: part.description || '',
+        manufacturer: part.manufacturer || '',
+        quantity: part.quantity !== undefined ? Number(part.quantity) : 0,
+        price: part.price || 0,
+        buyingPrice: part.buyingPrice || 0,
+        gst: part.gst || 18,
+        // Store sparePartId separately if needed
+        sparePartId: part.sparePartId || 0
+      };
+    });
+    
+    console.log("Formatted search results:", formattedResults);
     
     setRows(formattedResults);
     setTotalElements(formattedResults.length);
@@ -626,7 +633,10 @@ const UserPartList: React.FC = () => {
             <Tooltip title="View Details">
               <IconButton
                 color="primary"
-                onClick={() => navigate(`/admin/user-part/view/${params.row.id}`)}
+                onClick={() => {
+                  console.log("Navigating to part details with ID:", params.row.id);
+                  navigate(`/admin/user-part/view/${params.row.id}`);
+                }}
                 size="small"
                 sx={{ 
                   backgroundColor: alpha(theme.palette.primary.main, 0.1),
@@ -897,7 +907,7 @@ const UserPartList: React.FC = () => {
     // Clear any potential browser cache for the API endpoints
     const urls = [
       '/userParts/getAll',
-      '/Filter/searchBarFilter'
+      '/Filter/userPartSearchBarFilter'
     ];
     
     // Try to clear browser cache for these URLs
