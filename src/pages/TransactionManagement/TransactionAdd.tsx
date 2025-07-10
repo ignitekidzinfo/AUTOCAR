@@ -39,6 +39,22 @@ import {
 } from "@mui/material";
 import { useNavigate } from 'react-router-dom';
 
+// Helper functions for quantity handling
+const safeQuantityToNumber = (quantity: string | number | undefined): number => {
+  if (quantity === undefined || quantity === '') {
+    return 0;
+  }
+  if (typeof quantity === 'string') {
+    return parseInt(quantity) || 0;
+  }
+  return quantity;
+};
+
+const isQuantityGreaterThanZero = (quantity: string | number | undefined): boolean => {
+  const numQuantity = safeQuantityToNumber(quantity);
+  return numQuantity > 0;
+};
+
 // Custom styled components for square inputs
 const SquareTextField = styled(TextField)({
   '& .MuiOutlinedInput-root': {
@@ -180,7 +196,7 @@ interface SparePartItem {
   partNumber: string;
   manufacturer?: string;
   price: number;
-  quantity: number;
+  quantity: number | string; // Allow string for empty input fields
   rate?: number;
   gstPercentage: number;
   taxableAmount: number;
@@ -856,8 +872,17 @@ const TransactionAdd: React.FC = () => {
   const calculateTotals = (items: SparePartItem[]) => {
     console.log("Calculating totals for items:", items);
     
+    // Calculate totals, handling any invalid quantity values
+    const validItems = items.map(item => {
+      // Convert any non-numeric quantity to 0
+      if (!item.quantity || item.quantity === '' || isNaN(Number(item.quantity))) {
+        return { ...item, quantity: 0, total: 0 };
+      }
+      return item;
+    });
+    
     // Calculate net total (sum of all item totals)
-    const calculatedNetTotal = items.reduce((sum, item) => sum + (item.total || 0), 0);
+    const calculatedNetTotal = validItems.reduce((sum, item) => sum + (item.total || 0), 0);
     
     // Round to 2 decimal places for display
     const roundedNetTotal = parseFloat(calculatedNetTotal.toFixed(2));
@@ -898,11 +923,20 @@ const TransactionAdd: React.FC = () => {
       return;
     }
     
-    // Check if any items have zero quantity
-    const zeroQuantityItems = sparePartItems.filter(item => item.quantity === 0);
-    if (zeroQuantityItems.length > 0) {
+    // Helper function to safely check quantity
+    const isInvalidQuantity = (qty: string | number): boolean => {
+      if (typeof qty === 'string') {
+        return qty === '' || isNaN(Number(qty)) || Number(qty) === 0;
+      }
+      return qty === 0;
+    };
+    
+    // Check if any items have zero or empty quantity
+    const invalidQuantityItems = sparePartItems.filter(item => isInvalidQuantity(item.quantity));
+    
+    if (invalidQuantityItems.length > 0) {
       setFeedback({
-        message: `Please enter quantity for ${zeroQuantityItems.length} item(s)`,
+        message: `Please enter quantity for ${invalidQuantityItems.length} item(s)`,
         severity: "error"
       });
       return;
@@ -913,7 +947,7 @@ const TransactionAdd: React.FC = () => {
     
     try {
       // First, update inventory for all items that haven't been updated yet
-      const itemsToUpdateInventory = sparePartItems.filter(item => !item.inventoryUpdated && item.quantity > 0);
+      const itemsToUpdateInventory = sparePartItems.filter(item => !item.inventoryUpdated && isQuantityGreaterThanZero(item.quantity));
       
       if (itemsToUpdateInventory.length > 0) {
         console.log(`Updating inventory for ${itemsToUpdateInventory.length} items`);
@@ -1217,10 +1251,17 @@ const TransactionAdd: React.FC = () => {
           // Allow empty string values
           let updatedValue = value;
           
-          // For quantity, ensure it's a number and not less than 0
+          // For quantity, allow empty string to be displayed in the input field
           if (field === 'quantity') {
-            updatedValue = value === '' ? 0 : Math.max(0, parseInt(value.toString()) || 0);
-            console.log(`Converted quantity value to: ${updatedValue}`);
+            if (value === '') {
+              // Allow empty string in the UI but store as empty string
+              updatedValue = '';
+              console.log(`Allowing empty quantity value`);
+            } else {
+              // If not empty, ensure it's a number and not less than 0
+              updatedValue = Math.max(0, parseInt(value.toString()) || 0);
+              console.log(`Converted quantity value to: ${updatedValue}`);
+            }
           }
           
           const updatedItem = { ...item, [field]: updatedValue };
@@ -1306,7 +1347,7 @@ const TransactionAdd: React.FC = () => {
         partNumber: item.partNumber,
         partName: item.partName,
         manufacturer: item.manufacturer || "",
-        quantity: item.quantity,
+        quantity: typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity,
         price: safePrice, // Using rate as the price, guaranteed to be a number
         sparePartId: item.sparePartId,
         
@@ -1871,7 +1912,7 @@ const TransactionAdd: React.FC = () => {
   const handleGSTChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const gstPercentage = parseInt(e.target.value) || 0;
     const price = currentItem.price || 0;
-    const quantity = currentItem.quantity || 1;
+    const quantity = safeQuantityToNumber(currentItem.quantity) || 1;
     
     const taxableAmount = price * quantity;
     const gstAmount = (taxableAmount * gstPercentage) / 100;
@@ -2053,7 +2094,7 @@ const TransactionAdd: React.FC = () => {
           // Only update if rate is defined
           if (item.rate !== undefined) {
             // Calculate new values based on the new GST percentage
-            const taxableAmount = item.rate * item.quantity;
+            const taxableAmount = item.rate * safeQuantityToNumber(item.quantity);
             const gstAmount = (taxableAmount * gstValue) / 100;
             const cgst = gstValue > 0 ? gstAmount / 2 : 0;
             const sgst = gstValue > 0 ? gstAmount / 2 : 0;
@@ -2128,7 +2169,7 @@ const TransactionAdd: React.FC = () => {
             const newRate = item.rate * (1 + percentageChange / 100);
             
             // Recalculate all values
-            const taxableAmount = newRate * item.quantity;
+            const taxableAmount = newRate * safeQuantityToNumber(item.quantity);
             const gstAmount = (taxableAmount * item.gstPercentage) / 100;
             const cgst = item.gstPercentage > 0 ? gstAmount / 2 : 0;
             const sgst = item.gstPercentage > 0 ? gstAmount / 2 : 0;
@@ -2808,11 +2849,12 @@ const TransactionAdd: React.FC = () => {
                       fullWidth
                       size="small"
                       type="number"
-                      value={item.quantity}
+                      value={item.quantity === 0 ? '' : item.quantity}
                       onChange={(e) => {
                         console.log(`Changing quantity in table from ${item.quantity} to ${e.target.value}`);
                         handleTableCellChange(item.id, 'quantity', e.target.value);
                       }}
+                      placeholder="Enter qty"
                       variant="outlined"
                       sx={{ 
                         '& .MuiOutlinedInput-notchedOutline': { 
