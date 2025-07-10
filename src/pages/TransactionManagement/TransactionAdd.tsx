@@ -190,6 +190,7 @@ interface SparePartItem {
   isEditing?: boolean;
   isSelected?: boolean;
   qtyPrice?: number;
+  inventoryUpdated?: boolean;
 }
 
 const initialCreateData: CreateTransaction = {
@@ -266,11 +267,14 @@ const TransactionAdd: React.FC = () => {
   const [vendorSuggestions, setVendorSuggestions] = useState<Vendor[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [sparePartItems, setSparePartItems] = useState<SparePartItem[]>([]);
-  const [currentItem, setCurrentItem] = useState<Partial<SparePartItem>>({
+  
+  // Initialize currentItem with quantity as a number
+  const initialCurrentItem: Partial<SparePartItem> = {
     id: 0,
     barcode: "",
     partName: "",
-    quantity: 1,
+    partNumber: "",
+    quantity: 0, // Set default to 0 instead of 1
     price: 0,
     rate: undefined,
     gstPercentage: 0,
@@ -278,7 +282,20 @@ const TransactionAdd: React.FC = () => {
     cgst: 0,
     sgst: 0,
     total: 0
-  });
+  };
+  
+  const [currentItem, setCurrentItem] = useState<Partial<SparePartItem>>(initialCurrentItem);
+  
+  // Log initial state for debugging
+  useEffect(() => {
+    console.log("Initial currentItem state:", currentItem);
+    console.log("Quantity type:", typeof currentItem.quantity);
+  }, []);
+  
+  // Add a direct debug effect to track quantity changes
+  useEffect(() => {
+    console.log("Current quantity changed:", currentItem.quantity, "Type:", typeof currentItem.quantity);
+  }, [currentItem.quantity]);
   
   const [netTotal, setNetTotal] = useState<number>(0);
   const [roundOff, setRoundOff] = useState<number>(0);
@@ -501,8 +518,10 @@ const TransactionAdd: React.FC = () => {
   };
 
   const handlePartSelect = (part: SparePartDto | null) => {
-    setSelectedSearchPart(part); // Store the selected part
+    console.log("Part selected:", part);
+    console.log("Current item before selection:", currentItem);
     
+    // Always reset the current item completely when a new part is selected
     if (part) {
       console.log("Selected part (full data):", part);
       console.log("Part buyingPrice:", part.buyingPrice);
@@ -516,32 +535,45 @@ const TransactionAdd: React.FC = () => {
       
       console.log("Using MRP value:", mrpValue);
       
-      setCurrentItem((prev) => {
-        const updatedItem = {
-        ...prev,
-          partName: part.partName || "",
-          partNumber: part.partNumber || "",
-          sparePartId: part.sparePartId,
-          price: mrpValue,
-          rate: undefined, // Don't set rate automatically
-        };
-        console.log("Updated currentItem:", updatedItem);
-        return updatedItem;
-      });
-    } else {
+      // Completely reset the current item with new part data and default values
       setCurrentItem({
         id: 0,
         barcode: "",
-        partName: "",
-        quantity: 1,
-        price: 0,
-        rate: undefined, // Changed from 0 to undefined
+        partName: part.partName || "",
+        partNumber: part.partNumber || "",
+        sparePartId: part.sparePartId,
+        price: mrpValue,
+        rate: undefined, // Don't set rate automatically
+        quantity: 0, // Always set to 0
         gstPercentage: 0,
         taxableAmount: 0,
         cgst: 0,
         sgst: 0,
         total: 0
       });
+      
+      // Update the selected search part
+      setSelectedSearchPart(part);
+    } else {
+      // Reset everything when clearing selection
+      setCurrentItem({
+        id: 0,
+        barcode: "",
+        partName: "",
+        partNumber: "",
+        sparePartId: undefined,
+        price: 0,
+        rate: undefined,
+        quantity: 0,
+        gstPercentage: 0,
+        taxableAmount: 0,
+        cgst: 0,
+        sgst: 0,
+        total: 0
+      });
+      
+      // Clear the selected search part
+      setSelectedSearchPart(null);
     }
   };
 
@@ -574,17 +606,43 @@ const TransactionAdd: React.FC = () => {
   const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
-    // Update the current item with the raw value (including empty string)
-    setCurrentItem(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    console.log(`Changing ${name} to ${value} (type: ${typeof value})`);
+    
+    // Special handling for quantity field
+    if (name === 'quantity') {
+      // If the value is empty, use 1 as default
+      // Otherwise parse it as an integer
+      const numValue = value === '' ? 1 : parseInt(value) || 1;
+      console.log(`Converting quantity from ${value} (${typeof value}) to ${numValue} (${typeof numValue})`);
+      
+      // Update the current item with the parsed number value for quantity
+      setCurrentItem(prev => {
+        const updated = {
+          ...prev,
+          quantity: numValue // Store as a number, not a string
+        };
+        console.log("Updated currentItem with new quantity:", updated);
+        return updated;
+      });
+    } else {
+      // Update the current item with the raw value for other fields
+      setCurrentItem(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
 
     // Calculate values if price, quantity or GST changes
     if (name === 'price' || name === 'quantity' || name === 'gstPercentage' || name === 'rate') {
       // Use the raw value for the changed field, and current values for the others
       const price = name === 'price' ? value : currentItem.price;
-      const quantity = name === 'quantity' ? value : currentItem.quantity;
+      
+      // For quantity, ensure we use the numeric value
+      let quantity: number | string = currentItem.quantity || 1;
+      if (name === 'quantity') {
+        quantity = value === '' ? 1 : parseInt(value) || 1;
+      }
+      
       const gstPercentage = name === 'gstPercentage' ? value : currentItem.gstPercentage;
       const rate = name === 'rate' ? value : currentItem.rate;
       
@@ -592,9 +650,9 @@ const TransactionAdd: React.FC = () => {
       if (rate !== undefined && rate !== null && rate !== '') {
         const numRate = parseFloat(rate.toString());
         
-        // Fix TypeScript errors with proper type checking
+        // Ensure quantity is a number
         const numQuantity = typeof quantity === 'string' ? 
-          (quantity === '' ? 1 : parseFloat(quantity) || 1) : 
+          (quantity === '' ? 1 : parseInt(quantity) || 1) : 
           (quantity || 1);
         
         const numGstPercentage = typeof gstPercentage === 'string' ? 
@@ -608,12 +666,13 @@ const TransactionAdd: React.FC = () => {
           const sgst = numGstPercentage > 0 ? gstAmount / 2 : 0;
           const total = taxableAmount + gstAmount;
           
-          console.log("Updated calculations:", {
-            price, quantity, rate, gstPercentage, taxableAmount, cgst, sgst, total
+          console.log("Updated calculations with quantity:", numQuantity, {
+            price, quantity: numQuantity, rate, gstPercentage, taxableAmount, cgst, sgst, total
           });
           
           setCurrentItem(prev => ({
             ...prev,
+            quantity: numQuantity, // Ensure quantity is stored as a number
             taxableAmount,
             cgst,
             sgst,
@@ -621,9 +680,11 @@ const TransactionAdd: React.FC = () => {
           }));
         }
       } else {
-        // If rate is empty, clear calculated values
+        // If rate is empty, clear calculated values but keep quantity
+        const safeQuantity = typeof quantity === 'string' ? parseInt(quantity) || 1 : quantity || 1;
         setCurrentItem(prev => ({
           ...prev,
+          quantity: safeQuantity, // Ensure quantity is stored as a number
           taxableAmount: 0,
           cgst: 0,
           sgst: 0,
@@ -633,7 +694,7 @@ const TransactionAdd: React.FC = () => {
     }
   };
 
-  const addItemToList = () => {
+  const addItemToList = async () => {
     if (!currentItem.partName) {
       setFeedback({
         message: "Please select a spare part",
@@ -643,21 +704,22 @@ const TransactionAdd: React.FC = () => {
     }
 
     console.log("Adding item with price:", currentItem.price);
+    console.log("Current item before adding (FULL OBJECT):", JSON.stringify(currentItem, null, 2));
+    
+    // Set quantity to 0 by default - user will enter quantity in the table
+    const quantity = 0;
+    console.log("Setting initial quantity to:", quantity);
     
     const price = currentItem.price || 0;
     const rate = currentItem.rate;
-    const quantity = currentItem.quantity || 1;
     const gstPercentage = currentItem.gstPercentage || 0;
     
     // Calculate taxable amount only if rate is provided
+    // Note: With quantity=0, these will all be 0
     const taxableAmount = rate !== undefined ? rate * quantity : 0;
-    
-    // Calculate GST amounts only if rate is provided
     const gstAmount = rate !== undefined ? (taxableAmount * gstPercentage) / 100 : 0;
     const cgst = rate !== undefined && gstPercentage > 0 ? gstAmount / 2 : 0;
     const sgst = rate !== undefined && gstPercentage > 0 ? gstAmount / 2 : 0;
-    
-    // Calculate total only if rate is provided
     const total = rate !== undefined ? taxableAmount + gstAmount : 0;
     
     console.log("Item calculations:", {
@@ -672,6 +734,9 @@ const TransactionAdd: React.FC = () => {
       total
     });
     
+    // Skip inventory updates when adding item since quantity is 0
+    // Inventory will be updated when form is submitted with actual quantities
+    
     const newItem: SparePartItem = {
       id: sparePartItems.length + 1,
       sparePartId: currentItem.sparePartId,
@@ -680,20 +745,24 @@ const TransactionAdd: React.FC = () => {
       partNumber: currentItem.partNumber || "",
       manufacturer: selectedSearchPart?.manufacturer || "",
       price,
-      quantity,
+      quantity, // Set to 0 initially
       rate,
       gstPercentage,
       taxableAmount,
       cgst,
       sgst,
-      total
+      total,
+      // Set to false since inventory hasn't been updated yet
+      inventoryUpdated: false
     };
     
-    console.log("New item to add:", newItem);
+    console.log("New item to add with quantity:", quantity, newItem);
     
+    // Add the item to the table
     setSparePartItems(prev => {
       const updated = [...prev, newItem];
       console.log("Updated spareParts array:", updated);
+      console.log("New item in array should have quantity:", quantity);
       return updated;
     });
     
@@ -730,7 +799,55 @@ const TransactionAdd: React.FC = () => {
     });
   };
 
-  const removeItem = (id: number) => {
+  const removeItem = async (id: number) => {
+    // Find the item to be removed
+    const itemToRemove = sparePartItems.find(item => item.id === id);
+    
+    // If the item has already been added to inventory, we need to deduct it
+    if (itemToRemove && itemToRemove.inventoryUpdated) {
+      try {
+        console.log(`Removing item ${itemToRemove.partName} from inventory: quantity=${itemToRemove.quantity}`);
+        
+        // Only update inventory if we have a vendor and sparePartId
+        if (selectedVendor && itemToRemove.sparePartId) {
+          // Create transaction data for inventory update
+          const inventoryUpdateData = {
+            transactionType: "DEBIT" as const, // Use DEBIT to remove from inventory
+            userId: 10006,
+            vendorId: selectedVendor.vendorId,
+            sparePartId: itemToRemove.sparePartId,
+            partNumber: itemToRemove.partNumber || "",
+            partName: itemToRemove.partName || "",
+            manufacturer: itemToRemove.manufacturer || "",
+            quantity: itemToRemove.quantity, // Remove the entire quantity
+            price: typeof itemToRemove.rate === 'number' ? itemToRemove.rate : 0,
+            // Add a flag to indicate this is an inventory adjustment
+            updateInventory: true,
+            isAdjustment: true
+          };
+          
+          console.log("Removing from inventory:", inventoryUpdateData);
+          
+          // Call API to update inventory
+          const response = await apiClient.post("/userParts/addQuantity", inventoryUpdateData);
+          console.log("Inventory removal response:", response.data);
+          
+          // Show success message
+          setFeedback({
+            message: `Removed ${itemToRemove.partName} from inventory`,
+            severity: "success"
+          });
+        }
+      } catch (error) {
+        console.error("Error removing from inventory:", error);
+        setFeedback({
+          message: "Failed to update inventory. The item was removed from the list but inventory may not be accurate.",
+          severity: "warning"
+        });
+      }
+    }
+    
+    // Update the UI by removing the item
     const updatedItems = sparePartItems.filter(item => item.id !== id);
     setSparePartItems(updatedItems);
     calculateTotals(updatedItems);
@@ -780,11 +897,61 @@ const TransactionAdd: React.FC = () => {
       });
       return;
     }
+    
+    // Check if any items have zero quantity
+    const zeroQuantityItems = sparePartItems.filter(item => item.quantity === 0);
+    if (zeroQuantityItems.length > 0) {
+      setFeedback({
+        message: `Please enter quantity for ${zeroQuantityItems.length} item(s)`,
+        severity: "error"
+      });
+      return;
+    }
 
     // Start submission process
     setIsSubmitting(true);
     
     try {
+      // First, update inventory for all items that haven't been updated yet
+      const itemsToUpdateInventory = sparePartItems.filter(item => !item.inventoryUpdated && item.quantity > 0);
+      
+      if (itemsToUpdateInventory.length > 0) {
+        console.log(`Updating inventory for ${itemsToUpdateInventory.length} items`);
+        
+        for (const item of itemsToUpdateInventory) {
+          try {
+            if (selectedVendor && item.sparePartId) {
+              // Create transaction data for inventory update
+              const inventoryUpdateData = {
+                transactionType: "CREDIT" as const,
+                userId: 10006,
+                vendorId: selectedVendor.vendorId,
+                sparePartId: item.sparePartId,
+                partNumber: item.partNumber || "",
+                partName: item.partName || "",
+                manufacturer: item.manufacturer || "",
+                quantity: item.quantity,
+                price: typeof item.rate === 'number' ? item.rate : 0,
+                // Add a flag to indicate this is an inventory addition
+                updateInventory: true
+              };
+              
+              console.log(`Adding ${item.quantity} of ${item.partName} to inventory`);
+              
+              // Call API to update inventory
+              const response = await apiClient.post("/userParts/addQuantity", inventoryUpdateData);
+              console.log("Inventory update response:", response.data);
+              
+              // Mark item as updated in inventory
+              item.inventoryUpdated = true;
+            }
+          } catch (error) {
+            console.error(`Error updating inventory for ${item.partName}:`, error);
+            // Continue with other items even if one fails
+          }
+        }
+      }
+      
       // Check if we're in edit mode
       const urlParams = new URLSearchParams(window.location.search);
       const editBillId = urlParams.get('edit');
@@ -804,14 +971,18 @@ const TransactionAdd: React.FC = () => {
           cgstPercentage: item.gstPercentage / 2,
           sgstPercentage: item.gstPercentage / 2,
           amount: item.total,
-          transactionId: item.transactionId
+          transactionId: item.transactionId,
+          // Add flag to indicate inventory has already been updated
+          inventoryUpdated: item.inventoryUpdated || false
         })),
         subTotal: netTotal,
         totalCgst: sparePartItems.reduce((sum, item) => sum + item.cgst, 0),
         totalSgst: sparePartItems.reduce((sum, item) => sum + item.sgst, 0),
         roundOff: roundOff,
         grandTotal: grandTotal,
-        paid: paid
+        paid: paid,
+        // Add flag to indicate this is a bill submission, not an inventory addition
+        skipInventoryUpdate: true
       };
       
       let apiEndpoint = "/bills/create";
@@ -828,14 +999,24 @@ const TransactionAdd: React.FC = () => {
         (billData as any).billId = parseInt(editBillId);
       }
       
-      console.log(`${isEditMode ? 'Updating' : 'Saving'} bill:`, billData);
+      // Make the API call to create or update the bill
+      let response;
+      if (httpMethod === 'post') {
+        response = await apiClient.post(apiEndpoint, billData);
+      } else {
+        response = await apiClient.put(apiEndpoint, billData);
+      }
       
-      // Call the API to save/update the bill
-      const billResponse = isEditMode 
-        ? await apiClient.put(apiEndpoint, billData)  // Use PUT for updates
-        : await apiClient.post(apiEndpoint, billData); // Use POST for creates
-        
-      console.log("Bill saved successfully:", billResponse.data);
+      console.log("Bill created/updated:", response.data);
+      
+      // Process transactions in the background for better UX
+      // Only process items that haven't already been added to the inventory
+      const itemsToProcess = sparePartItems.filter(item => !item.inventoryUpdated);
+      if (itemsToProcess.length > 0) {
+        processTransactionsInBackground(itemsToProcess, selectedVendor, createData);
+      } else {
+        console.log("All items have already been added to inventory, skipping transaction processing");
+      }
       
       // Show success message
       setFeedback({
@@ -843,25 +1024,29 @@ const TransactionAdd: React.FC = () => {
         severity: "success"
       });
       
-      // Reset form
+      // Reset form after successful submission
       resetForm();
       
-      // Redirect to purchase list page immediately
-      navigate('/admin/purchase-list');
+    } catch (error: any) {
+      console.error("Error submitting bill:", error);
       
-      // Process transactions in the background after redirection
-      // This will continue even after the user is redirected
-      setTimeout(() => {
-        processTransactionsInBackground(sparePartItems, selectedVendor, createData);
-      }, 100);
+      let errorMessage = "Failed to submit bill. Please try again.";
       
-    } catch (billError: any) {
-      console.error("Error saving bill:", billError);
-      const isEditMode = window.location.search.includes('edit=');
+      if (error.response) {
+        if (error.response.data && error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.status === 401) {
+          errorMessage = "Authorization error. Please login again.";
+        } else if (error.response.status === 500) {
+          errorMessage = "Server error. Please try again later.";
+        }
+      }
+      
       setFeedback({
-        message: `Failed to ${isEditMode ? 'update' : 'create'} bill: ${billError.response?.data?.message || "Unknown error"}`,
+        message: errorMessage,
         severity: "error"
       });
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -893,7 +1078,9 @@ const TransactionAdd: React.FC = () => {
         gstPercentage: item.gstPercentage,
         ...(item.taxableAmount > 0 ? { taxableAmount: item.taxableAmount } : {}),
         ...(item.cgst > 0 ? { cgst: item.cgst } : {}),
-        ...(item.sgst > 0 ? { sgst: item.sgst } : {})
+        ...(item.sgst > 0 ? { sgst: item.sgst } : {}),
+        // Add a flag to indicate this is a bill submission, not an inventory addition
+        skipInventoryUpdate: true
       }));
       
       // Use larger batch sizes for faster processing
@@ -903,7 +1090,9 @@ const TransactionAdd: React.FC = () => {
       const bulkRequestData = {
         vendorId: vendor.vendorId,
         invoiceNo: formData.invoiceNo,
-        invoiceDate: formData.invoiceDate
+        invoiceDate: formData.invoiceDate,
+        // Add a flag to indicate this is a bill submission, not an inventory addition
+        skipInventoryUpdate: true
       };
       
       // Split transactions into chunks
@@ -929,7 +1118,9 @@ const TransactionAdd: React.FC = () => {
               'Accept': 'application/json',
               'X-Batch-Optimization': 'true',
               'X-Batch-Number': `${index + 1}`,
-              'X-Total-Batches': `${chunks.length}`
+              'X-Total-Batches': `${chunks.length}`,
+              // Add a header to indicate this is a bill submission, not an inventory addition
+              'X-Skip-Inventory-Update': 'true'
             }
     });
     
@@ -985,6 +1176,25 @@ const TransactionAdd: React.FC = () => {
     setSelectedItems([]);
     setSearchTerm("");
     setSelectedSearchPart(null);
+    
+    // Reset currentItem to initial state with a fresh object
+    const freshInitialItem = {
+      id: 0,
+      barcode: "",
+      partName: "",
+      partNumber: "",
+      quantity: 0, // Set to 0 by default
+      price: 0,
+      rate: undefined,
+      gstPercentage: 0,
+      taxableAmount: 0,
+      cgst: 0,
+      sgst: 0,
+      total: 0
+    };
+    
+    setCurrentItem(freshInitialItem);
+    console.log("Reset currentItem to:", freshInitialItem);
   };
 
   const toggleEditMode = (id: number) => {
@@ -998,23 +1208,33 @@ const TransactionAdd: React.FC = () => {
   };
 
   // Update the handleTableCellChange function to allow clearing values
-  const handleTableCellChange = (id: number, field: keyof SparePartItem, value: string | number) => {
+  const handleTableCellChange = async (id: number, field: keyof SparePartItem, value: string | number) => {
+    console.log(`Changing ${field} for item ${id} to ${value}`);
+    
     setSparePartItems(prev => {
       const updatedItems = prev.map(item => {
         if (item.id === id) {
           // Allow empty string values
-          const updatedItem = { ...item, [field]: value };
+          let updatedValue = value;
+          
+          // For quantity, ensure it's a number and not less than 0
+          if (field === 'quantity') {
+            updatedValue = value === '' ? 0 : Math.max(0, parseInt(value.toString()) || 0);
+            console.log(`Converted quantity value to: ${updatedValue}`);
+          }
+          
+          const updatedItem = { ...item, [field]: updatedValue };
           
           // Recalculate values if rate or quantity changes
           if (field === 'rate' || field === 'quantity') {
-            const rate = field === 'rate' ? value : item.rate;
-            const quantity = field === 'quantity' ? value : item.quantity;
+            const rate = field === 'rate' ? updatedValue : item.rate;
+            const quantity = field === 'quantity' ? updatedValue : item.quantity;
             
             // Only calculate if rate is defined and not empty
             if (rate !== undefined && rate !== null && rate !== '') {
               // Calculate with proper number conversions
               const numRate = rate === '' ? 0 : (typeof rate === 'string' ? parseFloat(rate) : rate) || 0;
-              const numQuantity = quantity === '' ? 1 : (typeof quantity === 'string' ? parseFloat(quantity) : quantity) || 1;
+              const numQuantity = quantity === '' ? 0 : (typeof quantity === 'string' ? parseFloat(quantity) : quantity) || 0;
               
               // Calculate taxable amount (rate * quantity)
               const taxableAmount = numRate * numQuantity;
@@ -1029,36 +1249,16 @@ const TransactionAdd: React.FC = () => {
               const total = taxableAmount + gstAmount;
               
               console.log("Recalculated values:", {
-                rate,
-                quantity,
-      taxableAmount,
+                rate: numRate,
+                quantity: numQuantity,
+                taxableAmount,
                 gstPercentage: item.gstPercentage,
                 gstAmount,
-      cgst,
-      sgst,
+                cgst,
+                sgst,
                 total
               });
               
-              // If this item has a transactionId, debounce the API call to avoid too many requests
-              if (item.transactionId && !isUpdating) {
-                // Clear previous timer if it exists
-                if (updateTimerRef.current) {
-                  clearTimeout(updateTimerRef.current);
-                }
-                
-                // Set new timer to call the API after a delay
-                updateTimerRef.current = setTimeout(() => {
-                  updateTransactionQuantity(item.transactionId as number, {
-                    ...updatedItem,
-                    taxableAmount,
-                    cgst,
-                    sgst,
-                    total
-                  });
-                  updateTimerRef.current = null;
-                }, 1000); // 1 second delay
-              }
-    
               return {
                 ...updatedItem,
                 taxableAmount,
@@ -1079,7 +1279,7 @@ const TransactionAdd: React.FC = () => {
           }
           
           // Return the updated item with the new field value
-          return item;
+          return updatedItem;
         }
         
         // Return the original item unchanged
@@ -1450,9 +1650,8 @@ const TransactionAdd: React.FC = () => {
 
   // Function to handle opening new part dialog
   const handleOpenNewPartDialog = (searchTerm: string = "") => {
-    // Initialize with the search term if provided
+    // Always completely reset the form data
     setNewPartData({
-      ...newPartData,
       partName: searchTerm || "",
       partNumber: searchTerm ? generatePartNumber(searchTerm) : "",
       manufacturer: "",
@@ -1462,7 +1661,7 @@ const TransactionAdd: React.FC = () => {
       sGST: 0,
       cGST: 0,
       totalGST: 0,
-      quantity: 1
+      quantity: 0 // Set to 0 by default
     });
     
     // Always open the dialog, even if no search term is provided
@@ -2381,8 +2580,8 @@ const TransactionAdd: React.FC = () => {
             overflow: 'visible'
           }}>
             <Box sx={{ 
-              width: { xs: '100%', sm: '25%' }, 
-              minWidth: { sm: '180px' }
+              width: { xs: '100%', sm: '30%' }, 
+              minWidth: { sm: '220px' }
             }}>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.75rem' }, mb: 1 }}>
                 Spare Name <span style={{ color: 'red' }}>*</span>
@@ -2403,14 +2602,14 @@ const TransactionAdd: React.FC = () => {
               <Box sx={{ height: '40px' }}>
                 <SquareTextField
                   fullWidth
-              size="small"
+                  size="small"
                   name="price"
                   type="number"
                   value={currentItem.price || ''}
                   onChange={handleItemChange}
                   placeholder="MRP"
                   variant="outlined"
-              disabled
+                  disabled
                   sx={{ 
                     height: '40px',
                     '& .MuiInputBase-root': {
@@ -2425,7 +2624,7 @@ const TransactionAdd: React.FC = () => {
               </Box>
             </Box>
 
-            <Box sx={{ width: { xs: '100%', sm: '15%' } }}>
+            <Box sx={{ width: { xs: '100%', sm: '20%' } }}>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.75rem' }, mb: 1 }}>
                 Rate <span style={{ color: 'red' }}>*</span>
               </Typography>
@@ -2434,7 +2633,7 @@ const TransactionAdd: React.FC = () => {
                   fullWidth
                   size="small"
                   name="rate"
-              type="number"
+                  type="number"
                   value={currentItem.rate === 0 ? '' : currentItem.rate || ''}
                   onChange={handleItemChange}
                   placeholder="Rate/Item"
@@ -2452,36 +2651,8 @@ const TransactionAdd: React.FC = () => {
                 />
               </Box>
             </Box>
-            
-            <Box sx={{ width: { xs: '100%', sm: '15%' } }}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.75rem' }, mb: 1 }}>
-                Qty <span style={{ color: 'red' }}>*</span>
-              </Typography>
-              <Box sx={{ height: '40px' }}>
-                <SquareTextField
-                  fullWidth
-              size="small"
-                  name="quantity"
-                  type="number"
-                  value={currentItem.quantity === 0 ? '' : currentItem.quantity || ''}
-                  onChange={handleItemChange}
-                  inputProps={{ min: 1 }}
-                  variant="outlined"
-                  sx={{ 
-                    height: '40px',
-                    '& .MuiInputBase-root': {
-                      height: '40px'
-                    },
-                    '& .MuiInputBase-input': {
-                      height: '24px',
-                      padding: { xs: '7px 8px', sm: '8.5px 14px' }
-                    }
-                  }}
-                />
-              </Box>
-            </Box>
 
-            <Box sx={{ width: { xs: '100%', sm: '15%' } }}>
+            <Box sx={{ width: { xs: '100%', sm: '20%' } }}>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.75rem' }, mb: 1 }}>
                 GST% <span style={{ color: 'red' }}>*</span>
               </Typography>
@@ -2490,9 +2661,9 @@ const TransactionAdd: React.FC = () => {
                   select
                   fullWidth
                   size="small"
-              name="gstPercentage"
+                  name="gstPercentage"
                   value={currentItem.gstPercentage || ''}
-              onChange={handleGSTChange}
+                  onChange={handleGSTChange}
                   variant="outlined"
                   sx={{ 
                     height: '40px',
@@ -2637,8 +2808,11 @@ const TransactionAdd: React.FC = () => {
                       fullWidth
                       size="small"
                       type="number"
-                      value={item.quantity === 0 ? '' : item.quantity || ''}
-                      onChange={(e) => handleTableCellChange(item.id, 'quantity', e.target.value)}
+                      value={item.quantity}
+                      onChange={(e) => {
+                        console.log(`Changing quantity in table from ${item.quantity} to ${e.target.value}`);
+                        handleTableCellChange(item.id, 'quantity', e.target.value);
+                      }}
                       variant="outlined"
                       sx={{ 
                         '& .MuiOutlinedInput-notchedOutline': { 
@@ -2934,22 +3108,12 @@ const TransactionAdd: React.FC = () => {
                 />
               </Grid>
               
-              <Grid item xs={12} sm={6}>
-                <Typography variant="body2" sx={{ mb: 1 }}>
-                  Initial Quantity <span style={{ color: 'red' }}>*</span>
-                </Typography>
-                <SquareTextField
-                  fullWidth
-                  size="small"
-                  name="quantity"
-                  type="number"
-                  value={newPartData.quantity === 0 ? '' : newPartData.quantity}
-                  onChange={handleNewPartChange}
-                  placeholder="Enter initial quantity"
-                  required
-                  inputProps={{ min: 1 }}
-                />
-              </Grid>
+              {/* Hidden quantity field - set to 0 by default */}
+              <input 
+                type="hidden" 
+                name="quantity" 
+                value="0" 
+              />
               
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" sx={{ mb: 1 }}>
