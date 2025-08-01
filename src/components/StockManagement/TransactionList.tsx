@@ -424,7 +424,6 @@ const UserPartList: React.FC = () => {
     const lowStock = formattedResults.filter(item => Number(item.quantity) < LOW_STOCK_THRESHOLD).length;
     setLowStockCount(lowStock);
     
-    // If no results were found, show a helpful message
     if (formattedResults.length === 0) {
       setError(`No parts found matching "${searchText}". Try a different search term.`);
     }
