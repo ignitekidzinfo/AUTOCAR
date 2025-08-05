@@ -19,15 +19,9 @@ import {
   forceCheckTokenValidity,
   isTokenValid
 } from './utils/tokenUtils';
-import storageUtils from './utils/storageUtils';
+
 import { useAuth } from './context/AuthContext';
 import AppRoutes from './AppRoutes';
-
-// Import Borrow components
-import CustomerDetailsList from './components/Borrow/CustomerDetailsList';
-import AddCustomer from './components/Borrow/AddCustomer';
-import AddCustomerPayment from './components/Borrow/AddCustomerPayment';
-import ViewCustomerPayments from './components/Borrow/ViewCustomerPayments';
 
 // Initialize DevTools protection with appropriate settings
 // This will help protect sensitive data in the browser

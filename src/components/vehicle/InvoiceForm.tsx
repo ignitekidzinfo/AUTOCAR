@@ -110,18 +110,7 @@ const defaultInvoiceData: InvoiceFormData = {
   invoiceNumber: '',
   jobCardNumber: '',
   parts: [],
-  labours: [
-    { description: '',
-      quantity: '1',
-      unitPrice: '',
-      taxableAmount: '',
-      discountPercent: '',
-      cgstPercent: '',
-      sgstPercent: '',
-      igstPercent: '',
-      cgst: '',
-      sgst: '',
-      igst: '' } ],
+  labours: [], // <-- start with empty array
   globalDiscount: 0,
   subTotal: 0,
   partsSubtotal: 0,
@@ -410,44 +399,98 @@ export default function InvoiceForm() {
       let invoiceNumber = '';
       let jobCardNumber = '';
       let transactionDate = '';
+      
+      console.log('Parts response:', partsResponse.data);
+      console.log('Parts response type:', typeof partsResponse.data);
+      console.log('Parts response is array:', Array.isArray(partsResponse.data));
+      
+      // Handle different possible response structures
       if (partsResponse.data && partsResponse.data.data && Array.isArray(partsResponse.data.data)) {
+        // Handle nested data structure: { data: [...] }
         partsArray = partsResponse.data.data;
+        console.log('Found parts in nested data structure:', partsArray.length);
         if (partsArray.length > 0) {
           invoiceNumber = partsArray[0].invoiceNumber || '';
           jobCardNumber = partsArray[0].jobCardNumber || '';
-          transactionDate = partsArray[0].transactionDate || '';   }
-      } else if (Array.isArray(partsResponse.data)) {
+          transactionDate = partsArray[0].transactionDate || '';
+        }
+      } else if (partsResponse.data && Array.isArray(partsResponse.data)) {
+        // Handle direct data structure: [...]
         partsArray = partsResponse.data;
+        console.log('Found parts in direct data structure:', partsArray.length);
         if (partsArray.length > 0) {
           invoiceNumber = partsArray[0].invoiceNumber || '';
           jobCardNumber = partsArray[0].jobCardNumber || '';
-          transactionDate = partsArray[0].transactionDate || ''; }
+          transactionDate = partsArray[0].transactionDate || '';
+        }
+      } else if (partsResponse.data && partsResponse.data.message === "Transactions retrieved successfully") {
+        // Handle the specific API response structure you showed
+        if (partsResponse.data.data && Array.isArray(partsResponse.data.data)) {
+          partsArray = partsResponse.data.data;
+          console.log('Found parts in API response structure:', partsArray.length);
+          if (partsArray.length > 0) {
+            invoiceNumber = partsArray[0].invoiceNumber || '';
+            jobCardNumber = partsArray[0].jobCardNumber || '';
+            transactionDate = partsArray[0].transactionDate || '';
+          }
+        }
       } else {
-        console.error('Parts data is not an array:', partsResponse.data);  }
-      const serviceResponse = await apiClient.get(`/serviceUsed/getByVehicleId/${id}`);
+        console.error('Parts data is not in expected format:', partsResponse.data);
+        console.error('Response structure:', typeof partsResponse.data, Array.isArray(partsResponse.data));
+        // Don't throw error, just log and continue with empty array
+      }
+      
+      console.log('Final processed parts array:', partsArray);
+      console.log('Parts array length:', partsArray.length);
+
+      // Try to fetch service data, but don't let it cause errors
       let serviceArray: any[] = [];
-      if (serviceResponse.data && Array.isArray(serviceResponse.data)) {
-        serviceArray = serviceResponse.data;
-        if (serviceArray.length > 0 && (!invoiceNumber || !jobCardNumber || !transactionDate)) {
-          invoiceNumber = invoiceNumber || serviceArray[0].invoiceNumber || '';
-          jobCardNumber = jobCardNumber || serviceArray[0].jobCardNumber || '';
-          transactionDate = transactionDate || serviceArray[0].transactionDate || ''; } }
+      try {
+        const serviceResponse = await apiClient.get(`/serviceUsed/getByVehicleId/${id}`);
+        console.log('Service response:', serviceResponse.data);
+        
+        if (serviceResponse.data && Array.isArray(serviceResponse.data)) {
+          serviceArray = serviceResponse.data;
+          console.log('Found service data:', serviceArray.length);
+          if (serviceArray.length > 0 && (!invoiceNumber || !jobCardNumber || !transactionDate)) {
+            invoiceNumber = invoiceNumber || serviceArray[0].invoiceNumber || '';
+            jobCardNumber = jobCardNumber || serviceArray[0].jobCardNumber || '';
+            transactionDate = transactionDate || serviceArray[0].transactionDate || '';
+          }
+        } else if (serviceResponse.data && serviceResponse.data.message === "Unexpected error") {
+          // This is expected when no services exist - don't treat as error
+          console.log('No services found for this vehicle (expected):', serviceResponse.data.message);
+        } else {
+          console.log('Service data format not recognized:', serviceResponse.data);
+        }
+      } catch (serviceError: any) {
+        // Don't let service errors affect the main flow
+        console.log('Service API error (non-critical):', serviceError.response?.data || serviceError.message);
+        if (serviceError.response?.data?.message === "Unexpected error" && 
+            serviceError.response?.data?.exception?.includes("No services found")) {
+          console.log('Expected: No services found for this vehicle');
+        }
+      }
+      
       setFormData(prev => ({
         ...prev,
         invoiceNumber,
         jobCardNumber,
-        date: transactionDate ? new Date(transactionDate).toISOString().split('T')[0] : '' }));
+        date: transactionDate ? new Date(transactionDate).toISOString().split('T')[0] : ''
+      }));
 
       // Apply discounts based on manufacturer for each part
-      await Promise.all(partsArray.map(async (part: PartWithManufacturer) => {
-        if (part.manufacturer) {
-          const discount = await fetchDiscountForManufacturer(part.manufacturer);
-          if (discount !== null) {
-            part.discountPercent = discount;
-            console.log(`Applied ${discount}% discount for ${part.partName} (${part.manufacturer})`);
+      if (partsArray.length > 0) {
+        await Promise.all(partsArray.map(async (part: PartWithManufacturer) => {
+          if (part.manufacturer) {
+            const discount = await fetchDiscountForManufacturer(part.manufacturer);
+            if (discount !== null) {
+              part.discountPercent = discount;
+              console.log(`Applied ${discount}% discount for ${part.partName} (${part.manufacturer})`);
+            }
           }
-        }
-      }));
+        }));
+      }
 
       const parts = partsArray.map((p: PartWithManufacturer) => {
         const baseAmount = parseFloat(String(p.quantity || 0)) * parseFloat(String(p.price || 0));
@@ -469,24 +512,49 @@ export default function InvoiceForm() {
           sgst: sgst.toFixed(2),
           igst: igst.toFixed(2),
           manufacturer: p.manufacturer // Store manufacturer for reference
-        }; });
+        };
+      });
+      
+      console.log('Final processed parts for form:', parts);
       setFormData(prev => ({ ...prev, parts }));
     } catch (error: any) {
-      setDialogTitle("Error");
-      setDialogMessage("Error fetching vehicle or parts data.");
-      setDialogOpen(true);
+      console.error('Error in fetchVehicleData:', error);
+      console.error('Error details:', error.response?.data, error.message);
+      
+      // Only show error dialog for genuine HTTP errors that prevent data loading
+      // Don't show error if we successfully got vehicle data or parts data
+      if (error.response?.status >= 400 && error.response?.status < 500) {
+        // Only show error for client errors (400-499), not for server errors or network issues
+        setDialogTitle("Error");
+        setDialogMessage("Error fetching vehicle or parts data.");
+        setDialogOpen(true);
+      } else {
+        console.log('Non-critical error or successful data retrieval, continuing with available data');
+        // Set empty parts array to prevent UI issues if parts failed to load
+        if (!formData.parts || formData.parts.length === 0) {
+          setFormData(prev => ({ ...prev, parts: [] }));
+        }
+      }
     } finally {
-      setLoadingData(false); }
+      setLoadingData(false);
+    }
   }, [id, setFormData, setDialogTitle, setDialogMessage, setDialogOpen, setLoadingData]);
   const fetchLabourData = useCallback(async () => {
     try {
       const labourResponse = await apiClient.get(`/serviceUsed/getByVehicleId/${id}`);
       let labourArray: any[] = [];
+      
+      console.log('Labour response:', labourResponse.data);
+      
       if (labourResponse.data && Array.isArray(labourResponse.data)) {
         labourArray = labourResponse.data;
+        console.log('Found labour data:', labourArray.length);
       } else {
-        console.error("Labour data is not an array:", labourResponse.data); }
-      const labours = labourArray.map((s: any) => ({
+        console.log("No labour data found or invalid format:", labourResponse.data);
+      }
+      
+      // If no labours, set to empty array
+      const labours = labourArray.length > 0 ? labourArray.map((s: any) => ({
         description: s.serviceName || '',
         quantity: s.quantity ? String(s.quantity) : '1',
         unitPrice: s.rate ? String(s.rate) : '',
@@ -497,10 +565,17 @@ export default function InvoiceForm() {
         igstPercent: '',
         cgst: s.cgst != null ? String(s.cgst) : '',
         sgst: s.sgst != null ? String(s.sgst) : '',
-        igst: '' }));
+        igst: ''
+      })) : [];
+      
+      console.log('Final processed labours:', labours);
       setFormData(prev => ({ ...prev, labours }));
     } catch (error) {
-      console.error("Error fetching labour data:", error); } }, [id, setFormData]);
+      console.error("Error fetching labour data:", error);
+      console.log("Setting empty labour array due to error");
+      setFormData(prev => ({ ...prev, labours: [] })); // Ensure empty array on error
+    }
+  }, [id, setFormData]);
   useEffect(() => {
     if (id) {
       fetchVehicleData();

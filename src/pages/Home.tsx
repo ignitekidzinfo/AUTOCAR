@@ -141,27 +141,19 @@ function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 scroll-smooth">
-     
-      <div
+    <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 scroll-smooth">
+      {/* Hero Section */}
+      <section
         className="relative h-[300px] md:h-[600px] flex flex-col items-center justify-center bg-center bg-no-repeat"
         style={{
           backgroundImage: `url('/ps.png')`,
           backgroundSize: "cover",
         }}
+        aria-label="Premium Car Service and Repairs Hero"
       >
-     
         <div className="absolute inset-0 bg-black opacity-20"></div>
         <div className="relative text-center text-white">
-          <motion.h1
-            initial={{ opacity: 0, y: -20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: false, amount: 0.3 }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
-            className="text-4xl md:text-6xl font-bold mb-4"
-          >
-            Premium Car Servicing & Repairs
-          </motion.h1>
+          <h1 className="text-4xl md:text-6xl font-bold mb-4" style={{textShadow: '1px 1px 8px #000'}}>Premium Car Servicing & Repairs | AutoCarCarePoint</h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -169,7 +161,7 @@ function Home() {
             transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
             className="text-lg md:text-xl mb-8"
           >
-            Trusted by thousands of car owners. Book your service today!
+            Trusted by thousands of car owners for oil change, brake repair, battery replacement, and more. Book your car service today with expert technicians and transparent pricing.
           </motion.p>
           <motion.div className="flex flex-col sm:flex-row gap-4 justify-center">
             <motion.button
@@ -193,36 +185,38 @@ function Home() {
             </motion.button>
           </motion.div>
         </div>
-      </div>
+      </section>
 
-      <div className="container mx-auto px-4 sm:px-6 py-16">
+      {/* Services Section */}
+      <section className="container mx-auto px-4 sm:px-6 py-16" aria-label="Our Car Services">
         <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-12 text-center">
           Our Services
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {services.map((service, index) => (
-            <motion.div
-              key={index}
-              whileHover={{ scale: 1.05 }}
-              className="bg-gray-200 p-6 rounded-lg shadow-md hover:shadow-xl transition transform text-gray-800 text-center"
-            >
+            <article key={index} className="bg-gray-200 p-6 rounded-lg shadow-md hover:shadow-xl transition transform text-gray-800 text-center">
               <div className="flex justify-center mb-4">
-                <service.icon className="w-12 h-12 text-red-600 animate-bounce" />
+                <service.icon className="w-12 h-12 text-red-600 animate-bounce" aria-hidden="true" />
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-center">
-                {service.title}
-              </h3>
+              <h3 className="text-xl font-semibold mb-2 text-center">{service.title}</h3>
               <p className="text-sm text-center">{service.description}</p>
-            </motion.div>
+            </article>
           ))}
         </div>
-      </div>
+      </section>
 
-      <HowItWorks />
+      {/* How It Works Section */}
+      <section aria-label="How Car Service Works">
+        <HowItWorks />
+      </section>
 
-      <OurApproach />
+      {/* Our Approach Section */}
+      <section aria-label="Why Choose AutoCarCarePoint">
+        <OurApproach />
+      </section>
 
-      <div className="container mx-auto px-4 sm:px-6 py-16">
+      {/* Testimonials Section */}
+      <section className="container mx-auto px-4 sm:px-6 py-16" aria-label="Customer Testimonials">
         <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-12 text-center">
           What Our Customers Say
         </h2>
@@ -234,7 +228,7 @@ function Home() {
                 <div className="flex items-center">
                   <img
                     src={testimonial.avatar}
-                    alt={testimonial.name}
+                    alt={`Photo of ${testimonial.name}, ${testimonial.role}`}
                     className="w-10 h-10 rounded-full mr-4"
                   />
                   <div>
@@ -248,9 +242,10 @@ function Home() {
             </div>
           ))}
         </Slider>
-      </div>
+      </section>
 
-      <div className="bg-gradient-to-r from-black to-red-600 text-white py-16">
+      {/* Call to Action Section */}
+      <section className="bg-gradient-to-r from-black to-red-600 text-white py-16" aria-label="Book Car Service">
         <div className="container mx-auto px-4 sm:px-6 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold mb-4">
             Ready to Service Your Car?
@@ -269,8 +264,36 @@ function Home() {
             Book Appointment Now
           </motion.button>
         </div>
-      </div>
+      </section>
 
+      {/* FAQ Section for SEO */}
+      <section className="container mx-auto px-4 sm:px-6 py-16" aria-label="Car Service FAQs">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-8 text-center">Frequently Asked Questions</h2>
+        <div className="max-w-3xl mx-auto space-y-6">
+          <article>
+            <h3 className="font-semibold text-lg mb-2">What services do you offer at AutoCarCarePoint?</h3>
+            <p>We offer oil changes, brake repair, battery replacement, tire rotation, and comprehensive car maintenance for all makes and models in Satara, Phaltan, and Kolki.</p>
+          </article>
+          <article>
+            <h3 className="font-semibold text-lg mb-2">How do I book a car service appointment?</h3>
+            <p>You can easily book your car service online through our website or call us at 8600650087. Our team will confirm your appointment and provide all necessary details.</p>
+          </article>
+          <article>
+            <h3 className="font-semibold text-lg mb-2">Are your technicians certified?</h3>
+            <p>Yes, all our technicians are certified and have years of experience in car servicing and repairs.</p>
+          </article>
+          <article>
+            <h3 className="font-semibold text-lg mb-2">Do you use genuine spare parts?</h3>
+            <p>We use only genuine and high-quality spare parts to ensure the best performance and safety for your vehicle.</p>
+          </article>
+          <article>
+            <h3 className="font-semibold text-lg mb-2">Where are you located?</h3>
+            <p>We are located at CTS No 77/2, near HP latkar godown, Ganesh temple, buva saheb nagar, shingnapur road, at, Kolki, tal, phaltan dist, Satara -415523.</p>
+          </article>
+        </div>
+      </section>
+
+      {/* Footer Section */}
       <footer className="bg-gray-800 text-white py-12">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
@@ -311,9 +334,7 @@ function Home() {
               <h3 className="text-lg font-bold mb-4">Contact Us</h3>
               <ul className="text-sm text-gray-400">
                 <li className="mb-2">Email: autocarcarepoint@gmail.com</li>
-                <li className="mb-2">Phone: 8600650087,
-                                            9595054555,
-                                            7758817766</li>
+                <li className="mb-2">Phone: 8600650087, 9595054555, 7758817766</li>
                 <li className="mb-2">Address: CTS No 77/2, near HP latkar godown, Ganesh temple, buva saheb nagar, shingnapur road, at, Kolki, tal, phaltan dist, Satara -415523</li>
               </ul>
             </div>
@@ -325,6 +346,7 @@ function Home() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400 hover:text-red-500 transition"
+                  aria-label="Facebook"
                 >
                   Facebook
                 </a>
@@ -333,6 +355,7 @@ function Home() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400 hover:text-red-500 transition"
+                  aria-label="Twitter"
                 >
                   Twitter
                 </a>
@@ -341,6 +364,7 @@ function Home() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400 hover:text-red-500 transition"
+                  aria-label="Instagram"
                 >
                   Instagram
                 </a>
@@ -364,7 +388,7 @@ function Home() {
           </div>
         </div>
       </footer>
-    </div>
+    </main>
   );
 }
 
