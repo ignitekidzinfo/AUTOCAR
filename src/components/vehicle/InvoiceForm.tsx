@@ -294,6 +294,44 @@ export default function InvoiceForm() {
     prefetchAllDiscounts();
   }, []);
 
+  // Whenever parts array changes (e.g., user adds/selects a part),
+  // auto-fetch the active discount for any part that has a manufacturer
+  // but no discount set yet, and populate its discountPercent.
+  useEffect(() => {
+    const applyMissingDiscounts = async () => {
+      if (!formData.parts || formData.parts.length === 0) return;
+
+      const updates: Array<{ index: number; discount: number }> = [];
+      await Promise.all(
+        formData.parts.map(async (p, index) => {
+          const hasManufacturer = !!p.manufacturer && String(p.manufacturer).trim() !== '';
+          const hasDiscount = p.discountPercent !== undefined && String(p.discountPercent).trim() !== '' && String(p.discountPercent) !== '0';
+          if (hasManufacturer && !hasDiscount) {
+            const discount = await fetchDiscountForManufacturer(String(p.manufacturer));
+            if (discount !== null) {
+              updates.push({ index, discount });
+            }
+          }
+        })
+      );
+
+      if (updates.length > 0) {
+        setFormData(prev => {
+          const parts = [...prev.parts];
+          updates.forEach(({ index, discount }) => {
+            parts[index] = {
+              ...parts[index],
+              discountPercent: String(discount)
+            } as typeof parts[number];
+          });
+          return { ...prev, parts };
+        });
+      }
+    };
+
+    applyMissingDiscounts();
+  }, [formData.parts]);
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     if (name === 'advanceAmount') {
@@ -684,11 +722,26 @@ export default function InvoiceForm() {
       return convert(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + convert(n % 10000000) : ''); };
     return convert(num); };
   const disabledTaxStyle = { backgroundColor: '#f5f5f5' };
+
+  const handleDiscounts = () => {
+    // Open the manage-discounts URL in a new tab
+    window.open('http://localhost:5173/admin/manage-discounts', '_blank');
+  };
+
   return (
     <Box sx={{ p: 2, width: '100%', overflowX: 'auto' }}>
-      <Typography variant="h5" fontWeight="bold" mb={2}>
-        Generate Invoice
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" fontWeight="bold">
+          Generate Invoice
+        </Typography>
+        <Button 
+          variant="contained" 
+          onClick={handleDiscounts}
+          sx={{ backgroundColor: '#007bff', '&:hover': { backgroundColor: '#0056b3' } }}
+        >
+          Discounts
+        </Button>
+      </Box>
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}

@@ -21,7 +21,6 @@ import { GridCellParams, GridRowsProp, GridColDef } from '@mui/x-data-grid';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import PreviewIcon from '@mui/icons-material/Preview';
 import { Print } from '@mui/icons-material';
 import apiClient from 'Services/apiService';
 
@@ -55,22 +54,21 @@ export default function QuotationList() {
   const getQuotationList = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     try {
-      // Check cache first if not forcing refresh
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(CACHE_KEY);
-        if (cachedData) {
-          const { data, timestamp } = JSON.parse(cachedData);
-          // Use cache if it's not expired
-          if (Date.now() - timestamp < CACHE_EXPIRY) {
+      // 1) Show cached data immediately if present (SWR style)
+      const cachedData = localStorage.getItem(CACHE_KEY);
+      if (!forceRefresh && cachedData) {
+        try {
+          const { data } = JSON.parse(cachedData);
+          if (Array.isArray(data) && data.length >= 0) {
             setRows(data);
             setLoading(false);
-            return;
           }
-        }
+        } catch {}
       }
 
+      // 2) Always fetch latest from server and update state/cache
       const response = await apiClient.get('/api/quotations');
-      const data: Quotation[] = response.data;
+      const data: Quotation[] = response.data || [];
       const formattedRows = data.map((quotation) => ({
         id: quotation.id,
         quotationDate: quotation.quotationDate,
@@ -79,8 +77,7 @@ export default function QuotationList() {
         customerMobile: quotation.customerMobile ?? '',
         vehicleNumber: quotation.vehicleNumber ?? '',
       }));
-      
-      // Update state and cache the data
+
       setRows(formattedRows);
       localStorage.setItem(CACHE_KEY, JSON.stringify({
         data: formattedRows,
@@ -96,23 +93,23 @@ export default function QuotationList() {
   }, []);
 
   useEffect(() => {
-    getQuotationList();
+    // Force a fresh network fetch on initial mount so newly added data appears immediately
+    getQuotationList(true);
   }, [getQuotationList]);
 
   const handleDelete = async (id: number) => {
     try {
-    setSelectedId(id);
-    setOpen(true);    
-      
-    if (open) {
-        const response = await apiClient.delete(`/api/quotations/${id}`);
-        if (response.status >= 200 && response.status < 300) {
-          // Refresh the list after deletion
-          getQuotationList(true);
-        } else {
-          console.error('Failed to delete quotation:', response.statusText);
-          setError('Failed to delete quotation. Please try again.');
-        }
+      setSelectedId(id);
+      setOpen(true);
+      // Perform deletion immediately (the snackbar is just feedback)
+      const response = await apiClient.delete(`/api/quotations/${id}`);
+      if (response.status >= 200 && response.status < 300) {
+        // Immediately refresh list and bust cache
+        localStorage.removeItem(CACHE_KEY);
+        getQuotationList(true);
+      } else {
+        console.error('Failed to delete quotation:', response.statusText);
+        setError('Failed to delete quotation. Please try again.');
       }
     } catch (error) {
       console.error('Error deleting quotation:', error);

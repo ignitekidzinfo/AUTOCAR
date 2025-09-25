@@ -537,9 +537,17 @@ const CounterSaleForm: FC = () => {
     navigate('/admin/invoiceList');
   };
 
+  const handleDiscounts = () => {
+    // Open the manage-discounts URL in a new tab
+    window.open('http://localhost:5173/admin/manage-discounts', '_blank');
+  };
+
   return (
     <div style={containerStyle}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem', gap: '1rem' }}>
+        <button style={buttonStyle} onClick={handleDiscounts}>
+          Discounts
+        </button>
         <button style={buttonStyle} onClick={handleManageCounterSale}>
           Manage Counter Sale
         </button>

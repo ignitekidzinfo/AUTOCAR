@@ -23,6 +23,7 @@ import {
   CardHeader,
   Divider
 } from '@mui/material';
+import Tooltip from '@mui/material/Tooltip';
 import Autocomplete from '@mui/material/Autocomplete';
 import { SelectChangeEvent } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -240,7 +241,7 @@ export default function AddVehicle() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTitle, setDialogTitle] = useState("");
   const [dialogMessage, setDialogMessage] = useState("");
-  const [errors, setErrors] = useState<{ email?: string; customerName?: string; customerMobileNumber?: string; kmsDriven?: string; insuranceTo?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; customerName?: string; customerMobileNumber?: string; kmsDriven?: string; insuranceTo?: string; manufactureYear?: string }>({});
 
   const [searchInput, setSearchInput] = useState("");
   const [searchResults, setSearchResults] = useState<VehicleRegDto[]>([]);
@@ -248,6 +249,8 @@ export default function AddVehicle() {
   const [loadingVehicle, setLoadingVehicle] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [processingDialogOpen, setProcessingDialogOpen] = useState(false);
+  const yearInputRef = useRef<HTMLInputElement>(null);
+  const [showYearHint, setShowYearHint] = useState(false);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setErrors((prev) => ({ ...prev, [event.target.name]: "" }));
@@ -271,7 +274,15 @@ export default function AddVehicle() {
   };
 
   const validateFields = (): boolean => {
-    const newErrors: { email?: string; customerName?: string; customerMobileNumber?: string; kmsDriven?: string; insuranceTo?: string } = {};
+    const newErrors: { email?: string; customerName?: string; customerMobileNumber?: string; kmsDriven?: string; insuranceTo?: string; manufactureYear?: string } = {};
+    // Manufacture year: must be a 4-digit year like 2019
+    if (formData.manufactureYear && String(formData.manufactureYear).trim() !== '') {
+      const yearStr = String(formData.manufactureYear).trim();
+      const yearRegex = /^(19\d{2}|20\d{2})$/; // years 1900-2099
+      if (!yearRegex.test(yearStr)) {
+        newErrors.manufactureYear = 'Enter a valid 4-digit year (e.g., 2019)';
+      }
+    }
     type DivRef = typeof kmsDrivenRef;
     let firstErrorRef: DivRef | null = null;
 
@@ -737,15 +748,29 @@ export default function AddVehicle() {
                 <Grid item xs={12} sm={6}>
                   <FormGrid>
                     <BoldFormLabel htmlFor="manufactureYear">Manufactured Year</BoldFormLabel>
+            <Tooltip open={showYearHint} title="Please enter a 4-digit year (e.g., 2019)" placement="top" arrow>
             <OutlinedInput
               id="manufactureYear"
               name="manufactureYear"
               value={formData.manufactureYear}
-              onChange={handleChange}
-                      placeholder="---------, ----"
+              onChange={(e) => {
+                const raw = e.target.value;
+                const val = raw.replace(/[^0-9]/g, '').slice(0, 4);
+                if (raw !== val) {
+                  setShowYearHint(true);
+                  window.setTimeout(() => setShowYearHint(false), 1500);
+                }
+                setFormData({ ...formData, manufactureYear: val });
+                setErrors(prev => ({ ...prev, manufactureYear: '' }));
+              }}
+                      placeholder="e.g., 2019"
               size="small"
+                      error={Boolean(errors.manufactureYear)}
                       fullWidth
+              inputRef={yearInputRef}
             />
+            </Tooltip>
+            {errors.manufactureYear && <FormHelperText error>{errors.manufactureYear}</FormHelperText>}
           </FormGrid>
                 </Grid>
                 
@@ -940,14 +965,13 @@ export default function AddVehicle() {
                 
                 <Grid item xs={12} sm={6} md={4}>
                   <FormGrid>
-                    <BoldFormLabel htmlFor="customerAadharNo">Customer Aadhar No.*</BoldFormLabel>
+                    <BoldFormLabel htmlFor="customerAadharNo">Customer Aadhar No.</BoldFormLabel>
             <OutlinedInput
               id="customerAadharNo"
               name="customerAadharNo"
               value={formData.customerAadharNo}
               onChange={handleChange}
                       placeholder="Enter Customer Aadhar No."
-              required
               size="small"
                       fullWidth
             />
