@@ -19,17 +19,15 @@ export const getFrontendBaseUrl = () => {
         return 'http://localhost:5173';
     }
     
-    // For production, replace the API port/path with the frontend port
-    // Assuming frontend runs on port 5173 or is served from the same domain
-    const url = new URL(API_BASE_URL);
-    
-    // If it's the production domain, use the same domain but different port or path
-    if (url.hostname.includes('prodchunca.in.net')) {
-        return `${url.protocol}//${url.hostname}:5173`;
+    // For production, map the API URL to the frontend URL
+    if (API_BASE_URL.includes('prodchunca.in.net')) {
+        // Map app.prodchunca.in.net to autocarcares.com
+        return 'https://autocarcares.com';
     }
     
-    // Default fallback - same host, port 5173
-    return `${url.protocol}//${url.hostname}:5173`;
+    // Default fallback - try to construct from API URL
+    const url = new URL(API_BASE_URL);
+    return `${url.protocol}//${url.hostname}`;
 };
 
 export default apiClient;
