@@ -95,7 +95,7 @@ const DiscountManagement: React.FC = () => {
   const [manufacturers, setManufacturers] = useState<string[]>([]);
   const [discountStructures, setDiscountStructures] = useState<DiscountStructureDTO[]>([]);
   const [manufacturerDiscounts, setManufacturerDiscounts] = useState<ManufacturerDiscount[]>([]);
-  const [activeSetIndex, setActiveSetIndex] = useState<number>(-1);
+  const [activeSetIndex, setActiveSetIndex] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [savingManufacturer, setSavingManufacturer] = useState<string | null>(null);
   const [currentEditDiscount, setCurrentEditDiscount] = useState<DiscountStructureDTO | null>(null);
@@ -115,7 +115,6 @@ const DiscountManagement: React.FC = () => {
   // Persist active set change immediately to backend for all manufacturers that already exist
   const handleActiveSetChange = async (index: number) => {
     setActiveSetIndex(index);
-    if (index === -1) return; // No persistence when None is chosen
 
     // Persist for each existing discount structure
     try {
@@ -188,11 +187,12 @@ const DiscountManagement: React.FC = () => {
     if (discountStructures.length === 0) return;
     const indices = discountStructures
       .map(ds => (ds as any).activeSetIndex)
-      .filter((v) => v !== undefined && v !== null);
+      .filter((v) => v !== undefined && v !== null && v >= 0 && v <= 2);
     if (indices.length > 0 && indices.every(v => v === indices[0])) {
       setActiveSetIndex(indices[0]);
     } else {
-      setActiveSetIndex(-1);
+      // Default to Box 1 (index 0) instead of -1
+      setActiveSetIndex(0);
     }
   }, [discountStructures.length]);
 
@@ -264,7 +264,7 @@ const DiscountManagement: React.FC = () => {
       discountA: discountData.values[0] === '' ? 0 : Number(discountData.values[0]),
       discountB: discountData.values[1] === '' ? 0 : Number(discountData.values[1]),
       discountC: discountData.values[2] === '' ? 0 : Number(discountData.values[2]),
-      activeSetIndex: activeSetIndex === -1 ? undefined : activeSetIndex
+      activeSetIndex: activeSetIndex
     };
     
     try {
@@ -324,7 +324,7 @@ const DiscountManagement: React.FC = () => {
       discountA: discountData.values[0] === '' ? 0 : Number(discountData.values[0]),
       discountB: discountData.values[1] === '' ? 0 : Number(discountData.values[1]),
       discountC: discountData.values[2] === '' ? 0 : Number(discountData.values[2]),
-      activeSetIndex: activeSetIndex === -1 ? undefined : activeSetIndex
+      activeSetIndex: activeSetIndex
     };
     
     try {
@@ -447,7 +447,6 @@ const DiscountManagement: React.FC = () => {
                 <FormControlLabel value={"0"} control={<Radio />} label="Box 1" />
                 <FormControlLabel value={"1"} control={<Radio />} label="Box 2" />
                 <FormControlLabel value={"2"} control={<Radio />} label="Box 3" />
-                <FormControlLabel value={"-1"} control={<Radio />} label="None" />
               </RadioGroup>
             </Box>
             <Table>
@@ -481,7 +480,7 @@ const DiscountManagement: React.FC = () => {
                               sx={{
                                 width: 110,
                                 transition: 'all 200ms ease',
-                                opacity: activeSetIndex === -1 ? 1 : (isActive(idx) ? 1 : 0.45),
+                                opacity: isActive(idx) ? 1 : 0.45,
                                 '& .MuiInputBase-input': { textAlign: 'center' }
                               }}
                               value={values[idx] as any}
