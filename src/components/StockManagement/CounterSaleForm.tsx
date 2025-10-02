@@ -539,7 +539,7 @@ const CounterSaleForm: FC = () => {
 
   const handleDiscounts = () => {
     const frontendBaseUrl = getFrontendBaseUrl();
-    window.open(`${frontendBaseUrl}/admin/manage-discounts`, '_blank');
+    window.open(`$/admin/manage-discounts`, '_blank');
   };
 
   return (
