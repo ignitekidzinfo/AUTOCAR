@@ -154,9 +154,12 @@ const DiscountManagement: React.FC = () => {
     setManufacturerDiscounts(initialManufacturerDiscounts);
   }, [manufacturers.length]);
 
-  // Update manufacturer per-row values when both datasets are present
+  // Update manufacturer per-row values when discount structures change (but not when manufacturerDiscounts change to avoid infinite loop)
   useEffect(() => {
     if (discountStructures.length === 0 || manufacturerDiscounts.length === 0) return;
+
+    // Don't update if currently editing to preserve user input
+    if (currentEditDiscount) return;
 
     let changed = false;
     const updated = manufacturerDiscounts.map(item => {
@@ -178,7 +181,7 @@ const DiscountManagement: React.FC = () => {
     });
 
     if (changed) setManufacturerDiscounts(updated);
-  }, [discountStructures, manufacturerDiscounts]);
+  }, [discountStructures, currentEditDiscount]); // Removed manufacturerDiscounts from dependencies to prevent infinite loop
 
   // Set the header activeSetIndex as soon as discount structures arrive (no dependency on manufacturers)
   useEffect(() => {
@@ -328,8 +331,8 @@ const DiscountManagement: React.FC = () => {
       const response = await apiClient.patch(`/discounts/${existingDiscount.discountId}`, updatedDiscount);
       if (response.status === 200) {
         showSnackbar(`Discount updated for ${manufacturer}`, 'success');
-        fetchDiscountStructures(); // Refresh the list
-        setCurrentEditDiscount(null);
+        setCurrentEditDiscount(null); // Clear edit state first
+        fetchDiscountStructures(); // Then refresh the list
       }
     } catch (error) {
       console.error('Error updating discount:', error);
@@ -396,6 +399,13 @@ const DiscountManagement: React.FC = () => {
   // Check if a manufacturer is currently being edited
   const isEditing = (manufacturer: string) => {
     return currentEditDiscount?.manufacturer === manufacturer;
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setCurrentEditDiscount(null);
+    // Refresh to restore original values
+    fetchDiscountStructures();
   };
 
   return (
@@ -484,16 +494,28 @@ const DiscountManagement: React.FC = () => {
                       </StyledTableBodyCell>
                       <StyledTableBodyCell align="center">
                         {isCurrentlyEditing ? (
-                          <StyledButton
-                            variant="contained"
-                            color="primary"
-                            onClick={() => handleUpdateDiscount(manufacturer)}
-                            disabled={savingManufacturer === manufacturer}
-                          >
-                            {savingManufacturer === manufacturer ? (
-                              <CircularProgress size={24} />
-                            ) : 'Save'}
-                          </StyledButton>
+                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                            <StyledButton
+                              variant="contained"
+                              color="primary"
+                              onClick={() => handleUpdateDiscount(manufacturer)}
+                              disabled={savingManufacturer === manufacturer}
+                              size="small"
+                            >
+                              {savingManufacturer === manufacturer ? (
+                                <CircularProgress size={20} />
+                              ) : 'Save'}
+                            </StyledButton>
+                            <StyledButton
+                              variant="outlined"
+                              color="secondary"
+                              onClick={handleCancelEdit}
+                              disabled={savingManufacturer === manufacturer}
+                              size="small"
+                            >
+                              Cancel
+                            </StyledButton>
+                          </Box>
                         ) : (
                           <StyledButton
                             variant="contained"

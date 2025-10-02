@@ -29,7 +29,7 @@ import {
   ListItemText
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import apiClient from 'Services/apiService';
+import apiClient, { getFrontendBaseUrl } from 'Services/apiService';
 import { useParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 
@@ -724,8 +724,9 @@ export default function InvoiceForm() {
   const disabledTaxStyle = { backgroundColor: '#f5f5f5' };
 
   const handleDiscounts = () => {
-    // Open the manage-discounts URL in a new tab
-    window.open('http://localhost:5173/admin/manage-discounts', '_blank');
+    // Open the manage-discounts URL in a new tab using dynamic base URL
+    const frontendBaseUrl = getFrontendBaseUrl();
+    window.open(`${frontendBaseUrl}/admin/manage-discounts`, '_blank');
   };
 
   return (

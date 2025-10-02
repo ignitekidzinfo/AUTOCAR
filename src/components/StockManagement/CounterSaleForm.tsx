@@ -1,7 +1,7 @@
 import React, { FC, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
-import apiClient from 'Services/apiService';
+import apiClient, { getFrontendBaseUrl } from 'Services/apiService';
 import { AiOutlineCalendar, AiOutlineUser, AiOutlinePhone } from 'react-icons/ai';
 import { MdLocationOn, MdOutlineDirectionsCar } from 'react-icons/md';
 
@@ -538,8 +538,8 @@ const CounterSaleForm: FC = () => {
   };
 
   const handleDiscounts = () => {
-    // Open the manage-discounts URL in a new tab
-    window.open('http://localhost:5173/admin/manage-discounts', '_blank');
+    const frontendBaseUrl = getFrontendBaseUrl();
+    window.open(`${frontendBaseUrl}/admin/manage-discounts`, '_blank');
   };
 
   return (
