@@ -33,6 +33,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import apiClient from '../../Services/apiService';
 import { useNavigate } from 'react-router-dom';
+import { CACHE_KEYS, invalidateCache, checkAndClearCacheCallback, setCacheInvalidationCallback } from '../../utils/cacheUtils';
 
 // Styled components
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
@@ -71,7 +72,7 @@ interface Bill {
 }
 
 // Enhanced cache implementation with state management
-const CACHE_KEY = 'purchase_bills_cache';
+const CACHE_KEY = CACHE_KEYS.PURCHASE_BILLS;
 const CACHE_EXPIRY = 10 * 60 * 1000; // 10 minutes in milliseconds
 const BACKGROUND_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
@@ -99,9 +100,9 @@ const PurchaseList: React.FC = () => {
   // Load data with strategic caching
   const fetchBills = useCallback(async (skipCache = false) => {
     try {
-      // Throttle API calls - don't fetch more than once every 10 seconds unless forced
+      // Throttle API calls - don't fetch more than once every 5 seconds unless forced
       const now = Date.now();
-      if (!skipCache && now - lastFetchTimeRef.current < 10000) {
+      if (!skipCache && now - lastFetchTimeRef.current < 5000) {
         console.log('Throttling API call - too frequent');
         return;
       }
@@ -118,8 +119,8 @@ const PurchaseList: React.FC = () => {
             setBills(parsedCache.data);
             setLoading(false);
             
-            // If cache is relatively fresh (less than 2 minutes old), don't fetch again
-            if (now - parsedCache.timestamp < 120000) {
+            // If cache is relatively fresh (less than 1 minute old), don't fetch again
+            if (now - parsedCache.timestamp < 60000) {
               return;
             }
             
@@ -169,37 +170,31 @@ const PurchaseList: React.FC = () => {
       }
       
       if (response.data && response.data.data) {
-        // Process bills to get total quantity
+        // Process bills to get total quantity - ensure proper quantity calculation
         const processedBills = response.data.data.map((bill: any) => ({
           billId: bill.billId,
           billNo: bill.billNo,
           billDate: new Date(bill.billDate).toLocaleDateString('en-GB'),
           vendorName: bill.vendorName,
           vendorId: bill.vendorId,
-          totalQuantity: bill.items?.reduce((total: number, item: any) => total + item.quantity, 0) || 0,
-          grandTotal: bill.grandTotal || 0
+          totalQuantity: bill.items?.reduce((total: number, item: any) => {
+            const quantity = typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity || 0;
+            return total + quantity;
+          }, 0) || 0,
+          grandTotal: bill.grandTotal || 0,
+          items: bill.items || [] // Store items for reference
         }));
         
-        // Check if data has changed compared to what we're currently showing
-        const currentBills = bills;
-        const hasDataChanged = currentBills.length !== processedBills.length || 
-          JSON.stringify(currentBills.map((b: Bill) => b.billId).sort()) !== 
-          JSON.stringify(processedBills.map((b: Bill) => b.billId).sort());
+        // Always update the state with fresh data
+        console.log('Updating bills with fresh data:', processedBills.length, 'bills');
+        setBills(processedBills);
         
-        if (hasDataChanged) {
-          console.log('Data has changed, updating view');
-          // Update state with new data
-          setBills(processedBills);
-          
-          // If data changed and we weren't showing loading indicator, show a success message
-          if (!skipCache && currentBills.length > 0) {
-            setFeedback({
-              message: "Purchase list updated with latest data",
-              severity: "info"
-            });
-          }
-        } else {
-          console.log('No changes in data detected');
+        // If data changed and we weren't showing loading indicator, show a success message
+        if (!skipCache) {
+          setFeedback({
+            message: "Purchase list updated with latest data",
+            severity: "info"
+          });
         }
         
         // Always update the cache with latest data and etag
@@ -257,7 +252,7 @@ const PurchaseList: React.FC = () => {
     };
   }, [fetchBills]);
 
-  // Add event listener for visibility changes to optimize API calls
+  // Add event listener for visibility changes and focus events to optimize API calls
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -275,18 +270,55 @@ const PurchaseList: React.FC = () => {
         }
       }
     };
+
+    const handleFocus = () => {
+      // Check if we're returning from an edit operation
+      if (checkAndClearCacheCallback('purchaseList')) {
+        console.log('Returning from edit operation, invalidating cache and refreshing');
+        invalidatePurchaseCache();
+      } else {
+        // Regular focus refresh
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        if (cachedData) {
+          const parsedCache: CacheData = JSON.parse(cachedData);
+          const timeSinceLastUpdate = Date.now() - parsedCache.timestamp;
+          
+          // If cache is older than 30 seconds, refresh
+          if (timeSinceLastUpdate > 30000) {
+            console.log('Window focused, refreshing data');
+            fetchBills(false);
+          }
+        }
+      }
+    };
     
-    // Add event listener
+    // Add event listeners
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
     
     // Cleanup
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [fetchBills]);
 
   // Add a manual refresh function that forces a refresh
   const handleManualRefresh = () => {
+    // Clear cache before refreshing
+    invalidateCache(CACHE_KEY);
+    etagRef.current = null;
+    lastFetchTimeRef.current = 0;
+    fetchBills(true);
+  };
+
+  // Function to invalidate cache when bills are created/updated
+  const invalidatePurchaseCache = () => {
+    console.log('Invalidating purchase bills cache');
+    invalidateCache(CACHE_KEY);
+    etagRef.current = null;
+    lastFetchTimeRef.current = 0;
+    // Force refresh after cache invalidation
     fetchBills(true);
   };
 
@@ -315,6 +347,9 @@ const PurchaseList: React.FC = () => {
         
         // Add a flag to indicate this is an edit operation to handle HTTP method correctly
         sessionStorage.setItem('isEditOperation', 'true');
+        
+        // Store callback function for cache invalidation after edit
+        setCacheInvalidationCallback('purchaseList');
         
         // Navigate to transaction add page with the bill ID
         navigate(`/admin/transaction?edit=${billId}`);

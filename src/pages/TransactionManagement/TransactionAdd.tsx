@@ -3,6 +3,7 @@ import { useState, useEffect, FormEvent, useMemo } from "react";
 import apiClient from "Services/apiService";
 import storageUtils from '../../utils/storageUtils';
 import PartSearch from '../../components/common/PartSearch';
+import { setCacheInvalidationCallback } from '../../utils/cacheUtils';
 import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
 
@@ -431,22 +432,27 @@ const TransactionAdd: React.FC = () => {
           
           // Load items
           if (billData.items && Array.isArray(billData.items)) {
-            const mappedItems: SparePartItem[] = billData.items.map((item: any, index: number) => ({
-              id: index + 1,
-              transactionId: item.transactionId,
-              sparePartId: item.sparePartId,
-              partName: item.itemName,
-              partNumber: item.partNumber || '',
-              manufacturer: item.manufacturer || '',
-              price: item.mrp || item.price || 0,
-              quantity: item.quantity || 1,
-              rate: item.rate || 0,
-              gstPercentage: (item.cgstPercentage + item.sgstPercentage) || 0,
-              taxableAmount: item.taxableAmount || (item.rate * item.quantity),
-              cgst: item.cgst || 0,
-              sgst: item.sgst || 0,
-              total: item.amount || 0
-            }));
+            const mappedItems: SparePartItem[] = billData.items.map((item: any, index: number) => {
+              // Ensure quantity is properly handled as a number
+              const quantity = typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity || 0;
+              
+              return {
+                id: index + 1,
+                transactionId: item.transactionId,
+                sparePartId: item.sparePartId,
+                partName: item.itemName,
+                partNumber: item.partNumber || '',
+                manufacturer: item.manufacturer || '',
+                price: item.mrp || item.price || 0,
+                quantity: quantity, // Ensure quantity is a number
+                rate: item.rate || 0,
+                gstPercentage: (item.cgstPercentage + item.sgstPercentage) || 0,
+                taxableAmount: item.taxableAmount || (item.rate * quantity),
+                cgst: item.cgst || 0,
+                sgst: item.sgst || 0,
+                total: item.amount || 0
+              };
+            });
             
             setSparePartItems(mappedItems);
             calculateTotals(mappedItems);
@@ -1000,7 +1006,7 @@ const TransactionAdd: React.FC = () => {
         items: sparePartItems.map(item => ({
           itemName: item.partName,
           partNumber: item.partNumber,
-          quantity: item.quantity,
+          quantity: typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity || 0,
           rate: item.rate || 0,
           cgstPercentage: item.gstPercentage / 2,
           sgstPercentage: item.gstPercentage / 2,
@@ -1058,8 +1064,20 @@ const TransactionAdd: React.FC = () => {
         severity: "success"
       });
       
+      // Clear edit data from sessionStorage
+      sessionStorage.removeItem('editBillData');
+      sessionStorage.removeItem('isEditOperation');
+      
+      // Set cache invalidation flag for the purchase list
+      setCacheInvalidationCallback('purchaseList');
+      
       // Reset form after successful submission
       resetForm();
+      
+      // Navigate back to purchase list after a short delay to show success message
+      setTimeout(() => {
+        navigate('/admin/purchase-list');
+      }, 1500);
       
     } catch (error: any) {
       console.error("Error submitting bill:", error);
@@ -1105,7 +1123,7 @@ const TransactionAdd: React.FC = () => {
         partNumber: item.partNumber,
         partName: item.partName,
         manufacturer: item.manufacturer || "",
-        quantity: parseInt(item.quantity.toString()),
+        quantity: typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity || 0,
         price: typeof item.rate === 'number' ? item.rate : 0,
         billNo: formData.invoiceNo,
         name: vendor.name,

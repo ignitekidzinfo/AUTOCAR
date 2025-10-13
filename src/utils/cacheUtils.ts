@@ -1,75 +1,97 @@
 /**
- * Cache utility functions for the application
+ * Cache utility functions for managing application-wide cache invalidation
  */
 
-// Cache keys
 export const CACHE_KEYS = {
-  USER_PARTS: 'userPartsCache',
-  USER_PARTS_TIMESTAMP: 'userPartsCacheTimestamp',
-  QUOTATIONS: 'quotationsCache',
-  QUOTATIONS_TIMESTAMP: 'quotationsCacheTimestamp',
-};
-
-// Cache event names
-export const CACHE_EVENTS = {
-  USER_PARTS_UPDATED: 'userPartsCacheUpdated',
-  QUOTATIONS_UPDATED: 'quotationsCacheUpdated',
-};
-
-// Default cache expiry time (5 minutes)
-export const DEFAULT_CACHE_EXPIRY = 5 * 60 * 1000;
+  PURCHASE_BILLS: 'purchase_bills_cache',
+  VENDORS: 'vendors_cache',
+  SPARE_PARTS: 'spare_parts_cache',
+  TRANSACTIONS: 'transactions_cache',
+} as const;
 
 /**
- * Invalidate the user parts cache
+ * Invalidate a specific cache by key
  */
-export const invalidateUserPartsCache = () => {
-  // Update timestamp in localStorage
-  localStorage.setItem(CACHE_KEYS.USER_PARTS_TIMESTAMP, Date.now().toString());
+export const invalidateCache = (cacheKey: string): void => {
+  console.log(`Invalidating cache: ${cacheKey}`);
+  localStorage.removeItem(cacheKey);
   
-  // Dispatch event to notify other components
-  window.dispatchEvent(new CustomEvent(CACHE_EVENTS.USER_PARTS_UPDATED));
-  
-  console.log('User parts cache invalidated at', new Date().toLocaleTimeString());
+  // Also clear any related etags
+  const etagKey = `${cacheKey}_etag`;
+  localStorage.removeItem(etagKey);
 };
 
 /**
- * Invalidate the quotations cache
+ * Invalidate multiple caches
  */
-export const invalidateQuotationsCache = () => {
-  // Update timestamp in localStorage
-  localStorage.setItem(CACHE_KEYS.QUOTATIONS_TIMESTAMP, Date.now().toString());
-  
-  // Dispatch event to notify other components
-  window.dispatchEvent(new CustomEvent(CACHE_EVENTS.QUOTATIONS_UPDATED));
-  
-  console.log('Quotations cache invalidated at', new Date().toLocaleTimeString());
+export const invalidateMultipleCaches = (cacheKeys: string[]): void => {
+  cacheKeys.forEach(key => invalidateCache(key));
 };
 
 /**
- * Check if a cache is valid
- * @param cacheKey The key of the cache timestamp to check
- * @param expiryTime The cache expiry time in milliseconds
- * @returns boolean indicating if the cache is valid
+ * Set a cache invalidation callback for cross-component communication
  */
-export const isCacheValid = (cacheKey: string, expiryTime = DEFAULT_CACHE_EXPIRY): boolean => {
-  const timestamp = localStorage.getItem(cacheKey);
-  if (!timestamp) return false;
-  
-  const parsedTimestamp = parseInt(timestamp, 10);
-  const now = Date.now();
-  
-  // Cache is valid if less than expiryTime has passed
-  return !isNaN(parsedTimestamp) && (now - parsedTimestamp < expiryTime);
+export const setCacheInvalidationCallback = (callbackKey: string): void => {
+  sessionStorage.setItem('cacheInvalidationCallback', callbackKey);
+};
+
+/**
+ * Check and clear cache invalidation callback
+ */
+export const checkAndClearCacheCallback = (expectedKey: string): boolean => {
+  const callback = sessionStorage.getItem('cacheInvalidationCallback');
+  if (callback === expectedKey) {
+    sessionStorage.removeItem('cacheInvalidationCallback');
+    return true;
+  }
+  return false;
 };
 
 /**
  * Clear all application caches
  */
-export const clearAllCaches = () => {
-  localStorage.removeItem(CACHE_KEYS.USER_PARTS);
-  localStorage.removeItem(CACHE_KEYS.USER_PARTS_TIMESTAMP);
-  localStorage.removeItem(CACHE_KEYS.QUOTATIONS);
-  localStorage.removeItem(CACHE_KEYS.QUOTATIONS_TIMESTAMP);
-  
-  console.log('All caches cleared at', new Date().toLocaleTimeString());
-}; 
+export const clearAllCaches = (): void => {
+  Object.values(CACHE_KEYS).forEach(key => invalidateCache(key));
+  console.log('All application caches cleared');
+};
+
+/**
+ * Get cache data with timestamp validation
+ */
+export const getCacheData = <T>(cacheKey: string, maxAge: number = 10 * 60 * 1000): T | null => {
+  try {
+    const cachedData = localStorage.getItem(cacheKey);
+    if (!cachedData) return null;
+    
+    const parsed = JSON.parse(cachedData);
+    const now = Date.now();
+    
+    if (now - parsed.timestamp > maxAge) {
+      // Cache expired
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+    
+    return parsed.data;
+  } catch (error) {
+    console.error(`Error reading cache ${cacheKey}:`, error);
+    localStorage.removeItem(cacheKey);
+    return null;
+  }
+};
+
+/**
+ * Set cache data with timestamp
+ */
+export const setCacheData = <T>(cacheKey: string, data: T, etag?: string): void => {
+  try {
+    const cacheData = {
+      data,
+      timestamp: Date.now(),
+      etag
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+  } catch (error) {
+    console.error(`Error setting cache ${cacheKey}:`, error);
+  }
+};
