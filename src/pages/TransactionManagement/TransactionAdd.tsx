@@ -1109,7 +1109,8 @@ const TransactionAdd: React.FC = () => {
       // Reset form after successful submission
       resetForm();
       
-      // Navigate back to purchase list immediately (cache-busted screen will fetch fresh)
+      // Mark for same-tab refresh and navigate back
+      try { sessionStorage.setItem('refreshPurchaseList', '1'); } catch {}
       navigate('/admin/purchase-list');
 
       // Signal list to invalidate aggressively

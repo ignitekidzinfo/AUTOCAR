@@ -219,7 +219,14 @@ const PurchaseList: React.FC = () => {
 
   // Initial load - try to use cache first
   useEffect(() => {
-    fetchBills(false);
+    // If redirected from edit, force an immediate refresh and clear the flag
+    const redirected = sessionStorage.getItem('refreshPurchaseList');
+    if (redirected) {
+      sessionStorage.removeItem('refreshPurchaseList');
+      fetchBills(true);
+    } else {
+      fetchBills(false);
+    }
     
     // Set up periodic background refresh with smart scheduling
     const scheduleNextRefresh = () => {
