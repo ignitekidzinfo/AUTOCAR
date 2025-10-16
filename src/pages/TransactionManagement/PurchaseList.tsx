@@ -143,31 +143,27 @@ const PurchaseList: React.FC = () => {
         setRefreshing(true);
       }
       
-      // Prepare headers for conditional request
-      const headers: Record<string, string> = {};
-      if (etagRef.current && !skipCache) {
-        headers['If-None-Match'] = etagRef.current;
-      }
+      // Prepare headers to aggressively bypass caches
+      const headers: Record<string, string> = {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      };
       
       // Update last fetch time
       lastFetchTimeRef.current = now;
       
-      // Make API request with conditional headers
-      const response = await apiClient.get('/bills/all', { headers });
+      // Make API request with cache-busting query param
+      const response = await apiClient.get(`/bills/all?cb=${now}`, { headers });
       
-      // Check if we got a 304 Not Modified response
+      // Do not honor 304 here; force fresh data if it happens unexpectedly
       if (response.status === 304) {
-        console.log('Server returned 304 Not Modified, using cached data');
-        setRefreshing(false);
-        setLoading(false);
-        return;
+        console.log('Received 304; forcing a fresh fetch');
+        const fresh = await apiClient.get(`/bills/all?cb=${Date.now()}`, { headers });
+        (response as any).data = fresh.data;
       }
       
-      // Store new etag if provided
-      const newEtag = response.headers?.etag;
-      if (newEtag) {
-        etagRef.current = newEtag;
-      }
+      // Ignore etag-based caching for this screen to avoid stale totals
+      const newEtag = undefined as unknown as string | undefined;
       
       if (response.data && response.data.data) {
         // Process bills to get total quantity - ensure proper quantity calculation
@@ -177,10 +173,11 @@ const PurchaseList: React.FC = () => {
           billDate: new Date(bill.billDate).toLocaleDateString('en-GB'),
           vendorName: bill.vendorName,
           vendorId: bill.vendorId,
-          totalQuantity: bill.items?.reduce((total: number, item: any) => {
+          // Prefer server-provided total if present; otherwise compute safely
+          totalQuantity: typeof bill.totalQuantity === 'number' ? bill.totalQuantity : (bill.items?.reduce((total: number, item: any) => {
             const quantity = typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity || 0;
             return total + quantity;
-          }, 0) || 0,
+          }, 0) || 0),
           grandTotal: bill.grandTotal || 0,
           items: bill.items || [] // Store items for reference
         }));
@@ -201,7 +198,7 @@ const PurchaseList: React.FC = () => {
         const cacheData: CacheData = {
           data: processedBills,
           timestamp: now,
-          etag: newEtag || etagRef.current
+          etag: (newEtag ?? etagRef.current ?? undefined) as string | undefined
         };
         localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
       }
@@ -254,6 +251,14 @@ const PurchaseList: React.FC = () => {
 
   // Add event listener for visibility changes and focus events to optimize API calls
   useEffect(() => {
+    // React to cross-tab/localStorage changes for reliable cache invalidation
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === CACHE_KEY || e.key === 'purchase_list_invalidate' || e.key === 'editBillCommitted') {
+        console.log('Storage event detected, invalidating purchase cache');
+        invalidatePurchaseCache();
+      }
+    };
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         // User has returned to the tab, check if we need a refresh
@@ -295,11 +300,13 @@ const PurchaseList: React.FC = () => {
     // Add event listeners
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStorage);
     
     // Cleanup
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorage);
     };
   }, [fetchBills]);
 
@@ -337,13 +344,16 @@ const PurchaseList: React.FC = () => {
       setLoading(true);
       
       // Get detailed bill data for editing
-      const response = await apiClient.get(`/bills/printData/${billId}`);
+      const response = await apiClient.get(`/bills/printData/${billId}?cb=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      });
       
       if (response.data && response.data.data) {
         const billData = response.data.data;
         
         // Store the bill data in sessionStorage for the edit page
         sessionStorage.setItem('editBillData', JSON.stringify(billData));
+        sessionStorage.setItem('editBillId', String(billId));
         
         // Add a flag to indicate this is an edit operation to handle HTTP method correctly
         sessionStorage.setItem('isEditOperation', 'true');

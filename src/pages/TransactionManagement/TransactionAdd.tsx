@@ -191,6 +191,7 @@ interface SparePartDto {
 interface SparePartItem {
   id: number;
   transactionId?: number;
+  billItemId?: number; // stable DB id for existing bill items
   sparePartId?: number;
   barcode?: string;
   partName: string;
@@ -395,99 +396,123 @@ const TransactionAdd: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionProgress, setSubmissionProgress] = useState({ current: 0, total: 0 });
 
-  // Add this near the top of the component, after other useEffect hooks
-  // Check for edit mode and load bill data if available
+  // Run-once guards for loading edit data and matching vendor later
+  const editDataLoadedRef = React.useRef(false);
+  const editBillVendorIdRef = React.useRef<number | null>(null);
+
+  // Load bill data for edit ONCE on mount (does not depend on vendors)
   useEffect(() => {
+    if (editDataLoadedRef.current) return;
+
     const urlParams = new URLSearchParams(window.location.search);
     const editBillId = urlParams.get('edit');
     const isEditMode = !!editBillId;
-    
-    if (isEditMode) {
-      // Try to get bill data from sessionStorage
-      const storedBillData = sessionStorage.getItem('editBillData');
-      if (storedBillData) {
-        try {
-          const billData = JSON.parse(storedBillData);
-          console.log('Loading bill for editing:', billData);
-          
-          // Load vendor data
-          if (billData.vendorId) {
-            const vendor = vendorSuggestions.find(v => v.vendorId === billData.vendorId);
-            if (vendor) {
-              setSelectedVendor(vendor);
-              setCreateData(prev => ({
-                ...prev,
-                name: vendor.name,
-                vendorId: vendor.vendorId,
-              }));
-            }
-          }
-          
-          // Set invoice details
-          setCreateData(prev => ({
-            ...prev,
-            invoiceNo: billData.billNo || '',
-            invoiceDate: billData.billDate ? new Date(billData.billDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-          }));
-          
-          // Load items
-          if (billData.items && Array.isArray(billData.items)) {
+    if (!isEditMode) return;
+
+    const load = async () => {
+      try {
+        // Always fetch fresh bill data to avoid stale session
+        const fresh = await apiClient.get(`/bills/printData/${editBillId}?cb=${Date.now()}`, {
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
+        const billData = (fresh.data && fresh.data.data) ? fresh.data.data : JSON.parse(sessionStorage.getItem('editBillData') || 'null');
+        if (!billData) return;
+
+        console.log('Loading bill for editing (fresh):', billData);
+
+      // Remember vendorId to set after vendors load
+      editBillVendorIdRef.current = billData.vendorId || null;
+
+      // Set invoice details
+      setCreateData(prev => ({
+        ...prev,
+        invoiceNo: billData.billNo || '',
+        invoiceDate: billData.billDate ? new Date(billData.billDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+      }));
+
+      // Load items
+      if (billData.items && Array.isArray(billData.items)) {
             const mappedItems: SparePartItem[] = billData.items.map((item: any, index: number) => {
-              // Ensure quantity is properly handled as a number
-              const quantity = typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity || 0;
-              
-              return {
-                id: index + 1,
-                transactionId: item.transactionId,
-                sparePartId: item.sparePartId,
-                partName: item.itemName,
-                partNumber: item.partNumber || '',
-                manufacturer: item.manufacturer || '',
-                price: item.mrp || item.price || 0,
-                quantity: quantity, // Ensure quantity is a number
-                rate: item.rate || 0,
-                gstPercentage: (item.cgstPercentage + item.sgstPercentage) || 0,
-                taxableAmount: item.taxableAmount || (item.rate * quantity),
-                cgst: item.cgst || 0,
-                sgst: item.sgst || 0,
-                total: item.amount || 0
-              };
-            });
-            
-            setSparePartItems(mappedItems);
-            calculateTotals(mappedItems);
-            
-            // Set other bill totals
-            setNetTotal(billData.subTotal || 0);
-            setRoundOff(billData.roundOff || 0);
-            setGrandTotal(billData.grandTotal || 0);
-            setPaid(billData.paid || 0);
-          }
-        } catch (error) {
-          console.error('Error parsing stored bill data:', error);
-          setFeedback({
-            message: "Failed to load bill data for editing",
-            severity: "error"
-          });
-        }
+          const quantity = typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity || 0;
+          return {
+            id: index + 1,
+            transactionId: item.transactionId,
+            billItemId: item.billItemId, // capture DB bill item id
+            sparePartId: item.sparePartId,
+            partName: item.itemName,
+            partNumber: item.partNumber || '',
+            manufacturer: item.manufacturer || '',
+                // Prefer server's rate as editable unit price; keep price for display only
+                price: typeof item.price === 'number' ? item.price : (typeof item.mrp === 'number' ? item.mrp : 0),
+            quantity,
+                rate: typeof item.rate === 'number' ? item.rate : 0,
+            gstPercentage: (item.cgstPercentage + item.sgstPercentage) || 0,
+                taxableAmount: typeof item.taxableAmount === 'number' ? item.taxableAmount : ((item.rate || 0) * quantity),
+                cgst: typeof item.cgst === 'number' ? item.cgst : 0,
+                sgst: typeof item.sgst === 'number' ? item.sgst : 0,
+                total: typeof item.amount === 'number' ? item.amount : ((item.rate || 0) * quantity * (1 + ((item.cgstPercentage + item.sgstPercentage || 0)/100)))
+          };
+        });
+
+        setSparePartItems(mappedItems);
+        calculateTotals(mappedItems);
+
+        setNetTotal(billData.subTotal || 0);
+        setRoundOff(billData.roundOff || 0);
+        setGrandTotal(billData.grandTotal || 0);
+        setPaid(billData.paid || 0);
       }
+
+        editDataLoadedRef.current = true;
+      } catch (error) {
+        console.error('Error loading bill data for editing:', error);
+        setFeedback({
+          message: "Failed to load bill data for editing",
+          severity: "error"
+        });
+      }
+    };
+
+    load();
+  }, []);
+
+  // After vendors load, set selected vendor once without touching items/quantities
+  useEffect(() => {
+    if (!editDataLoadedRef.current) return;
+    if (selectedVendor) return;
+    if (!vendorSuggestions || vendorSuggestions.length === 0) return;
+    if (!editBillVendorIdRef.current) return;
+
+    const vendor = vendorSuggestions.find(v => v.vendorId === editBillVendorIdRef.current);
+    if (vendor) {
+      setSelectedVendor(vendor);
+      setCreateData(prev => ({
+        ...prev,
+        name: vendor.name,
+        vendorId: vendor.vendorId,
+      }));
     }
-  }, [vendorSuggestions]);
+  }, [vendorSuggestions, selectedVendor]);
 
   useEffect(() => {
-    console.log("Component mounted, fetching vendors...");
-    fetchVendors();
+    // Guard to avoid double fetch in React 18 StrictMode and repeated reruns
+    const hasFetched = sessionStorage.getItem('vendorsFetchedOnce');
+    if (!hasFetched) {
+      console.log("Component mounted, fetching vendors...");
+      sessionStorage.setItem('vendorsFetchedOnce', 'true');
+      fetchVendors();
+    }
 
-    // Add a re-fetch mechanism if the first attempt gets no vendors
+    // Optional: if still empty after initial attempt, try once more after a short delay
     const timeoutId = setTimeout(() => {
-      if (vendorSuggestions.length === 0) {
-        console.log("No vendors fetched in initial attempt, retrying...");
+      if ((vendorSuggestions?.length || 0) === 0) {
+        console.log("No vendors fetched in initial attempt, retrying once...");
         fetchVendors();
       }
-    }, 3000);
+    }, 2000);
 
     return () => clearTimeout(timeoutId);
-  }, [vendorSuggestions.length]);
+  }, []);
 
   const fetchVendors = async () => {
     try {
@@ -1004,14 +1029,16 @@ const TransactionAdd: React.FC = () => {
         billNo: createData.invoiceNo,
         billDate: createData.invoiceDate ? `${createData.invoiceDate}T00:00:00` : new Date().toISOString().split('.')[0],
         items: sparePartItems.map(item => ({
+          // Prefer real billItemId; fallback to legacy transactionId
+          billItemId: item.billItemId ?? item.transactionId ?? null,
           itemName: item.partName,
           partNumber: item.partNumber,
           quantity: typeof item.quantity === 'string' ? parseInt(item.quantity) || 0 : item.quantity || 0,
-          rate: item.rate || 0,
+          rate: typeof item.rate === 'string' ? parseFloat(item.rate) || 0 : (item.rate || 0),
           cgstPercentage: item.gstPercentage / 2,
           sgstPercentage: item.gstPercentage / 2,
-          amount: item.total,
-          transactionId: item.transactionId,
+          amount: typeof item.total === 'string' ? parseFloat(item.total) || 0 : (item.total || 0),
+          transactionId: item.transactionId, // keep for backend fallback
           // Add flag to indicate inventory has already been updated
           inventoryUpdated: item.inventoryUpdated || false
         })),
@@ -1039,6 +1066,9 @@ const TransactionAdd: React.FC = () => {
         (billData as any).billId = parseInt(editBillId);
       }
       
+      // Log final payload for debugging
+      console.log('Submitting bill payload:', billData);
+
       // Make the API call to create or update the bill
       let response;
       if (httpMethod === 'post') {
@@ -1068,16 +1098,24 @@ const TransactionAdd: React.FC = () => {
       sessionStorage.removeItem('editBillData');
       sessionStorage.removeItem('isEditOperation');
       
-      // Set cache invalidation flag for the purchase list
+      // Set cache invalidation flag for the purchase list and notify via localStorage
       setCacheInvalidationCallback('purchaseList');
+      try {
+        localStorage.setItem('purchase_list_invalidate', String(Date.now()));
+      } catch (e) {
+        // ignore storage quota issues
+      }
       
       // Reset form after successful submission
       resetForm();
       
-      // Navigate back to purchase list after a short delay to show success message
-      setTimeout(() => {
-        navigate('/admin/purchase-list');
-      }, 1500);
+      // Navigate back to purchase list immediately (cache-busted screen will fetch fresh)
+      navigate('/admin/purchase-list');
+
+      // Signal list to invalidate aggressively
+      try {
+        localStorage.setItem('editBillCommitted', String(Date.now()));
+      } catch {}
       
     } catch (error: any) {
       console.error("Error submitting bill:", error);
