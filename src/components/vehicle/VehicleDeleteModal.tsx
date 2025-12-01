@@ -54,7 +54,7 @@ export default function VehicleDeleteModal({
       await onConfirm();
       return;
     }
-    
+
     if (deleteItemId === undefined) {
       console.error("Delete ID is undefined");
       setLocalError("No vehicle selected for deletion");
@@ -63,34 +63,30 @@ export default function VehicleDeleteModal({
 
     // Set deleting state immediately for UI feedback
     setLocalIsDeleting(true);
-    
+    setLocalError(null);
+
     try {
-      // First update the UI optimistically
-      if (onDeleteSuccess) {
-        // Call success handler immediately to update UI
-        setTimeout(() => {
-          onDeleteSuccess(deleteItemId);
-        }, 0);
-      }
-      
-      // Then make the API call in parallel
-      apiClient.delete(`/vehicle-reg/delete?vehicleRegId=${deleteItemId}`, {
-        timeout: 5000 // Add timeout to prevent long-running requests
-      })
-      .then(() => {
-        console.log(`Vehicle ${deleteItemId} deleted successfully`);
-      })
-      .catch(err => {
-        console.error("Error during background deletion:", err);
-        // Even if API fails, we already updated UI, so not showing error
+      console.log(`Deleting vehicle ${deleteItemId}...`);
+
+      // Make API call
+      await apiClient.delete(`/vehicle-reg/delete?vehicleRegId=${deleteItemId}`, {
+        timeout: 5000
       });
-      
-      // Close the modal immediately
+
+      console.log(`Vehicle ${deleteItemId} deleted successfully from API`);
+
+      // Call success handler to update parent UI
+      if (onDeleteSuccess) {
+        onDeleteSuccess(deleteItemId);
+      }
+
+      // Close the modal
       onClose();
+
     } catch (error: any) {
       console.error("Error deleting vehicle:", error);
       setLocalIsDeleting(false);
-      setLocalError(error.response?.data?.message || "Failed to delete vehicle");
+      setLocalError(error.response?.data?.message || "Failed to delete vehicle. Please try again.");
     }
   };
 
