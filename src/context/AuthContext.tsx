@@ -30,8 +30,8 @@ const AuthContext = createContext<AuthContextType>({
   authorizedComponents: [],
   userRole: '',
   userName: '',
-  login: () => {},
-  logout: () => {},
+  login: () => { },
+  logout: () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -49,56 +49,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (token) {
         try {
           const decoded = jwtDecode<DecodedToken>(token);
-          
+
           // Check if token is expired
           const expTime = decoded.exp ? Number(decoded.exp) * 1000 : 0;
           const currentTime = Date.now();
-          
+
           if (expTime <= currentTime) {
-            console.log('Token expired, logging out');
             storageUtils.clearAuthData();
             setIsAuthenticated(false);
             return;
           }
-          
+
           setIsAuthenticated(true);
           setAuthorizedComponents(decoded.componentNames || []);
-          
+
           // Get role from either roles or authorities array
           const role = decoded.roles?.[0] || decoded.authorities?.[0] || '';
           setUserRole(role);
           setUserName(decoded.firstname || '');
-          
-          // Enhanced logging for authentication state
-          console.log('Auth state loaded from token:', {
-            isAuthenticated: true,
-            role: role,
-            user: decoded.firstname,
-            components: decoded.componentNames?.length || 0,
-            authorities: decoded.authorities,
-          });
+
         } catch (error) {
-          console.error('Invalid token:', error);
+          logger.error('Invalid token:', error);
           storageUtils.clearAuthData();
           setIsAuthenticated(false);
-          console.log('Authentication failed: Invalid token cleared');
         }
       } else {
-        console.log('Authentication: No token found in storage');
         setIsAuthenticated(false);
       }
     };
 
     // Check auth on mount
     checkAuth();
-    
+
     // Also set up a listener for storage changes (in case another tab logs out)
     const handleStorageChange = () => {
       checkAuth();
     };
-    
+
     window.addEventListener('storage', handleStorageChange);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
@@ -107,33 +96,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = (token: string) => {
     try {
       const decoded = jwtDecode<DecodedToken>(token);
-      
+
       // Store token using secure storage
       storageUtils.clearAuthData(); // Clear any existing data
       secureStorage.setItem('token', token);
       secureStorage.setItem('userData', decoded);
-      
+
       setIsAuthenticated(true);
       setAuthorizedComponents(decoded.componentNames || []);
-      
+
       // Get role from either roles or authorities array
       const role = decoded.roles?.[0] || decoded.authorities?.[0] || '';
       setUserRole(role);
       setUserName(decoded.firstname || '');
-      
-      // Store raw token in localStorage for debugging (remove in production)
-      localStorage.setItem('debug_raw_token', token.substring(0, 20) + '...');
-      
-      // Enhanced logging for login
-      console.log('Login successful - Authentication state updated:', {
-        isAuthenticated: true,
-        role: role,
-        user: decoded.firstname,
-        components: decoded.componentNames?.length || 0,
-        authorities: decoded.authorities,
-      });
+
     } catch (error) {
-      console.error('Login failed:', error);
+      logger.error('Login failed:', error);
       setIsAuthenticated(false);
     }
   };
@@ -144,13 +122,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthorizedComponents([]);
     setUserRole('');
     setUserName('');
-    console.log('User logged out - Authentication state cleared');
-    
-    // Clear debug values
-    localStorage.removeItem('debug_token_stored');
-    localStorage.removeItem('debug_login_time');
-    localStorage.removeItem('debug_raw_token');
-    
+
     window.location.href = '/signIn';
   };
 
@@ -162,14 +134,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     login,
     logout,
   };
-
-  // Detailed authentication state log
-  console.log('Current auth state:', {
-    isAuthenticated,
-    role: userRole,
-    user: userName,
-    componentsCount: authorizedComponents.length
-  });
 
   return (
     <AuthContext.Provider value={value}>

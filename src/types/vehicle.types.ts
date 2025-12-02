@@ -73,3 +73,36 @@ export interface UseVehicleDataReturn {
     deleteVehicle: (id: string) => Promise<void>;
     searchVehicles: (filters: VehicleListFilters, searchType: SearchType) => Promise<void>;
 }
+
+export interface VehicleRegDto {
+    vehicleRegId: number;
+    appointmentId?: number;
+    vehicleNumber: string;
+    vehicleBrand?: string;
+    vehicleModelName?: string;
+    vehicleVariant?: string;
+    engineNumber?: string;
+    chasisNumber?: string;
+    numberPlateColour?: string;
+    kmsDriven?: number;
+    email?: string;
+    ManufactureYear?: number;
+    advancePayment?: number;
+    customerId?: number;
+    customerName: string;
+    customerAddress?: string;
+    customerMobileNumber: string;
+    customerAadharNo?: string;
+    customerGstin?: string;
+    superwiser?: string;
+    technician?: string;
+    worker?: string;
+    status?: string;
+    userId?: number;
+    date?: string;
+    vehicleInspection?: string;
+    jobCard?: string;
+    insuranceStatus?: string;
+    insuredFrom?: string;
+    insuredTo?: string;
+}
