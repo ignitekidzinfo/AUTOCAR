@@ -26,8 +26,8 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import { VehicleRegDto } from '../types/vehicle.types';
-import InsuranceCard from './Insurance/InsuranceCard';
-import InsuranceTable from './Insurance/InsuranceTable';
+import InsuranceCard from './insurance/InsuranceCard';
+import InsuranceTable from './insurance/InsuranceTable';
 
 const InsuranceList: React.FC = () => {
   const [tabValue, setTabValue] = useState<number>(0);

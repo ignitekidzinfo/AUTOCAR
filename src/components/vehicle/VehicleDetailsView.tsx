@@ -3,17 +3,17 @@ import Grid from '@mui/material/Grid';
 import { styled, useTheme, alpha } from '@mui/material/styles';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { 
-  Box, 
-  Button, 
-  Card, 
-  CardContent, 
-  Chip, 
-  Divider, 
-  Paper,
-  CircularProgress,
-  IconButton,
-  Tooltip 
+import {
+    Box,
+    Button,
+    Card,
+    CardContent,
+    Chip,
+    Divider,
+    Paper,
+    CircularProgress,
+    IconButton,
+    Tooltip
 } from "@mui/material";
 import { useNavigate, useParams } from 'react-router-dom';
 import { VehicleDataByID } from 'Services/vehicleService';
@@ -31,33 +31,33 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 
 const InfoItem = styled(Box)(({ theme }) => ({
     display: "flex",
-  flexDirection: "column",
-  marginBottom: theme.spacing(2),
-  width: "100%",
+    flexDirection: "column",
+    marginBottom: theme.spacing(2),
+    width: "100%",
 }));
 
 const InfoLabel = styled(Typography)(({ theme }) => ({
-  fontWeight: 500,
-  color: theme.palette.text.secondary,
-  fontSize: '0.875rem',
-  marginBottom: theme.spacing(0.5),
+    fontWeight: 500,
+    color: theme.palette.text.secondary,
+    fontSize: '0.875rem',
+    marginBottom: theme.spacing(0.5),
 }));
 
 const InfoValue = styled(Typography)(({ theme }) => ({
-  fontWeight: 600,
-  color: theme.palette.text.primary,
-  fontSize: '1rem',
+    fontWeight: 600,
+    color: theme.palette.text.primary,
+    fontSize: '1rem',
 }));
 
 const SectionTitle = styled(Typography)(({ theme }) => ({
-  fontWeight: 700,
-  fontSize: '1.1rem',
-  marginBottom: theme.spacing(2),
-  marginTop: theme.spacing(1),
-  color: theme.palette.primary.main,
-  display: 'flex',
-  alignItems: 'center',
-  gap: theme.spacing(1),
+    fontWeight: 700,
+    fontSize: '1.1rem',
+    marginBottom: theme.spacing(2),
+    marginTop: theme.spacing(1),
+    color: theme.palette.primary.main,
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(1),
 }));
 
 interface VehicleFormData {
@@ -155,7 +155,7 @@ export default function VehicleDetailsView() {
             console.log(transactions[0].data);
             const transactionsData = transactions[0].data;
             const newTransactions = transactionsData.map((resData: any, index: number) => ({
-                id: index + 1, 
+                id: index + 1,
                 partNumber: resData.partNumber,
                 partName: resData.partName,
                 quantity: resData.quantity,
@@ -179,17 +179,17 @@ export default function VehicleDetailsView() {
         { field: "partNumber", headerName: "Part Number", width: 150 },
         { field: "partName", headerName: "Part Name", flex: 1, minWidth: 200 },
         { field: "quantity", headerName: "Quantity", width: 100 },
-        { 
-            field: "amount", 
-            headerName: "Amount", 
+        {
+            field: "amount",
+            headerName: "Amount",
             width: 120,
             renderCell: (params) => (
                 <Typography variant="body2">₹{params.row.amount}</Typography>
             )
         },
-        { 
-            field: "total", 
-            headerName: "Total", 
+        {
+            field: "total",
+            headerName: "Total",
             width: 120,
             renderCell: (params) => (
                 <Typography variant="body2" fontWeight="bold">₹{params.row.total}</Typography>
@@ -279,10 +279,10 @@ export default function VehicleDetailsView() {
             p: 2,
         }}>
             <Card elevation={3} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
-                <Box 
-                    sx={{ 
-                        p: 2, 
-                        borderBottom: 1, 
+                <Box
+                    sx={{
+                        p: 2,
+                        borderBottom: 1,
                         borderColor: 'divider',
                         background: `linear-gradient(90deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(theme.palette.primary.main, 0.05)})`,
                         display: 'flex',
@@ -291,9 +291,9 @@ export default function VehicleDetailsView() {
                     }}
                 >
                     <Stack direction="row" alignItems="center" spacing={2}>
-                        <IconButton 
+                        <IconButton
                             onClick={() => navigate(-1)}
-                            sx={{ 
+                            sx={{
                                 backgroundColor: alpha(theme.palette.common.white, 0.8),
                                 '&:hover': { backgroundColor: alpha(theme.palette.common.white, 1) }
                             }}
@@ -302,16 +302,16 @@ export default function VehicleDetailsView() {
                         </IconButton>
                         <div>
                             <Typography variant="h5" fontWeight="bold" color="primary">
-                    Vehicle Details
-                </Typography>
+                                Vehicle Details
+                            </Typography>
                             <Typography variant="body2" color="text.secondary">
                                 {formData.vehicleNumber} • {formData.vehicleBrand} {formData.vehicleModelName}
                             </Typography>
                         </div>
                     </Stack>
-                    <Button 
-                        variant="contained" 
-                        color="primary" 
+                    <Button
+                        variant="contained"
+                        color="primary"
                         startIcon={<ReceiptIcon />}
                         onClick={() => navigate(`/admin/billForm/${id}`)}
                         sx={{ borderRadius: 2 }}
@@ -319,42 +319,42 @@ export default function VehicleDetailsView() {
                         Generate Bill
                     </Button>
                 </Box>
-                
+
                 <CardContent sx={{ p: 3 }}>
                     {/* Status information */}
                     <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                        <Chip 
-                            label={`Status: ${formData.status}`} 
+                        <Chip
+                            label={`Status: ${formData.status}`}
                             color={getStatusColor(formData.status) as any}
                             variant="outlined"
                             sx={{ fontWeight: 'bold' }}
                         />
-                        <Chip 
-                            label={`Insurance: ${formData.insuranceStatus}`} 
+                        <Chip
+                            label={`Insurance: ${formData.insuranceStatus}`}
                             color={getInsuranceColor(formData.insuranceStatus) as any}
                             variant="outlined"
                             sx={{ fontWeight: 'bold' }}
                         />
-                        <Chip 
-                            label={`Admission Date: ${formData.date}`} 
+                        <Chip
+                            label={`Admission Date: ${formData.date}`}
                             variant="outlined"
                             sx={{ fontWeight: 'bold' }}
                         />
-                        <Chip 
-                            label={`Advance: ₹${formData.advancePayment}`} 
+                        <Chip
+                            label={`Advance: ₹${formData.advancePayment}`}
                             color="primary"
                             variant="outlined"
                             sx={{ fontWeight: 'bold' }}
                         />
                     </Box>
 
-            <Grid container spacing={3}>
+                    <Grid container spacing={3}>
                         <Grid item xs={12} md={6}>
                             <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
                                 <SectionTitle>
                                     <DirectionsCarIcon color="primary" /> Vehicle Information
                                 </SectionTitle>
-                                
+
                                 <Grid container spacing={2}>
                                     <Grid item xs={12} md={6}>
                                         <InfoItem>
@@ -522,8 +522,8 @@ export default function VehicleDetailsView() {
                                         <InfoItem>
                                             <InfoLabel>Insurance Status</InfoLabel>
                                             <InfoValue>
-                                                <Chip 
-                                                    label={formData.insuranceStatus} 
+                                                <Chip
+                                                    label={formData.insuranceStatus}
                                                     color={getInsuranceColor(formData.insuranceStatus) as any}
                                                     size="small"
                                                     variant="outlined"
@@ -531,8 +531,8 @@ export default function VehicleDetailsView() {
                                             </InfoValue>
                                         </InfoItem>
                                     </Grid>
-                {formData.insuranceStatus === "Insured" && (
-                    <>
+                                    {formData.insuranceStatus === "Insured" && (
+                                        <>
                                             <Grid item xs={12} md={6}>
                                                 <InfoItem>
                                                     <InfoLabel>Insurance From</InfoLabel>
@@ -545,52 +545,52 @@ export default function VehicleDetailsView() {
                                                     <InfoValue>{formData.insuranceTo}</InfoValue>
                                                 </InfoItem>
                                             </Grid>
-                    </>
-                )}
+                                        </>
+                                    )}
                                 </Grid>
                             </Paper>
                         </Grid>
-            </Grid>
+                    </Grid>
                 </CardContent>
             </Card>
 
             <Card elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
-                <Box 
-                    sx={{ 
-                        p: 2, 
-                        borderBottom: 1, 
+                <Box
+                    sx={{
+                        p: 2,
+                        borderBottom: 1,
                         borderColor: 'divider',
                         background: `linear-gradient(90deg, ${alpha(theme.palette.warning.main, 0.1)}, ${alpha(theme.palette.warning.main, 0.05)})`,
                     }}
                 >
                     <Typography variant="h6" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <BuildIcon color="warning" /> Service Part Details
-                </Typography>
+                    </Typography>
                 </Box>
-                
+
                 <CardContent sx={{ p: 0 }}>
-                    <Box sx={{ 
+                    <Box sx={{
                         position: 'relative',
                         height: '400px',
                         overflow: 'hidden',
                     }}>
                         {partsLoading ? (
-                            <Box sx={{ 
-                                display: 'flex', 
-                                justifyContent: 'center', 
-                                alignItems: 'center', 
-                                height: '100%', 
+                            <Box sx={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                height: '100%',
                                 width: '100%'
                             }}>
                                 <CircularProgress size={30} />
                                 <Typography variant="body2" sx={{ ml: 2 }}>Loading service parts...</Typography>
                             </Box>
                         ) : rows.length === 0 ? (
-                            <Box sx={{ 
-                                display: 'flex', 
-                                justifyContent: 'center', 
-                                alignItems: 'center', 
-                                height: '100%', 
+                            <Box sx={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                height: '100%',
                                 width: '100%',
                                 color: 'text.secondary',
                                 flexDirection: 'column',
@@ -600,10 +600,10 @@ export default function VehicleDetailsView() {
                                 <Typography>No service parts found for this vehicle</Typography>
                             </Box>
                         ) : (
-                            <CustomizedDataGrid 
-                                columns={columns} 
-                                rows={rows} 
-                                checkboxSelection={false} 
+                            <CustomizedDataGrid
+                                columns={columns}
+                                rows={rows}
+                                checkboxSelection={false}
                             />
                         )}
                     </Box>
